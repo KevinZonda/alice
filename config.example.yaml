@@ -1,0 +1,22 @@
+# Feishu app credentials (required)
+feishu_app_id: "cli_xxxxx"
+feishu_app_secret: "xxxxxx"
+
+# Optional, default is https://open.feishu.cn
+feishu_base_url: "https://open.feishu.cn"
+
+# Codex runtime
+codex_command: "codex"
+codex_timeout_secs: 120
+workspace_dir: "."
+
+# Prompt and fallback
+codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
+failure_message: "Codex 暂时不可用，请稍后重试。"
+
+# Queue and worker
+queue_capacity: 256
+worker_concurrency: 1
+
+# debug | info | warn | error
+log_level: "info"

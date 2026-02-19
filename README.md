@@ -1,5 +1,7 @@
 # Feishu -> Codex Connector (Go, Long Connection)
 
+[中文同步版](./README.zh-CN.md)
+
 A minimal connector that:
 
 1. Uses **Feishu official Go SDK** (`github.com/larksuite/oapi-sdk-go/v3`) long connection (`ws`) mode.
@@ -26,9 +28,8 @@ Feishu currently provides official server SDKs for Go/Java/Python/Node, and offi
 ## Quickstart
 
 ```bash
-cp .env.example .env
-# edit .env
-set -a; source .env; set +a
+cp config.example.yaml config.yaml
+# edit config.yaml
 
 # install dependencies
 go mod tidy
@@ -37,7 +38,21 @@ go mod tidy
 go test ./...
 
 # start connector
-go run ./cmd/connector
+go run ./cmd/connector -config ./config.yaml
+```
+
+## Build
+
+Compile current platform binary:
+
+```bash
+go build -o bin/alice-connector ./cmd/connector
+```
+
+Then run:
+
+```bash
+./bin/alice-connector -config ./config.yaml
 ```
 
 ## Pre-commit checks
@@ -54,35 +69,51 @@ Install git pre-commit hook (runs `make check` before commit):
 make precommit-install
 ```
 
-## Environment variables
+## Config file
 
-Required:
+The application loads config from YAML file (default: `config.yaml`).
 
-- `FEISHU_APP_ID`
-- `FEISHU_APP_SECRET`
+You can provide a custom file path:
 
-Optional:
+```bash
+go run ./cmd/connector -config /path/to/config.yaml
+```
 
-- `FEISHU_BASE_URL` (default `https://open.feishu.cn`)
-- `CODEX_COMMAND` (default `codex`)
-- `CODEX_TIMEOUT_SECS` (default `120`)
-- `WORKSPACE_DIR` (default `.`)
-- `CODEX_PROMPT_PREFIX` (default short Chinese instruction)
-- `FAILURE_MESSAGE` (default fallback message when Codex fails)
-- `QUEUE_CAPACITY` (default `256`)
-- `WORKER_CONCURRENCY` (default `1`)
-- `LOG_LEVEL` (`debug|info|warn|error`, default `info`)
+`config.example.yaml`:
+
+```yaml
+feishu_app_id: "cli_xxxxx"
+feishu_app_secret: "xxxxxx"
+feishu_base_url: "https://open.feishu.cn"
+
+codex_command: "codex"
+codex_timeout_secs: 120
+workspace_dir: "."
+
+codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
+failure_message: "Codex 暂时不可用，请稍后重试。"
+
+queue_capacity: 256
+worker_concurrency: 1
+
+log_level: "info"
+```
+
+Required keys:
+
+- `feishu_app_id`
+- `feishu_app_secret`
 
 ## Runtime behavior
 
 - Non-text messages are ignored.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Reply target priority: `chat_id`, fallback to sender `open_id`.
-- On Codex failure/timeout, sends `FAILURE_MESSAGE`.
+- On Codex failure/timeout, sends `failure_message`.
 
 ## Project layout
 
 - `cmd/connector/main.go`: bootstrap and lifecycle
-- `internal/config/config.go`: env config and validation
+- `internal/config/config.go`: config file loading and validation (`viper`)
 - `internal/codex/codex.go`: Codex CLI call + JSONL parsing
 - `internal/connector/connector.go`: long connection, queue, workers, Feishu send
