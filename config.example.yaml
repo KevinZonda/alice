@@ -7,7 +7,7 @@ feishu_base_url: "https://open.feishu.cn"
 
 # Codex runtime
 codex_command: "codex"
-codex_timeout_secs: 120
+codex_timeout_secs: 172800
 workspace_dir: "."
 
 # Prompt and fallback
