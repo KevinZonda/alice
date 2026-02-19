@@ -1,0 +1,263 @@
+package connector
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"regexp"
+	"strings"
+	"time"
+
+	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
+	larkdispatcher "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
+
+	"github.com/alice/feishu-codex-connector/internal/config"
+)
+
+var mentionPattern = regexp.MustCompile(`<at[^>]*>.*?</at>`)
+
+var ErrIgnoreMessage = errors.New("ignore message")
+
+type CodexRunner interface {
+	Run(ctx context.Context, userText string) (string, error)
+}
+
+type Sender interface {
+	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
+}
+
+type Job struct {
+	ReceiveID     string
+	ReceiveIDType string
+	Text          string
+	EventID       string
+	ReceivedAt    time.Time
+}
+
+type Processor struct {
+	codex          CodexRunner
+	sender         Sender
+	failureMessage string
+}
+
+func NewProcessor(codexRunner CodexRunner, sender Sender, failureMessage string) *Processor {
+	return &Processor{
+		codex:          codexRunner,
+		sender:         sender,
+		failureMessage: failureMessage,
+	}
+}
+
+func (p *Processor) ProcessJob(ctx context.Context, job Job) {
+	reply, err := p.codex.Run(ctx, job.Text)
+	if err != nil {
+		log.Printf("codex failed event_id=%s: %v", job.EventID, err)
+		reply = p.failureMessage
+	}
+
+	if sendErr := p.sender.SendText(ctx, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
+		log.Printf("send message failed event_id=%s: %v", job.EventID, sendErr)
+	}
+}
+
+type App struct {
+	cfg       config.Config
+	queue     chan Job
+	processor *Processor
+}
+
+func NewApp(cfg config.Config, processor *Processor) *App {
+	return &App{
+		cfg:       cfg,
+		queue:     make(chan Job, cfg.QueueCapacity),
+		processor: processor,
+	}
+}
+
+func (a *App) Run(ctx context.Context) error {
+	for i := 0; i < a.cfg.WorkerConcurrency; i++ {
+		go a.workerLoop(ctx, i)
+	}
+
+	eventHandler := larkdispatcher.NewEventDispatcher("", "").OnP2MessageReceiveV1(a.onMessageReceive)
+	wsClient := larkws.NewClient(
+		a.cfg.FeishuAppID,
+		a.cfg.FeishuAppSecret,
+		larkws.WithDomain(a.cfg.FeishuBaseURL),
+		larkws.WithEventHandler(eventHandler),
+		larkws.WithLogLevel(parseLogLevel(a.cfg.LogLevel)),
+	)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- wsClient.Start(ctx)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("ws client stopped: %w", err)
+		}
+		return nil
+	}
+}
+
+func (a *App) workerLoop(ctx context.Context, idx int) {
+	log.Printf("worker started id=%d", idx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job := <-a.queue:
+			a.processor.ProcessJob(ctx, job)
+		}
+	}
+}
+
+func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
+	job, err := BuildJob(event)
+	if err != nil {
+		if errors.Is(err, ErrIgnoreMessage) {
+			return nil
+		}
+		log.Printf("build job failed: %v", err)
+		return nil
+	}
+
+	select {
+	case a.queue <- *job:
+		log.Printf("job queued event_id=%s receive_id_type=%s", job.EventID, job.ReceiveIDType)
+	default:
+		log.Printf("queue full, drop event_id=%s", job.EventID)
+	}
+
+	return nil
+}
+
+func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
+	if event == nil || event.Event == nil || event.Event.Message == nil {
+		return nil, ErrIgnoreMessage
+	}
+
+	message := event.Event.Message
+	if strings.ToLower(deref(message.MessageType)) != "text" {
+		return nil, ErrIgnoreMessage
+	}
+
+	text, err := extractText(message.Content)
+	if err != nil {
+		return nil, err
+	}
+	if text == "" {
+		return nil, ErrIgnoreMessage
+	}
+
+	receiveID := strings.TrimSpace(deref(message.ChatId))
+	receiveIDType := "chat_id"
+	if receiveID == "" {
+		receiveID = strings.TrimSpace(extractOpenID(event))
+		receiveIDType = "open_id"
+	}
+	if receiveID == "" {
+		return nil, errors.New("missing receive target")
+	}
+
+	return &Job{
+		ReceiveID:     receiveID,
+		ReceiveIDType: receiveIDType,
+		Text:          text,
+		EventID:       eventID(event),
+		ReceivedAt:    time.Now(),
+	}, nil
+}
+
+func extractText(content *string) (string, error) {
+	if strings.TrimSpace(deref(content)) == "" {
+		return "", ErrIgnoreMessage
+	}
+
+	var payload struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(deref(content)), &payload); err != nil {
+		return "", fmt.Errorf("invalid text content json: %w", err)
+	}
+
+	text := mentionPattern.ReplaceAllString(payload.Text, "")
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", ErrIgnoreMessage
+	}
+	return text, nil
+}
+
+func extractOpenID(event *larkim.P2MessageReceiveV1) string {
+	if event == nil || event.Event == nil || event.Event.Sender == nil || event.Event.Sender.SenderId == nil {
+		return ""
+	}
+	return deref(event.Event.Sender.SenderId.OpenId)
+}
+
+func eventID(event *larkim.P2MessageReceiveV1) string {
+	if event == nil || event.EventV2Base == nil || event.EventV2Base.Header == nil {
+		return ""
+	}
+	return event.EventV2Base.Header.EventID
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func parseLogLevel(level string) larkcore.LogLevel {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return larkcore.LogLevelDebug
+	case "warn", "warning":
+		return larkcore.LogLevelWarn
+	case "error":
+		return larkcore.LogLevelError
+	default:
+		return larkcore.LogLevelInfo
+	}
+}
+
+type LarkSender struct {
+	client *lark.Client
+}
+
+func NewLarkSender(client *lark.Client) *LarkSender {
+	return &LarkSender{client: client}
+}
+
+func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, text string) error {
+	contentBytes, _ := json.Marshal(map[string]string{"text": text})
+
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(receiveIDType).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(receiveID).
+			MsgType("text").
+			Content(string(contentBytes)).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	return nil
+}

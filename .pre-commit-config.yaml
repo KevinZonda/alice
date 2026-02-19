@@ -1,26 +1,18 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 25.9.0
-    hooks:
-      - id: black
-        args: ["--line-length=100"]
-
-  - repo: https://github.com/PyCQA/isort
-    rev: 6.1.0
-    hooks:
-      - id: isort
-        args: ["--profile=black", "--line-length=100"]
-
   - repo: local
     hooks:
-      - id: mypy
-        name: mypy
-        entry: .venv/bin/mypy app tests
+      - id: go-fmt-check
+        name: go fmt check
+        entry: make fmt-check
         language: system
         pass_filenames: false
-
-      - id: pytest
-        name: pytest
-        entry: .venv/bin/pytest -q
+      - id: go-vet
+        name: go vet
+        entry: make vet
+        language: system
+        pass_filenames: false
+      - id: go-test
+        name: go test
+        entry: make test
         language: system
         pass_filenames: false

@@ -1,28 +1,27 @@
-.PHONY: format lint type test check precommit-install
+.PHONY: fmt fmt-check vet test check precommit-install
 
-VENV ?= .venv
-PYTHON ?= $(VENV)/bin/python
-BLACK ?= $(VENV)/bin/black
-ISORT ?= $(VENV)/bin/isort
-MYPY ?= $(VENV)/bin/mypy
-PYTEST ?= $(VENV)/bin/pytest
-PRECOMMIT ?= $(VENV)/bin/pre-commit
+fmt:
+	gofmt -w $(shell find . -name '*.go' -type f)
 
-format:
-	$(ISORT) app tests
-	$(BLACK) app tests
+fmt-check:
+	@unformatted=$$(gofmt -l $$(find . -name '*.go' -type f)); \
+	if [ -n "$$unformatted" ]; then \
+		echo "These files need gofmt:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
 
-lint:
-	$(ISORT) --check-only app tests
-	$(BLACK) --check app tests
-
-type:
-	$(MYPY) app tests
+vet:
+	go vet ./...
 
 test:
-	$(PYTEST) -q
+	go test ./...
 
-check: lint type test
+check: fmt-check vet test
 
 precommit-install:
-	$(PRECOMMIT) install
+	@mkdir -p .githooks
+	@cp scripts/pre-commit.sh .githooks/pre-commit
+	@chmod +x .githooks/pre-commit
+	@git config core.hooksPath .githooks
+	@echo "Installed git pre-commit hook to .githooks/pre-commit"
