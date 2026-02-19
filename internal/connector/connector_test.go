@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -173,7 +174,7 @@ func TestProcessor_NoSourceMessageUsesSendText(t *testing.T) {
 }
 
 func TestBuildProgressCardContent_UsesCardSchemaV2BodyElements(t *testing.T) {
-	content := buildProgressCardContent("问题", "思考", "答案", false)
+	content := buildProgressCardContent("思考", "答案", false, 1250*time.Millisecond)
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
@@ -182,6 +183,9 @@ func TestBuildProgressCardContent_UsesCardSchemaV2BodyElements(t *testing.T) {
 
 	if payload["schema"] != "2.0" {
 		t.Fatalf("expected schema 2.0, got %#v", payload["schema"])
+	}
+	if _, exists := payload["header"]; exists {
+		t.Fatalf("card should not include header title")
 	}
 	if _, exists := payload["elements"]; exists {
 		t.Fatalf("schema 2.0 card should not use top-level elements")
@@ -202,13 +206,30 @@ func TestBuildProgressCardContent_UsesCardSchemaV2BodyElements(t *testing.T) {
 	if first["tag"] != "markdown" {
 		t.Fatalf("expected markdown element, got %#v", first["tag"])
 	}
-	last, ok := elements[len(elements)-1].(map[string]any)
-	if !ok {
-		t.Fatalf("expected last element object, got %#v", elements[len(elements)-1])
+
+	var joined strings.Builder
+	for _, element := range elements {
+		elementMap, ok := element.(map[string]any)
+		if !ok {
+			t.Fatalf("expected element object, got %#v", element)
+		}
+		content, _ := elementMap["content"].(string)
+		joined.WriteString(content)
+		joined.WriteByte('\n')
 	}
-	lastContent, _ := last["content"].(string)
-	if !strings.Contains(lastContent, "-") || !strings.Contains(lastContent, ":") {
-		t.Fatalf("expected human readable timestamp in last element, got %q", lastContent)
+
+	all := joined.String()
+	if strings.Contains(all, "Alice 助手") {
+		t.Fatalf("card should not include assistant name: %s", all)
+	}
+	if strings.Contains(all, "你的消息") {
+		t.Fatalf("card should not include user message block: %s", all)
+	}
+	if strings.Contains(all, "更新时间") {
+		t.Fatalf("card should not include update timestamp: %s", all)
+	}
+	if !strings.Contains(all, "耗时：") && !strings.Contains(all, "已思考：") {
+		t.Fatalf("card should include elapsed duration: %s", all)
 	}
 }
 

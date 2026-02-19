@@ -85,12 +85,13 @@ func (p *Processor) ProcessJob(ctx context.Context, job Job) {
 }
 
 func (p *Processor) processReplyCard(ctx context.Context, job Job) {
+	startedAt := time.Now()
 	thinkingParts := make([]string, 0, 8)
 	initialThinking := strings.TrimSpace(p.thinkingMessage)
 	if initialThinking == "" {
 		initialThinking = "思考中..."
 	}
-	cardContent := buildProgressCardContent(job.Text, initialThinking, "", false)
+	cardContent := buildProgressCardContent(initialThinking, "", false, 0)
 
 	cardMessageID, err := p.sender.ReplyCard(ctx, job.SourceMessageID, cardContent)
 	if err != nil {
@@ -117,7 +118,7 @@ func (p *Processor) processReplyCard(ctx context.Context, job Job) {
 		if time.Since(lastPatchTime) < 350*time.Millisecond {
 			return
 		}
-		progressCard := buildProgressCardContent(job.Text, thinkingText, "", false)
+		progressCard := buildProgressCardContent(thinkingText, "", false, time.Since(startedAt))
 		if patchErr := p.sender.PatchCard(ctx, cardMessageID, progressCard); patchErr != nil {
 			log.Printf("patch card failed event_id=%s: %v", job.EventID, patchErr)
 			return
@@ -132,9 +133,10 @@ func (p *Processor) processReplyCard(ctx context.Context, job Job) {
 		finalReply = p.failureMessage
 	}
 	finalThinking := strings.Join(thinkingParts, "\n")
+	elapsed := time.Since(startedAt)
 
 	if cardMessageID != "" {
-		finalCard := buildProgressCardContent(job.Text, finalThinking, finalReply, failed)
+		finalCard := buildProgressCardContent(finalThinking, finalReply, failed, elapsed)
 		if patchErr := p.sender.PatchCard(ctx, cardMessageID, finalCard); patchErr == nil {
 			return
 		}
@@ -334,7 +336,7 @@ func normalizeReasoning(step string) string {
 	return clipText(step, 600)
 }
 
-func buildProgressCardContent(userText, thinkingText, answerText string, failed bool) string {
+func buildProgressCardContent(thinkingText, answerText string, failed bool, elapsed time.Duration) string {
 	status := "思考中"
 	if failed {
 		status = "失败"
@@ -342,14 +344,22 @@ func buildProgressCardContent(userText, thinkingText, answerText string, failed 
 		status = "已完成"
 	}
 
-	question := clipText(strings.TrimSpace(userText), 1200)
 	thinking := clipText(strings.TrimSpace(thinkingText), 4000)
 	answer := clipText(strings.TrimSpace(answerText), 4000)
 	if thinking == "" {
 		thinking = "（暂无）"
 	}
-	if answer == "" {
-		answer = "（等待中）"
+	durationLabel := "已思考：" + formatElapsed(elapsed)
+	if failed || strings.TrimSpace(answer) != "" {
+		durationLabel = "总耗时：" + formatElapsed(elapsed)
+	}
+
+	elements := []any{
+		cardMarkdown("**状态**：" + status + "（" + durationLabel + "）"),
+		cardMarkdown("**Codex 思考**\n" + thinking),
+	}
+	if strings.TrimSpace(answer) != "" {
+		elements = append(elements, cardMarkdown("**回复**\n"+answer))
 	}
 
 	card := map[string]any{
@@ -358,20 +368,8 @@ func buildProgressCardContent(userText, thinkingText, answerText string, failed 
 			"enable_forward": true,
 			"update_multi":   true,
 		},
-		"header": map[string]any{
-			"title": map[string]any{
-				"tag":     "plain_text",
-				"content": "Alice 助手",
-			},
-		},
 		"body": map[string]any{
-			"elements": []any{
-				cardMarkdown("**状态**：" + status),
-				cardMarkdown("**你的消息**\n" + question),
-				cardMarkdown("**Codex 思考**\n" + thinking),
-				cardMarkdown("**回复**\n" + answer),
-				cardMarkdown("_更新时间：" + time.Now().In(time.Local).Format("2006-01-02 15:04:05") + "_"),
-			},
+			"elements": elements,
 		},
 	}
 	raw, _ := json.Marshal(card)
@@ -394,6 +392,25 @@ func clipText(text string, maxRunes int) string {
 		return text
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+func formatElapsed(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := int(d / time.Minute)
+		seconds := int((d % time.Minute) / time.Second)
+		return fmt.Sprintf("%dm%02ds", minutes, seconds)
+	}
+
+	hours := int(d / time.Hour)
+	minutes := int((d % time.Hour) / time.Minute)
+	seconds := int((d % time.Minute) / time.Second)
+	return fmt.Sprintf("%dh%02dm%02ds", hours, minutes, seconds)
 }
 
 type LarkSender struct {
