@@ -33,6 +33,9 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.QueueCapacity != 256 {
 		t.Fatalf("unexpected queue_capacity: %d", cfg.QueueCapacity)
 	}
+	if cfg.ThinkingMessage != "正在思考中..." {
+		t.Fatalf("unexpected thinking_message: %s", cfg.ThinkingMessage)
+	}
 }
 
 func TestLoadFromFile_RequiredKeys(t *testing.T) {

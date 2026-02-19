@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,42 +28,129 @@ type CodexRunner interface {
 	Run(ctx context.Context, userText string) (string, error)
 }
 
+type StreamingCodexRunner interface {
+	RunWithProgress(ctx context.Context, userText string, onThinking func(step string)) (string, error)
+}
+
 type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
+	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
+	ReplyCard(ctx context.Context, sourceMessageID, cardContent string) (string, error)
+	PatchCard(ctx context.Context, messageID, cardContent string) error
 }
 
 type Job struct {
-	ReceiveID     string
-	ReceiveIDType string
-	Text          string
-	EventID       string
-	ReceivedAt    time.Time
+	ReceiveID       string
+	ReceiveIDType   string
+	SourceMessageID string
+	Text            string
+	EventID         string
+	ReceivedAt      time.Time
 }
 
 type Processor struct {
-	codex          CodexRunner
-	sender         Sender
-	failureMessage string
+	codex           CodexRunner
+	sender          Sender
+	failureMessage  string
+	thinkingMessage string
 }
 
-func NewProcessor(codexRunner CodexRunner, sender Sender, failureMessage string) *Processor {
+func NewProcessor(
+	codexRunner CodexRunner,
+	sender Sender,
+	failureMessage string,
+	thinkingMessage string,
+) *Processor {
 	return &Processor{
-		codex:          codexRunner,
-		sender:         sender,
-		failureMessage: failureMessage,
+		codex:           codexRunner,
+		sender:          sender,
+		failureMessage:  failureMessage,
+		thinkingMessage: thinkingMessage,
 	}
 }
 
 func (p *Processor) ProcessJob(ctx context.Context, job Job) {
-	reply, err := p.codex.Run(ctx, job.Text)
+	if strings.TrimSpace(job.SourceMessageID) != "" {
+		p.processReplyCard(ctx, job)
+		return
+	}
+
+	reply, err := p.runCodex(ctx, job.Text, nil)
 	if err != nil {
 		log.Printf("codex failed event_id=%s: %v", job.EventID, err)
 		reply = p.failureMessage
 	}
-
 	if sendErr := p.sender.SendText(ctx, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
 		log.Printf("send message failed event_id=%s: %v", job.EventID, sendErr)
 	}
+}
+
+func (p *Processor) processReplyCard(ctx context.Context, job Job) {
+	thinkingParts := []string{p.thinkingMessage}
+	thinkingText := p.thinkingMessage
+	cardContent := buildProgressCardContent(job.Text, thinkingText, "", false)
+
+	cardMessageID, err := p.sender.ReplyCard(ctx, job.SourceMessageID, cardContent)
+	if err != nil {
+		log.Printf("send card reply failed event_id=%s: %v", job.EventID, err)
+		cardMessageID = ""
+	}
+	lastPatchTime := time.Time{}
+
+	onThinking := func(step string) {
+		normalized := normalizeReasoning(step)
+		if normalized == "" {
+			return
+		}
+		if thinkingParts[len(thinkingParts)-1] == normalized {
+			return
+		}
+		thinkingParts = append(thinkingParts, normalized)
+		thinkingText = strings.Join(thinkingParts, "\n")
+
+		if cardMessageID == "" {
+			return
+		}
+		// Feishu patch API recommends per-message frequency control; throttle incremental sync.
+		if time.Since(lastPatchTime) < 350*time.Millisecond {
+			return
+		}
+		progressCard := buildProgressCardContent(job.Text, thinkingText, "", false)
+		if patchErr := p.sender.PatchCard(ctx, cardMessageID, progressCard); patchErr != nil {
+			log.Printf("patch card failed event_id=%s: %v", job.EventID, patchErr)
+			return
+		}
+		lastPatchTime = time.Now()
+	}
+
+	finalReply, runErr := p.runCodex(ctx, job.Text, onThinking)
+	failed := runErr != nil
+	if failed {
+		log.Printf("codex failed event_id=%s: %v", job.EventID, runErr)
+		finalReply = p.failureMessage
+	}
+
+	if cardMessageID != "" {
+		finalCard := buildProgressCardContent(job.Text, thinkingText, finalReply, failed)
+		if patchErr := p.sender.PatchCard(ctx, cardMessageID, finalCard); patchErr == nil {
+			return
+		}
+	}
+
+	if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, finalReply); replyErr != nil {
+		log.Printf("fallback reply text failed event_id=%s: %v", job.EventID, replyErr)
+	}
+}
+
+func (p *Processor) runCodex(
+	ctx context.Context,
+	userText string,
+	onThinking func(step string),
+) (string, error) {
+	if runner, ok := p.codex.(StreamingCodexRunner); ok {
+		return runner.RunWithProgress(ctx, userText, onThinking)
+	}
+	return p.codex.Run(ctx, userText)
 }
 
 type App struct {
@@ -170,11 +258,12 @@ func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
 	}
 
 	return &Job{
-		ReceiveID:     receiveID,
-		ReceiveIDType: receiveIDType,
-		Text:          text,
-		EventID:       eventID(event),
-		ReceivedAt:    time.Now(),
+		ReceiveID:       receiveID,
+		ReceiveIDType:   receiveIDType,
+		SourceMessageID: strings.TrimSpace(deref(message.MessageId)),
+		Text:            text,
+		EventID:         eventID(event),
+		ReceivedAt:      time.Now(),
 	}, nil
 }
 
@@ -232,6 +321,84 @@ func parseLogLevel(level string) larkcore.LogLevel {
 	}
 }
 
+func normalizeReasoning(step string) string {
+	step = strings.TrimSpace(step)
+	step = strings.Trim(step, "*")
+	step = strings.TrimSpace(step)
+	if step == "" {
+		return ""
+	}
+	return clipText(step, 600)
+}
+
+func buildProgressCardContent(userText, thinkingText, answerText string, failed bool) string {
+	status := "思考中"
+	template := "blue"
+	if failed {
+		status = "失败"
+		template = "red"
+	} else if strings.TrimSpace(answerText) != "" {
+		status = "已完成"
+		template = "green"
+	}
+
+	question := clipText(strings.TrimSpace(userText), 1200)
+	thinking := clipText(strings.TrimSpace(thinkingText), 4000)
+	answer := clipText(strings.TrimSpace(answerText), 4000)
+	if thinking == "" {
+		thinking = "（暂无）"
+	}
+	if answer == "" {
+		answer = "（等待中）"
+	}
+
+	card := map[string]any{
+		"schema": "2.0",
+		"config": map[string]any{
+			"wide_screen_mode": true,
+			"enable_forward":   true,
+			"update_multi":     true,
+		},
+		"header": map[string]any{
+			"template": template,
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": "Alice 助手",
+			},
+		},
+		"elements": []any{
+			cardMarkdown("**状态**：" + status),
+			cardMarkdown("**你的消息**\n" + question),
+			cardMarkdown("**Codex 思考**\n" + thinking),
+			cardMarkdown("**回复**\n" + answer),
+			cardMarkdown("_更新时间：" + strconv.FormatInt(time.Now().Unix(), 10) + "_"),
+		},
+	}
+	raw, _ := json.Marshal(card)
+	return string(raw)
+}
+
+func cardMarkdown(content string) map[string]any {
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": content,
+		},
+	}
+}
+
+func clipText(text string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "..."
+}
+
 type LarkSender struct {
 	client *lark.Client
 }
@@ -241,14 +408,14 @@ func NewLarkSender(client *lark.Client) *LarkSender {
 }
 
 func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, text string) error {
-	contentBytes, _ := json.Marshal(map[string]string{"text": text})
+	content := textMessageContent(text)
 
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(receiveIDType).
 		Body(larkim.NewCreateMessageReqBodyBuilder().
 			ReceiveId(receiveID).
 			MsgType("text").
-			Content(string(contentBytes)).
+			Content(content).
 			Build()).
 		Build()
 
@@ -260,4 +427,73 @@ func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, tex
 		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
 	}
 	return nil
+}
+
+func (s *LarkSender) ReplyText(ctx context.Context, sourceMessageID, text string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(sourceMessageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType("text").
+			Content(textMessageContent(text)).
+			ReplyInThread(false).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	if resp.Data == nil || resp.Data.MessageId == nil {
+		return "", errors.New("reply success but response message_id is empty")
+	}
+	return strings.TrimSpace(*resp.Data.MessageId), nil
+}
+
+func (s *LarkSender) ReplyCard(ctx context.Context, sourceMessageID, cardContent string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(sourceMessageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType("interactive").
+			Content(cardContent).
+			ReplyInThread(false).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	if resp.Data == nil || resp.Data.MessageId == nil {
+		return "", errors.New("reply card success but response message_id is empty")
+	}
+	return strings.TrimSpace(*resp.Data.MessageId), nil
+}
+
+func (s *LarkSender) PatchCard(ctx context.Context, messageID, cardContent string) error {
+	req := larkim.NewPatchMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewPatchMessageReqBodyBuilder().
+			Content(cardContent).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Patch(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	return nil
+}
+
+func textMessageContent(text string) string {
+	contentBytes, _ := json.Marshal(map[string]string{"text": text})
+	return string(contentBytes)
 }

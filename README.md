@@ -96,6 +96,7 @@ workspace_dir: "."
 
 codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
 failure_message: "Codex 暂时不可用，请稍后重试。"
+thinking_message: "正在思考中..."
 
 queue_capacity: 256
 worker_concurrency: 1
@@ -112,8 +113,19 @@ Required keys:
 
 - Non-text messages are ignored.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
-- Reply target priority: `chat_id`, fallback to sender `open_id`.
+- The bot replies with an **interactive card** quoting the source message (`reply` API).
+- While Codex is running, the card is patched incrementally with Codex reasoning.
+- After completion, the same card is patched with final answer (`patch` API).
+- Reply target priority (fallback path for non-card mode): `chat_id`, fallback to sender `open_id`.
 - On Codex failure/timeout, sends `failure_message`.
+
+Note: Feishu OpenAPI currently has reply/patch APIs, but no dedicated bot typing-status API in the IM catalog. This project uses card incremental patches as a typing-like experience.
+
+## Feishu API references
+
+- Reply message: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/reply
+- Patch message card: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/patch
+- API catalog: https://open.feishu.cn/api_explorer/v1/api_catalog
 
 ## Project layout
 

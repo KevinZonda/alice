@@ -21,6 +21,7 @@ type Config struct {
 	CodexTimeoutSecs  int           `mapstructure:"codex_timeout_secs"`
 	CodexPromptPrefix string        `mapstructure:"codex_prompt_prefix"`
 	FailureMessage    string        `mapstructure:"failure_message"`
+	ThinkingMessage   string        `mapstructure:"thinking_message"`
 	WorkspaceDir      string        `mapstructure:"workspace_dir"`
 
 	QueueCapacity     int `mapstructure:"queue_capacity"`
@@ -38,6 +39,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("codex_timeout_secs", 120)
 	v.SetDefault("codex_prompt_prefix", "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
+	v.SetDefault("thinking_message", "正在思考中...")
 	v.SetDefault("workspace_dir", ".")
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
@@ -58,6 +60,7 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
 	cfg.CodexPromptPrefix = strings.TrimSpace(cfg.CodexPromptPrefix)
 	cfg.FailureMessage = strings.TrimSpace(cfg.FailureMessage)
+	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
 	cfg.WorkspaceDir = strings.TrimSpace(cfg.WorkspaceDir)
 	cfg.LogLevel = strings.ToLower(strings.TrimSpace(cfg.LogLevel))
 
@@ -84,6 +87,9 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.FailureMessage == "" {
 		cfg.FailureMessage = "Codex 暂时不可用，请稍后重试。"
+	}
+	if cfg.ThinkingMessage == "" {
+		cfg.ThinkingMessage = "正在思考中..."
 	}
 
 	if cfg.CodexTimeoutSecs <= 0 {

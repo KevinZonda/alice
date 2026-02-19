@@ -13,6 +13,7 @@ workspace_dir: "."
 # Prompt and fallback
 codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
 failure_message: "Codex 暂时不可用，请稍后重试。"
+thinking_message: "正在思考中..."
 
 # Queue and worker
 queue_capacity: 256

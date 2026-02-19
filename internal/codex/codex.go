@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -20,6 +21,14 @@ type Runner struct {
 }
 
 func (r Runner) Run(ctx context.Context, userText string) (string, error) {
+	return r.RunWithProgress(ctx, userText, nil)
+}
+
+func (r Runner) RunWithProgress(
+	ctx context.Context,
+	userText string,
+	onThinking func(step string),
+) (string, error) {
 	prompt := strings.TrimSpace(r.PromptPrefix) + "\n\n" + strings.TrimSpace(userText)
 	if strings.TrimSpace(prompt) == "" {
 		return "", errors.New("empty prompt")
@@ -47,12 +56,54 @@ func (r Runner) Run(ctx context.Context, userText string) (string, error) {
 		cmd.Dir = r.WorkspaceDir
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("create stdout pipe failed: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("create stderr pipe failed: %w", err)
+	}
 
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("start codex process failed: %w", err)
+	}
+
+	var stderr bytes.Buffer
+	stderrDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&stderr, stderrPipe)
+		close(stderrDone)
+	}()
+
+	var stdout bytes.Buffer
+	var finalMessage string
+	scanner := bufio.NewScanner(stdoutPipe)
+	scanner.Buffer(make([]byte, 0, 64*1024), 5*1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		stdout.WriteString(line)
+		stdout.WriteByte('\n')
+
+		reasoning, agentMessage := parseEventLine(line)
+		if strings.TrimSpace(reasoning) != "" && onThinking != nil {
+			onThinking(strings.TrimSpace(reasoning))
+		}
+		if strings.TrimSpace(agentMessage) != "" {
+			finalMessage = strings.TrimSpace(agentMessage)
+		}
+	}
+
+	if scanErr := scanner.Err(); scanErr != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		<-stderrDone
+		return "", fmt.Errorf("read codex output failed: %w", scanErr)
+	}
+
+	err = cmd.Wait()
+	<-stderrDone
 	if errors.Is(tctx.Err(), context.DeadlineExceeded) {
 		return "", errors.New("codex timeout")
 	}
@@ -67,11 +118,14 @@ func (r Runner) Run(ctx context.Context, userText string) (string, error) {
 		return "", fmt.Errorf("codex exec failed: %w (%s)", err, detail)
 	}
 
-	message, err := ParseFinalMessage(stdout.String())
-	if err != nil {
-		return "", err
+	if finalMessage == "" {
+		message, parseErr := ParseFinalMessage(stdout.String())
+		if parseErr != nil {
+			return "", parseErr
+		}
+		finalMessage = strings.TrimSpace(message)
 	}
-	return strings.TrimSpace(message), nil
+	return finalMessage, nil
 }
 
 func ParseFinalMessage(jsonlOutput string) (string, error) {
@@ -85,26 +139,7 @@ func ParseFinalMessage(jsonlOutput string) (string, error) {
 			continue
 		}
 
-		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			continue
-		}
-
-		if event["type"] != "item.completed" {
-			continue
-		}
-
-		item, ok := event["item"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if item["type"] != "agent_message" {
-			continue
-		}
-		text, ok := item["text"].(string)
-		if !ok {
-			continue
-		}
+		_, text := parseEventLine(line)
 		if strings.TrimSpace(text) != "" {
 			lastMessage = text
 		}
@@ -117,4 +152,34 @@ func ParseFinalMessage(jsonlOutput string) (string, error) {
 		return "", errors.New("codex returned no final agent message")
 	}
 	return lastMessage, nil
+}
+
+func parseEventLine(line string) (reasoning string, agentMessage string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", ""
+	}
+
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return "", ""
+	}
+	if event["type"] != "item.completed" {
+		return "", ""
+	}
+
+	item, ok := event["item"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	itemType, _ := item["type"].(string)
+	text, _ := item["text"].(string)
+	switch itemType {
+	case "reasoning":
+		return text, ""
+	case "agent_message":
+		return "", text
+	default:
+		return "", ""
+	}
 }

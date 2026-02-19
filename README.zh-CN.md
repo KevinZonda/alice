@@ -96,6 +96,7 @@ workspace_dir: "."
 
 codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
 failure_message: "Codex 暂时不可用，请稍后重试。"
+thinking_message: "正在思考中..."
 
 queue_capacity: 256
 worker_concurrency: 1
@@ -112,8 +113,19 @@ log_level: "info"
 
 - 非文本消息会忽略。
 - 群聊中的 `<at ...>...</at>` 会先清理，再发送给 Codex。
-- 回复目标优先 `chat_id`，没有则回退到发送者 `open_id`。
+- 机器人会使用“**卡片消息 + 引用回复原消息**”方式返回结果。
+- Codex 执行期间，会把思考过程持续同步到同一条卡片消息。
+- Codex 完成后，会把同一条卡片更新为最终答案。
+- 回复目标优先级（非卡片回退路径）：`chat_id`，没有则回退到发送者 `open_id`。
 - Codex 超时或失败时，发送 `failure_message`。
+
+说明：飞书 IM 官方目录里有“回复消息/卡片更新”接口，但没有独立的机器人“正在输入”状态接口。本项目使用“卡片增量更新”来提供接近打字中的体验。
+
+## 飞书 API 参考
+
+- 回复消息: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/reply
+- 更新消息卡片: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/patch
+- API 目录: https://open.feishu.cn/api_explorer/v1/api_catalog
 
 ## 项目结构
 

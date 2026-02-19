@@ -39,7 +39,12 @@ func main() {
 		WorkspaceDir: cfg.WorkspaceDir,
 	}
 
-	processor := connector.NewProcessor(codexRunner, connector.NewLarkSender(botClient), cfg.FailureMessage)
+	processor := connector.NewProcessor(
+		codexRunner,
+		connector.NewLarkSender(botClient),
+		cfg.FailureMessage,
+		cfg.ThinkingMessage,
+	)
 	app := connector.NewApp(cfg, processor)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
