@@ -105,7 +105,7 @@ func (m *Manager) BuildPrompt(userText string) (string, error) {
 	prompt := "---\n" +
 		"记忆内容与更新规则：\n" +
 		"长期记忆：\n" +
-		"- 文件位置：" + longTermPromptPath + "\n" +
+		"- 文件位置：" + longTermPromptPath + "\n- 文件内容：\n" +
 		longText + "\n\n" +
 		"分日期记忆：\n" +
 		"- 目录位置：" + shortTermDir + "\n" +
