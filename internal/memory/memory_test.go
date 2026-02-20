@@ -17,7 +17,7 @@ func TestManagerInit_RequiresMemoryDir(t *testing.T) {
 	}
 }
 
-func TestManagerInit_DoesNotCreateMemoryFiles(t *testing.T) {
+func TestManagerInit_CreatesMemoryDirStructure(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "memory")
 
@@ -25,8 +25,12 @@ func TestManagerInit_DoesNotCreateMemoryFiles(t *testing.T) {
 	if err := mgr.Init(); err != nil {
 		t.Fatalf("init memory failed: %v", err)
 	}
-	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("init should not create memory dir, stat err=%v", err)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("init should create memory dir, err=%v", err)
+	}
+	shortTermDir := filepath.Join(dir, ShortTermDirName)
+	if info, err := os.Stat(shortTermDir); err != nil || !info.IsDir() {
+		t.Fatalf("init should create short-term memory dir, err=%v", err)
 	}
 }
 

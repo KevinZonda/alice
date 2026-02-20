@@ -115,6 +115,7 @@ Required keys:
 - Non-text messages are ignored.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Memory module is enabled by default, writing files under `memory_dir`: long-term `MEMORY.md` and date-based memory in `daily/YYYY-MM-DD.md`.
+- On first startup, the connector auto-creates `memory_dir` and its `daily/` subdirectory.
 - Before each Codex call, only long-term memory is injected; date-based memory is exposed as a directory path for Codex to search on demand.
 - The connector does not auto-write memory files; Codex decides whether to update long-term/date-based memory on demand based on prompt instructions.
 - The bot replies with an **interactive card** quoting the source message (`reply` API).

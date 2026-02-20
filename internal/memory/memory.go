@@ -56,6 +56,13 @@ func (m *Manager) Init() error {
 	if strings.TrimSpace(m.Dir) == "" {
 		return errors.New("memory dir is empty")
 	}
+
+	if err := os.MkdirAll(m.Dir, 0o755); err != nil {
+		return fmt.Errorf("create memory dir failed: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(m.Dir, ShortTermDirName), 0o755); err != nil {
+		return fmt.Errorf("create short-term memory dir failed: %w", err)
+	}
 	return nil
 }
 
