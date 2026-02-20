@@ -10,14 +10,14 @@
 
 ## 2. 提交信息规范
 
-- 推荐使用 Conventional Commits：
-  - `feat:` 新功能
-  - `fix:` 缺陷修复
-  - `docs:` 文档更新
-  - `chore:` 工程或依赖调整
-  - `test:` 测试相关改动
-  - `refactor:` 重构（不改行为）
-- 提交标题尽量简洁明确，能直接看出改动目的。
+- 强制使用 Conventional Commits，格式为：
+  - `type(scope): subject`
+  - `type: subject`
+- 允许的 `type`：`feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、`build`、`ci`、`chore`、`revert`
+- 示例：
+  - `feat(connector): support codex resume thread`
+  - `fix: keep proxy env for codex exec`
+- 本仓库通过 `commit-msg` hook 自动校验，不符合格式会拒绝提交。
 
 ## 3. 提交前必须检查
 

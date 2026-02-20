@@ -63,7 +63,10 @@ Run all checks manually:
 make check
 ```
 
-Install git pre-commit hook (runs `make check` before commit):
+Install git hooks:
+
+- `pre-commit`: runs `make check` before commit
+- `commit-msg`: enforces Conventional Commits format
 
 ```bash
 make precommit-install

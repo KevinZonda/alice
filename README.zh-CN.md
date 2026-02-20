@@ -63,7 +63,10 @@ go build -o bin/alice-connector ./cmd/connector
 make check
 ```
 
-安装 git pre-commit hook（提交前自动执行 `make check`）：
+安装 git hooks：
+
+- `pre-commit`：提交前自动执行 `make check`
+- `commit-msg`：校验 Conventional Commits 提交信息格式
 
 ```bash
 make precommit-install

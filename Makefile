@@ -22,6 +22,10 @@ check: fmt-check vet test
 precommit-install:
 	@mkdir -p .githooks
 	@cp scripts/pre-commit.sh .githooks/pre-commit
+	@cp scripts/commit-msg.sh .githooks/commit-msg
 	@chmod +x .githooks/pre-commit
+	@chmod +x .githooks/commit-msg
 	@git config core.hooksPath .githooks
-	@echo "Installed git pre-commit hook to .githooks/pre-commit"
+	@echo "Installed git hooks:"
+	@echo "  - .githooks/pre-commit"
+	@echo "  - .githooks/commit-msg"
