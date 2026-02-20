@@ -107,6 +107,7 @@ thinking_message: "正在思考中..."
 
 queue_capacity: 256
 worker_concurrency: 1
+idle_summary_hours: 8
 
 log_level: "info"
 ```
@@ -119,6 +120,7 @@ log_level: "info"
 可选项：
 
 - `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
+- `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
 
 ## 运行行为
 
@@ -126,8 +128,11 @@ log_level: "info"
 - 群聊中的 `<at ...>...</at>` 会先清理，再发送给 Codex。
 - 默认启用记忆模块，文件写入 `memory_dir`：长期记忆 `MEMORY.md`，分日期记忆在 `daily/YYYY-MM-DD.md`。
 - 首次启动时会自动创建 `memory_dir` 及其 `daily/` 子目录。
+- 连接器会把每个聊天的会话状态持久化到 `memory_dir/session_state.json`，重启后仍可续接线程。
 - 每次调用 Codex 前，仅把长期记忆注入提示词；分日期记忆只提供目录位置，让 Codex 按需检索。
-- 连接器不会自动写入记忆文件；是否更新长期/分日期记忆由 Codex 根据提示按需自行处理。
+- 每个聊天（`chat_id`，没有则 `open_id`）始终复用同一个 Codex 线程。
+- 若某聊天连续空闲达到 `idle_summary_hours`（默认 8 小时），后台会异步 resume 该线程并将“空闲摘要”追加到 `daily/YYYY-MM-DD.md`，同一段空闲期仅写一次。
+- 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 机器人会使用“**卡片消息 + 引用回复原消息**”方式返回结果。
 - Codex 执行期间，会把思考过程持续同步到同一条卡片消息。
 - 同一会话内若收到新的用户消息，会立即中断旧任务并切换到最新消息（steer）。

@@ -76,8 +76,8 @@ func TestManagerBuildPrompt_ContainsLongTermAndPaths(t *testing.T) {
 	if !strings.Contains(prompt, filepath.Join(dir, ShortTermDirName)) {
 		t.Fatalf("prompt missing short-term dir location: %s", prompt)
 	}
-	if !strings.Contains(prompt, "本系统不会自动写入任何记忆文件") {
-		t.Fatalf("prompt missing llm-managed memory instruction: %s", prompt)
+	if !strings.Contains(prompt, "系统仅会在会话空闲超时后自动追加“空闲摘要”") {
+		t.Fatalf("prompt missing idle-summary instruction: %s", prompt)
 	}
 	if !strings.Contains(prompt, "帮我总结下") {
 		t.Fatalf("prompt missing user message: %s", prompt)
@@ -111,5 +111,41 @@ func TestManagerSaveInteraction_DelegatedToLLMNoSystemWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("save interaction should not create memory dir, stat err=%v", err)
+	}
+}
+
+func TestManagerAppendDailySummary_CreatesAndAppendsDailyFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "memory")
+	mgr := NewManager(dir)
+
+	at := time.Date(2026, 2, 20, 10, 30, 0, 0, time.Local)
+	if err := mgr.AppendDailySummary("chat_id:oc_chat", "- 要点1\n- 要点2", at); err != nil {
+		t.Fatalf("append daily summary failed: %v", err)
+	}
+	if err := mgr.AppendDailySummary("", "", at.Add(time.Minute)); err != nil {
+		t.Fatalf("append empty summary failed: %v", err)
+	}
+
+	dailyPath := filepath.Join(dir, ShortTermDirName, "2026-02-20.md")
+	data, err := os.ReadFile(dailyPath)
+	if err != nil {
+		t.Fatalf("read daily file failed: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "session: chat_id:oc_chat") {
+		t.Fatalf("missing session key in daily file: %s", content)
+	}
+	if !strings.Contains(content, "session: unknown") {
+		t.Fatalf("missing fallback session key in daily file: %s", content)
+	}
+	if !strings.Contains(content, "空闲摘要：") {
+		t.Fatalf("missing summary label in daily file: %s", content)
+	}
+	if !strings.Contains(content, "无重要新增信息") {
+		t.Fatalf("missing empty-summary fallback text: %s", content)
+	}
+	if strings.Count(content, "## ") != 2 {
+		t.Fatalf("expected two appended summary entries, got content: %s", content)
 	}
 }

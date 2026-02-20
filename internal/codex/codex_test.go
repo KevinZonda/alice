@@ -65,6 +65,9 @@ func TestBuildExecArgs_ResumeThread(t *testing.T) {
 	if !slices.Contains(args, "thread_123") {
 		t.Fatalf("expected thread id in args, got: %#v", args)
 	}
+	if slices.Contains(args, "--sandbox") {
+		t.Fatalf("resume args should not include --sandbox, got: %#v", args)
+	}
 }
 
 func TestBuildPrompt_NewThreadIncludesPrefix(t *testing.T) {

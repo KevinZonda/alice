@@ -59,6 +59,7 @@ make fmt
   - `config.example.yaml`
   - `internal/config/config.go` 中默认值与校验逻辑
   - 相关文档（中英文 README）
+- 涉及会话/记忆行为的配置项（如 `idle_summary_hours`）需补充对应测试（触发条件、边界值、并发一致性）。
 
 ## 6. 文档同步规则
 

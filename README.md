@@ -107,6 +107,7 @@ thinking_message: "正在思考中..."
 
 queue_capacity: 256
 worker_concurrency: 1
+idle_summary_hours: 8
 
 log_level: "info"
 ```
@@ -119,6 +120,7 @@ Required keys:
 Optional:
 
 - `env`: key-value environment variables injected into `codex` process (for example HTTP/HTTPS/SOCKS proxy settings).
+- `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
 
 ## Runtime behavior
 
@@ -126,8 +128,11 @@ Optional:
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Memory module is enabled by default, writing files under `memory_dir`: long-term `MEMORY.md` and date-based memory in `daily/YYYY-MM-DD.md`.
 - On first startup, the connector auto-creates `memory_dir` and its `daily/` subdirectory.
+- The connector also persists per-chat session state in `memory_dir/session_state.json` to keep thread continuity across restarts.
 - Before each Codex call, only long-term memory is injected; date-based memory is exposed as a directory path for Codex to search on demand.
-- The connector does not auto-write memory files; Codex decides whether to update long-term/date-based memory on demand based on prompt instructions.
+- For each chat (`chat_id`, fallback `open_id`), the connector always reuses one Codex thread.
+- If a chat stays idle for `idle_summary_hours` (default 8), a background task asynchronously resumes that thread and appends an "idle summary" to `daily/YYYY-MM-DD.md` once per idle period.
+- The message path does not wait for idle-summary writes; new messages are handled immediately.
 - The bot replies with an **interactive card** quoting the source message (`reply` API).
 - While Codex is running, the card is patched incrementally with Codex reasoning.
 - If a newer user message arrives in the same session, the running task is interrupted immediately and switched to the latest message (steer behavior).

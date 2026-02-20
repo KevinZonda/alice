@@ -264,11 +264,9 @@ func buildExecArgs(threadID string, prompt string) []string {
 	if threadID != "" {
 		return []string{
 			"exec",
+			"resume",
 			"--json",
 			"--skip-git-repo-check",
-			"--sandbox",
-			"danger-full-access",
-			"resume",
 			threadID,
 			prompt,
 		}

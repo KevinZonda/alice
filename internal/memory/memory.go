@@ -112,7 +112,7 @@ func (m *Manager) BuildPrompt(userText string) (string, error) {
 		"- 文件命名：YYYY-MM-DD.md（例如：" + shortTermName + "）\n" +
 		"- 需要历史信息时，请按日期自行检索对应文件。\n\n" +
 		"按需记忆更新：\n" +
-		"- 本系统不会自动写入任何记忆文件；如需更新记忆，请你自行编辑上述记忆文件。\n" +
+		"- 系统仅会在会话空闲超时后自动追加“空闲摘要”到分日期记忆；其余记忆更新请你自行编辑上述文件。\n" +
 		"- 长期记忆内容有限，若用户未明确要求，不要将临时任务细节升级为长期偏好。\n" +
 		"---\n\n" +
 		"当前用户消息：\n" + userText
@@ -139,11 +139,70 @@ func (m *Manager) SaveInteraction(userText, assistantText string, failed bool) (
 	return false, nil
 }
 
+func (m *Manager) AppendDailySummary(sessionKey, summary string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if strings.TrimSpace(m.Dir) == "" {
+		return errors.New("memory dir is empty")
+	}
+
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		sessionKey = "unknown"
+	}
+
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		summary = "无重要新增信息"
+	}
+	summary = clipRunes(summary, m.maxEntryRunes())
+
+	if at.IsZero() {
+		at = m.now()
+	}
+	at = at.Local()
+
+	dailyDir := filepath.Join(m.Dir, ShortTermDirName)
+	if err := os.MkdirAll(dailyDir, 0o755); err != nil {
+		return fmt.Errorf("create daily memory dir failed: %w", err)
+	}
+
+	dailyPath := filepath.Join(dailyDir, shortTermFileName(at))
+	f, err := os.OpenFile(dailyPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open daily memory file failed: %w", err)
+	}
+	defer f.Close()
+
+	entry := "## " + at.Format("15:04:05") + " | session: " + sessionKey + "\n" +
+		"空闲摘要：\n" + summary + "\n\n"
+	if _, err := f.WriteString(entry); err != nil {
+		return fmt.Errorf("append daily memory failed: %w", err)
+	}
+
+	logging.Debugf(
+		"daily memory appended dir=%s session=%s file=%s summary=%q",
+		m.Dir,
+		sessionKey,
+		absOrSame(dailyPath),
+		summary,
+	)
+	return nil
+}
+
 func (m *Manager) maxLongTermRunes() int {
 	if m.MaxLongTermRunes <= 0 {
 		return defaultMaxLongTermRunes
 	}
 	return m.MaxLongTermRunes
+}
+
+func (m *Manager) maxEntryRunes() int {
+	if m.MaxEntryRunes <= 0 {
+		return defaultMaxEntryRunes
+	}
+	return m.MaxEntryRunes
 }
 
 func shortTermFileName(now time.Time) string {
@@ -185,4 +244,15 @@ func clipTailRunes(text string, maxRunes int) string {
 		return text
 	}
 	return "...\n" + string(runes[len(runes)-maxRunes:])
+}
+
+func clipRunes(text string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "..."
 }

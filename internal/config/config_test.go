@@ -36,6 +36,12 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.ThinkingMessage != "正在思考中..." {
 		t.Fatalf("unexpected thinking_message: %s", cfg.ThinkingMessage)
 	}
+	if cfg.IdleSummaryHours != 8 {
+		t.Fatalf("unexpected idle_summary_hours: %d", cfg.IdleSummaryHours)
+	}
+	if cfg.IdleSummaryIdle != 8*time.Hour {
+		t.Fatalf("unexpected idle_summary_idle: %s", cfg.IdleSummaryIdle)
+	}
 	if cfg.MemoryDir != ".memory" {
 		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
 	}
@@ -105,6 +111,27 @@ env:
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "must not contain '='") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFromFile_IdleSummaryHoursInvalid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+idle_summary_hours: 0
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "idle_summary_hours must be > 0") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

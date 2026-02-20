@@ -59,6 +59,12 @@ func main() {
 		cfg.ThinkingMessage,
 		memoryManager,
 	)
+	sessionStatePath := filepath.Join(memoryDir, "session_state.json")
+	if err := processor.LoadSessionState(sessionStatePath); err != nil {
+		log.Printf("load session state failed file=%s err=%v", sessionStatePath, err)
+	} else {
+		log.Printf("session state enabled file=%s", sessionStatePath)
+	}
 	app := connector.NewApp(cfg, processor)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -30,6 +30,8 @@ type Config struct {
 
 	QueueCapacity     int `mapstructure:"queue_capacity"`
 	WorkerConcurrency int `mapstructure:"worker_concurrency"`
+	IdleSummaryHours  int `mapstructure:"idle_summary_hours"`
+	IdleSummaryIdle   time.Duration
 
 	LogLevel string `mapstructure:"log_level"`
 }
@@ -48,6 +50,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("memory_dir", ".memory")
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
+	v.SetDefault("idle_summary_hours", 8)
 	v.SetDefault("log_level", "info")
 
 	if err := v.ReadInConfig(); err != nil {
@@ -123,7 +126,11 @@ func LoadFromFile(path string) (Config, error) {
 	if cfg.WorkerConcurrency <= 0 {
 		return Config{}, errors.New("worker_concurrency must be > 0")
 	}
+	if cfg.IdleSummaryHours <= 0 {
+		return Config{}, errors.New("idle_summary_hours must be > 0")
+	}
 	cfg.CodexTimeout = time.Duration(cfg.CodexTimeoutSecs) * time.Second
+	cfg.IdleSummaryIdle = time.Duration(cfg.IdleSummaryHours) * time.Hour
 
 	return cfg, nil
 }
