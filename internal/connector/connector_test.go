@@ -10,6 +10,8 @@ import (
 
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+
+	"gitee.com/alicespace/alice/internal/config"
 )
 
 func TestBuildJob_TextMessage(t *testing.T) {
@@ -173,8 +175,198 @@ func TestProcessor_NoSourceMessageUsesSendText(t *testing.T) {
 	}
 }
 
+func TestProcessor_CanceledReplyMarksInterruptedInsteadOfFailure(t *testing.T) {
+	fakeCodex := codexStub{err: context.Canceled}
+	sender := &senderStub{}
+	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
+
+	processor := NewProcessorWithMemory(
+		fakeCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+		memory,
+	)
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_src",
+		Text:            "hello",
+	})
+
+	if sender.patchCardCalls != 1 {
+		t.Fatalf("expected 1 patch call, got %d", sender.patchCardCalls)
+	}
+	if !strings.Contains(sender.lastPatchedCard, "已中断") {
+		t.Fatalf("interrupted card should include interrupted status: %s", sender.lastPatchedCard)
+	}
+	if strings.Contains(sender.lastPatchedCard, "Codex 暂时不可用，请稍后重试") {
+		t.Fatalf("interrupted card should not include failure message: %s", sender.lastPatchedCard)
+	}
+	if memory.saveCalls != 0 {
+		t.Fatalf("canceled job should not be saved to memory, got %d", memory.saveCalls)
+	}
+}
+
+func TestProcessor_CanceledNonReplySkipsSendingAndMemory(t *testing.T) {
+	fakeCodex := codexStub{err: context.Canceled}
+	sender := &senderStub{}
+	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
+
+	processor := NewProcessorWithMemory(
+		fakeCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+		memory,
+	)
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		Text:          "hello",
+	})
+
+	if sender.sendCalls != 0 {
+		t.Fatalf("expected no send text calls, got %d", sender.sendCalls)
+	}
+	if memory.saveCalls != 0 {
+		t.Fatalf("canceled job should not be saved to memory, got %d", memory.saveCalls)
+	}
+}
+
+func TestApp_EnqueueJobAssignsVersionAndCancelsActive(t *testing.T) {
+	cfg := configForTest()
+	app := NewApp(cfg, nil)
+
+	cancelCalls := 0
+	app.latest["chat_id:oc_chat"] = 1
+	app.active["chat_id:oc_chat"] = activeSession{
+		version: 1,
+		cancel: func() {
+			cancelCalls++
+		},
+		eventID: "evt_old",
+	}
+
+	job := &Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		EventID:       "evt_new",
+	}
+
+	queued, cancelActive, canceledEventID := app.enqueueJob(job)
+	if !queued {
+		t.Fatal("expected job to be queued")
+	}
+	if job.SessionKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected session key: %s", job.SessionKey)
+	}
+	if job.SessionVersion != 2 {
+		t.Fatalf("unexpected session version: %d", job.SessionVersion)
+	}
+	if app.latest[job.SessionKey] != 2 {
+		t.Fatalf("latest version should be 2, got %d", app.latest[job.SessionKey])
+	}
+	if canceledEventID != "evt_old" {
+		t.Fatalf("unexpected canceled event id: %s", canceledEventID)
+	}
+	if cancelActive == nil {
+		t.Fatal("expected active cancel func")
+	}
+	cancelActive()
+	if cancelCalls != 1 {
+		t.Fatalf("expected cancel to be called once, got %d", cancelCalls)
+	}
+}
+
+func TestApp_ShouldProcessJobSkipsStaleVersion(t *testing.T) {
+	cfg := configForTest()
+	app := NewApp(cfg, nil)
+
+	sessionKey := "chat_id:oc_chat"
+	app.latest[sessionKey] = 3
+
+	if app.shouldProcessJob(Job{SessionKey: sessionKey, SessionVersion: 2}) {
+		t.Fatal("stale job should not be processed")
+	}
+	if !app.shouldProcessJob(Job{SessionKey: sessionKey, SessionVersion: 3}) {
+		t.Fatal("latest job should be processed")
+	}
+}
+
+func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {
+	fakeCodex := &codexCaptureStub{resp: "final answer"}
+	sender := &senderStub{}
+	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
+
+	processor := NewProcessorWithMemory(
+		fakeCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+		memory,
+	)
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		Text:          "hello",
+	})
+
+	if memory.buildCalls != 1 || memory.lastBuildInput != "hello" {
+		t.Fatalf("unexpected memory build call: %+v", memory)
+	}
+	if fakeCodex.lastInput != "记忆上下文 + 用户消息" {
+		t.Fatalf("codex should receive memory prompt, got: %s", fakeCodex.lastInput)
+	}
+	if memory.saveCalls != 1 {
+		t.Fatalf("expected 1 memory save, got %d", memory.saveCalls)
+	}
+	if memory.lastSaveUser != "hello" {
+		t.Fatalf("unexpected saved user text: %s", memory.lastSaveUser)
+	}
+	if memory.lastSaveReply != "final answer" {
+		t.Fatalf("unexpected saved reply: %s", memory.lastSaveReply)
+	}
+	if memory.lastSaveFailed {
+		t.Fatalf("save flag should be success")
+	}
+}
+
+func TestProcessor_SavesFailureFallbackToMemory(t *testing.T) {
+	fakeCodex := &codexCaptureStub{err: errors.New("boom")}
+	sender := &senderStub{}
+	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
+
+	processor := NewProcessorWithMemory(
+		fakeCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+		memory,
+	)
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		Text:          "hello",
+	})
+
+	if memory.saveCalls != 1 {
+		t.Fatalf("expected 1 memory save, got %d", memory.saveCalls)
+	}
+	if !memory.lastSaveFailed {
+		t.Fatal("expected failed=true when codex returns error")
+	}
+	if memory.lastSaveReply != "Codex 暂时不可用，请稍后重试。" {
+		t.Fatalf("unexpected fallback reply saved: %s", memory.lastSaveReply)
+	}
+}
+
 func TestBuildProgressCardContent_UsesCardSchemaV2BodyElements(t *testing.T) {
-	content := buildProgressCardContent("思考", "答案", false, 1250*time.Millisecond)
+	content := buildProgressCardContent("思考", "答案", false, false, 1250*time.Millisecond)
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
@@ -263,6 +455,43 @@ func (c codexStreamingStub) RunWithProgress(
 	return c.resp, c.err
 }
 
+type codexCaptureStub struct {
+	resp      string
+	err       error
+	lastInput string
+}
+
+func (c *codexCaptureStub) Run(_ context.Context, input string) (string, error) {
+	c.lastInput = input
+	return c.resp, c.err
+}
+
+type memoryStub struct {
+	prompt string
+
+	buildCalls     int
+	lastBuildInput string
+
+	saveCalls      int
+	lastSaveUser   string
+	lastSaveReply  string
+	lastSaveFailed bool
+}
+
+func (m *memoryStub) BuildPrompt(userText string) (string, error) {
+	m.buildCalls++
+	m.lastBuildInput = userText
+	return m.prompt, nil
+}
+
+func (m *memoryStub) SaveInteraction(userText, assistantText string, failed bool) (bool, error) {
+	m.saveCalls++
+	m.lastSaveUser = userText
+	m.lastSaveReply = assistantText
+	m.lastSaveFailed = failed
+	return true, nil
+}
+
 type senderStub struct {
 	sendCalls      int
 	lastSendText   string
@@ -301,3 +530,10 @@ func (s *senderStub) PatchCard(_ context.Context, _ string, cardContent string) 
 }
 
 func strPtr(s string) *string { return &s }
+
+func configForTest() config.Config {
+	return config.Config{
+		QueueCapacity:     8,
+		WorkerConcurrency: 1,
+	}
+}

@@ -116,7 +116,7 @@ Required keys:
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Memory module is enabled by default, writing files under `memory_dir`: long-term `MEMORY.md` and date-based memory in `daily/YYYY-MM-DD.md`.
 - Before each Codex call, only long-term memory is injected; date-based memory is exposed as a directory path for Codex to search on demand.
-- Each interaction is appended to current-day short-term memory; messages containing "记住"/"长期记忆"/"remember this" are also appended to `MEMORY.md`.
+- The connector does not auto-write memory files; Codex decides whether to update long-term/date-based memory on demand based on prompt instructions.
 - The bot replies with an **interactive card** quoting the source message (`reply` API).
 - While Codex is running, the card is patched incrementally with Codex reasoning.
 - If a newer user message arrives in the same session, the running task is interrupted immediately and switched to the latest message (steer behavior).

@@ -36,6 +36,9 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.ThinkingMessage != "正在思考中..." {
 		t.Fatalf("unexpected thinking_message: %s", cfg.ThinkingMessage)
 	}
+	if cfg.MemoryDir != ".memory" {
+		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
+	}
 }
 
 func TestLoadFromFile_RequiredKeys(t *testing.T) {

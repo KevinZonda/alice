@@ -35,7 +35,7 @@ type StreamingCodexRunner interface {
 
 type MemoryManager interface {
 	BuildPrompt(userText string) (string, error)
-	SaveInteraction(userText, assistantText string, failed bool) error
+	SaveInteraction(userText, assistantText string, failed bool) (changed bool, err error)
 }
 
 type Sender interface {
@@ -245,12 +245,13 @@ func (p *Processor) recordInteraction(job Job, reply string, failed bool) {
 		logging.Debugf("memory update skipped event_id=%s changed=false reason=no_memory_manager", job.EventID)
 		return
 	}
-	if err := p.memory.SaveInteraction(job.Text, reply, failed); err != nil {
+	changed, err := p.memory.SaveInteraction(job.Text, reply, failed)
+	if err != nil {
 		log.Printf("save memory failed event_id=%s: %v", job.EventID, err)
 		logging.Debugf("memory update result event_id=%s changed=unknown error=%v", job.EventID, err)
 		return
 	}
-	logging.Debugf("memory update result event_id=%s changed=true failed=%t", job.EventID, failed)
+	logging.Debugf("memory update result event_id=%s changed=%t failed=%t", job.EventID, changed, failed)
 }
 
 type App struct {

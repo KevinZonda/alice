@@ -23,6 +23,7 @@ type Config struct {
 	FailureMessage    string        `mapstructure:"failure_message"`
 	ThinkingMessage   string        `mapstructure:"thinking_message"`
 	WorkspaceDir      string        `mapstructure:"workspace_dir"`
+	MemoryDir         string        `mapstructure:"memory_dir"`
 
 	QueueCapacity     int `mapstructure:"queue_capacity"`
 	WorkerConcurrency int `mapstructure:"worker_concurrency"`
@@ -41,6 +42,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
 	v.SetDefault("thinking_message", "正在思考中...")
 	v.SetDefault("workspace_dir", ".")
+	v.SetDefault("memory_dir", ".memory")
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
 	v.SetDefault("log_level", "info")
@@ -62,6 +64,7 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.FailureMessage = strings.TrimSpace(cfg.FailureMessage)
 	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
 	cfg.WorkspaceDir = strings.TrimSpace(cfg.WorkspaceDir)
+	cfg.MemoryDir = strings.TrimSpace(cfg.MemoryDir)
 	cfg.LogLevel = strings.ToLower(strings.TrimSpace(cfg.LogLevel))
 
 	if cfg.FeishuAppID == "" {
@@ -78,6 +81,9 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.WorkspaceDir == "" {
 		cfg.WorkspaceDir = "."
+	}
+	if cfg.MemoryDir == "" {
+		cfg.MemoryDir = ".memory"
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"

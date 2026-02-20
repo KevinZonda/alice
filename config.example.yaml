@@ -9,6 +9,8 @@ feishu_base_url: "https://open.feishu.cn"
 codex_command: "codex"
 codex_timeout_secs: 172800
 workspace_dir: "."
+# Memory directory (long-term MEMORY.md + short-term YYYY-MM-DD.md)
+memory_dir: ".memory"
 
 # Prompt and fallback
 codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
