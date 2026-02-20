@@ -57,14 +57,14 @@ make fmt
 - 本项目使用 YAML 配置文件（`-c config.yaml`），不使用环境变量作为主配置入口。
 - 若新增配置项，必须同时更新：
   - `config.example.yaml`
-  - `/Users/alice/Developer/alicespace/internal/config/config.go` 中默认值与校验逻辑
+  - `internal/config/config.go` 中默认值与校验逻辑
   - 相关文档（中英文 README）
 
 ## 6. 文档同步规则
 
 - 任何用户可见行为变更（命令、参数、配置、运行方式）都必须同步更新：
-  - `/Users/alice/Developer/alicespace/README.md`
-  - `/Users/alice/Developer/alicespace/README.zh-CN.md`
+  - `README.md`
+  - `README.zh-CN.md`
 - 保持中英文文档内容一致，避免一份文档过期。
 
 ## 7. 合并前自检清单
