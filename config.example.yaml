@@ -9,6 +9,10 @@ feishu_base_url: "https://open.feishu.cn"
 codex_command: "codex"
 codex_timeout_secs: 172800
 workspace_dir: "."
+# Optional: environment variables passed to `codex` process (proxy, etc.)
+env:
+  HTTPS_PROXY: "http://127.0.0.1:7890"
+  ALL_PROXY: "socks5://127.0.0.1:7891"
 # Memory directory (long-term MEMORY.md + short-term YYYY-MM-DD.md)
 memory_dir: ".memory"
 

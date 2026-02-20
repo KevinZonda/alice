@@ -93,6 +93,9 @@ feishu_base_url: "https://open.feishu.cn"
 codex_command: "codex"
 codex_timeout_secs: 120
 workspace_dir: "."
+env:
+  HTTPS_PROXY: "http://127.0.0.1:7890"
+  ALL_PROXY: "socks5://127.0.0.1:7891"
 memory_dir: ".memory"
 
 codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
@@ -109,6 +112,10 @@ log_level: "info"
 
 - `feishu_app_id`
 - `feishu_app_secret`
+
+可选项：
+
+- `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 
 ## 运行行为
 

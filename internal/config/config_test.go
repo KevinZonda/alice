@@ -39,6 +39,9 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.MemoryDir != ".memory" {
 		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
 	}
+	if len(cfg.CodexEnv) != 0 {
+		t.Fatalf("unexpected codex_env: %#v", cfg.CodexEnv)
+	}
 }
 
 func TestLoadFromFile_RequiredKeys(t *testing.T) {
@@ -54,6 +57,54 @@ func TestLoadFromFile_RequiredKeys(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "feishu_app_secret is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFromFile_Env(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+env:
+  HTTPS_PROXY: "  http://127.0.0.1:7890  "
+  ALL_PROXY: "socks5://127.0.0.1:7891"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if cfg.CodexEnv["HTTPS_PROXY"] != "http://127.0.0.1:7890" {
+		t.Fatalf("unexpected HTTPS_PROXY: %q", cfg.CodexEnv["HTTPS_PROXY"])
+	}
+	if cfg.CodexEnv["ALL_PROXY"] != "socks5://127.0.0.1:7891" {
+		t.Fatalf("unexpected ALL_PROXY: %q", cfg.CodexEnv["ALL_PROXY"])
+	}
+}
+
+func TestLoadFromFile_EnvInvalidKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+env:
+  "BAD=KEY": "v"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "must not contain '='") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

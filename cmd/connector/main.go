@@ -41,6 +41,7 @@ func main() {
 	codexRunner := codex.Runner{
 		Command:      cfg.CodexCommand,
 		Timeout:      cfg.CodexTimeout,
+		Env:          cfg.CodexEnv,
 		PromptPrefix: cfg.CodexPromptPrefix,
 		WorkspaceDir: cfg.WorkspaceDir,
 	}

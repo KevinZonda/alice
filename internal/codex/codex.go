@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 type Runner struct {
 	Command      string
 	Timeout      time.Duration
+	Env          map[string]string
 	PromptPrefix string
 	WorkspaceDir string
 }
@@ -62,6 +65,7 @@ func (r Runner) RunWithProgress(
 	if strings.TrimSpace(r.WorkspaceDir) != "" {
 		cmd.Dir = r.WorkspaceDir
 	}
+	cmd.Env = mergeEnv(os.Environ(), r.Env)
 	logging.Debugf(
 		"run codex command command=%q args=%q cwd=%q timeout=%s",
 		r.Command,
@@ -223,4 +227,46 @@ func parseEventLine(line string) (reasoning string, agentMessage string) {
 	default:
 		return "", ""
 	}
+}
+
+func mergeEnv(base []string, overrides map[string]string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+
+	env := make([]string, len(base))
+	copy(env, base)
+
+	indexByKey := make(map[string]int, len(env))
+	for i, item := range env {
+		key := envKey(item)
+		if key == "" {
+			continue
+		}
+		indexByKey[key] = i
+	}
+
+	keys := make([]string, 0, len(overrides))
+	for key := range overrides {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		pair := key + "=" + overrides[key]
+		if idx, ok := indexByKey[key]; ok {
+			env[idx] = pair
+			continue
+		}
+		env = append(env, pair)
+	}
+	return env
+}
+
+func envKey(item string) string {
+	idx := strings.Index(item, "=")
+	if idx <= 0 {
+		return ""
+	}
+	return item[:idx]
 }

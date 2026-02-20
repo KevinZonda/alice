@@ -3,10 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 )
 
 const DefaultConfigPath = "config.yaml"
@@ -16,14 +18,15 @@ type Config struct {
 	FeishuAppSecret string `mapstructure:"feishu_app_secret"`
 	FeishuBaseURL   string `mapstructure:"feishu_base_url"`
 
-	CodexCommand      string        `mapstructure:"codex_command"`
-	CodexTimeout      time.Duration `mapstructure:"-"`
-	CodexTimeoutSecs  int           `mapstructure:"codex_timeout_secs"`
-	CodexPromptPrefix string        `mapstructure:"codex_prompt_prefix"`
-	FailureMessage    string        `mapstructure:"failure_message"`
-	ThinkingMessage   string        `mapstructure:"thinking_message"`
-	WorkspaceDir      string        `mapstructure:"workspace_dir"`
-	MemoryDir         string        `mapstructure:"memory_dir"`
+	CodexCommand      string            `mapstructure:"codex_command"`
+	CodexTimeout      time.Duration     `mapstructure:"-"`
+	CodexTimeoutSecs  int               `mapstructure:"codex_timeout_secs"`
+	CodexEnv          map[string]string `mapstructure:"env"`
+	CodexPromptPrefix string            `mapstructure:"codex_prompt_prefix"`
+	FailureMessage    string            `mapstructure:"failure_message"`
+	ThinkingMessage   string            `mapstructure:"thinking_message"`
+	WorkspaceDir      string            `mapstructure:"workspace_dir"`
+	MemoryDir         string            `mapstructure:"memory_dir"`
 
 	QueueCapacity     int `mapstructure:"queue_capacity"`
 	WorkerConcurrency int `mapstructure:"worker_concurrency"`
@@ -55,11 +58,16 @@ func LoadFromFile(path string) (Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config yaml failed: %w", err)
 	}
+	envMap, err := loadEnvFromYAML(path)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg.FeishuAppID = strings.TrimSpace(cfg.FeishuAppID)
 	cfg.FeishuAppSecret = strings.TrimSpace(cfg.FeishuAppSecret)
 	cfg.FeishuBaseURL = strings.TrimSpace(cfg.FeishuBaseURL)
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
+	cfg.CodexEnv = normalizeEnvMap(envMap)
 	cfg.CodexPromptPrefix = strings.TrimSpace(cfg.CodexPromptPrefix)
 	cfg.FailureMessage = strings.TrimSpace(cfg.FailureMessage)
 	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
@@ -101,6 +109,14 @@ func LoadFromFile(path string) (Config, error) {
 	if cfg.CodexTimeoutSecs <= 0 {
 		return Config{}, errors.New("codex_timeout_secs must be > 0")
 	}
+	for key := range cfg.CodexEnv {
+		if key == "" {
+			return Config{}, errors.New("env key must not be empty")
+		}
+		if strings.ContainsRune(key, '=') {
+			return Config{}, fmt.Errorf("env key %q must not contain '='", key)
+		}
+	}
 	if cfg.QueueCapacity <= 0 {
 		return Config{}, errors.New("queue_capacity must be > 0")
 	}
@@ -110,4 +126,31 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.CodexTimeout = time.Duration(cfg.CodexTimeoutSecs) * time.Second
 
 	return cfg, nil
+}
+
+func normalizeEnvMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return out
+}
+
+func loadEnvFromYAML(path string) (map[string]string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file %q failed: %w", path, err)
+	}
+
+	var raw struct {
+		Env map[string]string `yaml:"env"`
+	}
+	if err := yaml.Unmarshal(content, &raw); err != nil {
+		return nil, fmt.Errorf("parse config yaml failed: %w", err)
+	}
+	return raw.Env, nil
 }
