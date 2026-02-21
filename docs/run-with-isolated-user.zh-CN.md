@@ -170,7 +170,7 @@ sudo -u codexbot -H bash -lc '
 sudo -u codexbot -H bash -lc '
   export XDG_RUNTIME_DIR=/run/user/$(id -u)
   export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
-  journalctl --user -u alice-codex-connector.service -f
+  journalctl --user-unit alice-codex-connector.service -f
 '
 ```
 
