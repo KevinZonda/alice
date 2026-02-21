@@ -1,8 +1,13 @@
 package codex
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseFinalMessage(t *testing.T) {
@@ -81,5 +86,45 @@ func TestBuildPrompt_ResumeThreadSkipsPrefix(t *testing.T) {
 	prompt := buildPrompt("thread_123", "你是助手Alice。", "你好")
 	if prompt != "你好" {
 		t.Fatalf("unexpected resume prompt: %q", prompt)
+	}
+}
+
+func TestRunnerRunWithProgress_IncludesAgentMessageUpdates(t *testing.T) {
+	tempDir := t.TempDir()
+	fakeCodexPath := filepath.Join(tempDir, "fake-codex.sh")
+	script := `#!/bin/sh
+cat <<'EOF'
+{"type":"item.completed","item":{"type":"agent_message","text":"阶段提示"}}
+{"type":"item.completed","item":{"type":"reasoning","text":"分析步骤"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"最终答复"}}
+EOF
+`
+	if err := os.WriteFile(fakeCodexPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake codex script failed: %v", err)
+	}
+
+	runner := Runner{
+		Command:      fakeCodexPath,
+		Timeout:      3 * time.Second,
+		PromptPrefix: "你是助手Alice。",
+	}
+	updates := make([]string, 0, 4)
+	reply, err := runner.RunWithProgress(context.Background(), "你好", func(step string) {
+		updates = append(updates, strings.TrimSpace(step))
+	})
+	if err != nil {
+		t.Fatalf("run with progress failed: %v", err)
+	}
+	if reply != "最终答复" {
+		t.Fatalf("unexpected reply: %q", reply)
+	}
+	if !slices.Contains(updates, "阶段提示") {
+		t.Fatalf("agent message should be synced as thinking update, got: %#v", updates)
+	}
+	if !slices.Contains(updates, "分析步骤") {
+		t.Fatalf("reasoning should still be synced, got: %#v", updates)
+	}
+	if !slices.Contains(updates, "最终答复") {
+		t.Fatalf("final agent message should be synced, got: %#v", updates)
 	}
 }

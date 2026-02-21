@@ -134,6 +134,9 @@ func (r Runner) RunWithThreadAndProgress(
 		}
 		if strings.TrimSpace(agentMessage) != "" {
 			finalMessage = strings.TrimSpace(agentMessage)
+			if onThinking != nil {
+				onThinking(finalMessage)
+			}
 			logging.Debugf("codex agent_message=%q", finalMessage)
 		}
 	}
