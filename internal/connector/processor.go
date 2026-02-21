@@ -72,7 +72,7 @@ func (p *Processor) ProcessJob(ctx context.Context, job Job) {
 		job.Text,
 	)
 	if strings.TrimSpace(job.SourceMessageID) != "" {
-		p.processReplyCard(ctx, job)
+		p.processReplyMessage(ctx, job)
 		return
 	}
 
@@ -97,52 +97,33 @@ func (p *Processor) ProcessJob(ctx context.Context, job Job) {
 	}
 }
 
-func (p *Processor) processReplyCard(ctx context.Context, job Job) {
+func (p *Processor) processReplyMessage(ctx context.Context, job Job) {
 	sessionKey := sessionKeyForJob(job)
-	startedAt := time.Now()
-	thinkingParts := make([]string, 0, 8)
-	initialThinking := strings.TrimSpace(p.thinkingMessage)
-	if initialThinking == "" {
-		initialThinking = "思考中..."
-	}
-	cardContent := buildProgressCardContent(initialThinking, "", false, false, 0)
-
-	cardMessageID, err := p.sender.ReplyCard(ctx, job.SourceMessageID, cardContent)
+	ackMessageID, err := p.sender.ReplyText(ctx, job.SourceMessageID, "收到！")
 	if err != nil {
-		log.Printf("send card reply failed event_id=%s: %v", job.EventID, err)
-		cardMessageID = ""
+		log.Printf("send ack reply failed event_id=%s: %v", job.EventID, err)
+		ackMessageID = ""
 	}
-	lastPatchTime := time.Time{}
 
-	onThinking := func(step string) {
-		normalized := normalizeReasoning(step)
+	lastSentAgentMessage := ""
+	sendAgentMessage := func(agentMessage string) {
+		normalized := strings.TrimSpace(agentMessage)
 		if normalized == "" {
 			return
 		}
-		if len(thinkingParts) > 0 && thinkingParts[len(thinkingParts)-1] == normalized {
+		if normalized == lastSentAgentMessage {
 			return
 		}
-		thinkingParts = append(thinkingParts, normalized)
-		thinkingText := strings.Join(thinkingParts, "\n")
-
-		if cardMessageID == "" {
+		if _, sendErr := p.sender.ReplyText(ctx, job.SourceMessageID, normalized); sendErr != nil {
+			log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
 			return
 		}
-		// Feishu patch API recommends per-message frequency control; throttle incremental sync.
-		if time.Since(lastPatchTime) < 350*time.Millisecond {
-			return
-		}
-		progressCard := buildProgressCardContent(thinkingText, "", false, false, time.Since(startedAt))
-		if patchErr := p.sender.PatchCard(ctx, cardMessageID, progressCard); patchErr != nil {
-			log.Printf("patch card failed event_id=%s: %v", job.EventID, patchErr)
-			return
-		}
-		lastPatchTime = time.Now()
+		lastSentAgentMessage = normalized
 	}
 
 	currentThreadID := p.getThreadID(sessionKey)
 	promptText := p.buildPromptWithMemory(ctx, job, currentThreadID)
-	finalReply, nextThreadID, runErr := p.runCodex(ctx, currentThreadID, promptText, onThinking)
+	finalReply, nextThreadID, runErr := p.runCodex(ctx, currentThreadID, promptText, sendAgentMessage)
 	p.setThreadID(sessionKey, nextThreadID)
 	if errors.Is(runErr, context.Canceled) {
 		// Parent context cancellation usually means app shutdown.
@@ -150,17 +131,11 @@ func (p *Processor) processReplyCard(ctx context.Context, job Job) {
 			logging.Debugf("memory update skipped event_id=%s changed=false reason=context_canceled", job.EventID)
 			return
 		}
-
-		finalThinking := strings.Join(thinkingParts, "\n")
-		elapsed := time.Since(startedAt)
-		if cardMessageID != "" {
-			interruptedCard := buildProgressCardContent(finalThinking, interruptedReplyMessage, false, true, elapsed)
-			if patchErr := p.sender.PatchCard(ctx, cardMessageID, interruptedCard); patchErr == nil {
-				logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
-				return
+		if ackMessageID != "" {
+			if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+				log.Printf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 			}
-		}
-		if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+		} else if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 			log.Printf("fallback interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 		}
 		logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
@@ -172,19 +147,10 @@ func (p *Processor) processReplyCard(ctx context.Context, job Job) {
 		finalReply = p.failureMessage
 	}
 	p.recordInteraction(job, finalReply, failed)
-
-	finalThinking := strings.Join(thinkingParts, "\n")
-	elapsed := time.Since(startedAt)
-
-	if cardMessageID != "" {
-		finalCard := buildProgressCardContent(finalThinking, finalReply, failed, false, elapsed)
-		if patchErr := p.sender.PatchCard(ctx, cardMessageID, finalCard); patchErr == nil {
-			return
+	if strings.TrimSpace(finalReply) != "" && strings.TrimSpace(finalReply) != lastSentAgentMessage {
+		if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, finalReply); replyErr != nil {
+			log.Printf("send final reply text failed event_id=%s: %v", job.EventID, replyErr)
 		}
-	}
-
-	if _, replyErr := p.sender.ReplyText(ctx, job.SourceMessageID, finalReply); replyErr != nil {
-		log.Printf("fallback reply text failed event_id=%s: %v", job.EventID, replyErr)
 	}
 }
 
@@ -192,16 +158,16 @@ func (p *Processor) runCodex(
 	ctx context.Context,
 	threadID string,
 	userText string,
-	onThinking func(step string),
+	onAgentMessage func(message string),
 ) (string, string, error) {
 	if runner, ok := p.codex.(ResumableStreamingCodexRunner); ok {
-		return runner.RunWithThreadAndProgress(ctx, threadID, userText, onThinking)
+		return runner.RunWithThreadAndProgress(ctx, threadID, userText, onAgentMessage)
 	}
 	if runner, ok := p.codex.(ResumableCodexRunner); ok {
 		return runner.RunWithThread(ctx, threadID, userText)
 	}
 	if runner, ok := p.codex.(StreamingCodexRunner); ok {
-		reply, err := runner.RunWithProgress(ctx, userText, onThinking)
+		reply, err := runner.RunWithProgress(ctx, userText, onAgentMessage)
 		return reply, strings.TrimSpace(threadID), err
 	}
 	reply, err := p.codex.Run(ctx, userText)

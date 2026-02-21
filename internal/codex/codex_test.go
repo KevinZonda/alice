@@ -115,7 +115,7 @@ func TestBuildPrompt_ResumeThreadSkipsPrefix(t *testing.T) {
 	}
 }
 
-func TestRunnerRunWithProgress_IncludesAgentMessageUpdates(t *testing.T) {
+func TestRunnerRunWithProgress_OnlyIncludesAgentMessageUpdates(t *testing.T) {
 	tempDir := t.TempDir()
 	fakeCodexPath := filepath.Join(tempDir, "fake-codex.sh")
 	script := `#!/bin/sh
@@ -145,10 +145,10 @@ EOF
 		t.Fatalf("unexpected reply: %q", reply)
 	}
 	if !slices.Contains(updates, "阶段提示") {
-		t.Fatalf("agent message should be synced as thinking update, got: %#v", updates)
+		t.Fatalf("agent message should be synced as progress update, got: %#v", updates)
 	}
-	if !slices.Contains(updates, "分析步骤") {
-		t.Fatalf("reasoning should still be synced, got: %#v", updates)
+	if slices.Contains(updates, "分析步骤") {
+		t.Fatalf("reasoning should not be synced to user updates, got: %#v", updates)
 	}
 	if !slices.Contains(updates, "最终答复") {
 		t.Fatalf("final agent message should be synced, got: %#v", updates)

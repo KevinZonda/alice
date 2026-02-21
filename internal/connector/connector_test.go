@@ -225,7 +225,7 @@ func TestApp_OnMessageReceive_GroupMentionWithoutBotIDConfigNotQueued(t *testing
 	}
 }
 
-func TestProcessor_UsesReplyCardAndPatchOnFailure(t *testing.T) {
+func TestProcessor_ReplyMessageFlow_OnFailureSendsAckThenFallback(t *testing.T) {
 	fakeCodex := codexStub{err: errors.New("boom")}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
@@ -237,21 +237,24 @@ func TestProcessor_UsesReplyCardAndPatchOnFailure(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.replyCardCalls != 1 {
-		t.Fatalf("expected 1 reply card call, got %d", sender.replyCardCalls)
+	if sender.replyTextCalls != 2 {
+		t.Fatalf("expected 2 reply text calls, got %d", sender.replyTextCalls)
 	}
-	if sender.patchCardCalls != 1 {
-		t.Fatalf("expected 1 patch call, got %d", sender.patchCardCalls)
+	if len(sender.replyTexts) != 2 {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
 	}
-	if !strings.Contains(sender.lastPatchedCard, "Codex 暂时不可用，请稍后重试") {
-		t.Fatalf("final card missing fallback message: %s", sender.lastPatchedCard)
+	if sender.replyTexts[0] != "收到！" {
+		t.Fatalf("first reply should be ack, got %q", sender.replyTexts[0])
+	}
+	if sender.replyTexts[1] != "Codex 暂时不可用，请稍后重试。" {
+		t.Fatalf("second reply should be failure message, got %q", sender.replyTexts[1])
 	}
 }
 
-func TestProcessor_SyncsThinkingWhenStreaming(t *testing.T) {
+func TestProcessor_SendsAgentMessagesAsReplyTexts(t *testing.T) {
 	fakeCodex := codexStreamingStub{
-		resp:      "final answer",
-		reasoning: []string{"分析第一步", "分析第二步"},
+		resp:          "最终答复",
+		agentMessages: []string{"阶段提示", "最终答复"},
 	}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
@@ -263,44 +266,24 @@ func TestProcessor_SyncsThinkingWhenStreaming(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.replyCardCalls != 1 {
-		t.Fatalf("expected 1 reply card call, got %d", sender.replyCardCalls)
+	if sender.replyTextCalls != 3 {
+		t.Fatalf("expected ack + 2 agent messages, got %d", sender.replyTextCalls)
 	}
-	if sender.patchCardCalls < 2 {
-		t.Fatalf("expected at least 2 patch calls, got %d", sender.patchCardCalls)
+	expected := []string{"收到！", "阶段提示", "最终答复"}
+	if len(sender.replyTexts) != len(expected) {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
 	}
-	if !strings.Contains(sender.lastPatchedCard, "分析第二步") {
-		t.Fatalf("final card missing synced reasoning: %s", sender.lastPatchedCard)
-	}
-	if !strings.Contains(sender.lastPatchedCard, "final answer") {
-		t.Fatalf("final card missing final answer: %s", sender.lastPatchedCard)
-	}
-}
-
-func TestProcessor_FallbackToReplyTextWhenPatchFails(t *testing.T) {
-	fakeCodex := codexStub{resp: "final answer"}
-	sender := &senderStub{patchCardErr: errors.New("patch failed")}
-	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
-
-	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:       "oc_chat",
-		ReceiveIDType:   "chat_id",
-		SourceMessageID: "om_src",
-		Text:            "hello",
-	})
-
-	if sender.patchCardCalls != 1 {
-		t.Fatalf("expected 1 patch call, got %d", sender.patchCardCalls)
-	}
-	if sender.replyTextCalls != 1 {
-		t.Fatalf("expected 1 fallback reply text call, got %d", sender.replyTextCalls)
-	}
-	if sender.lastReplyText != "final answer" {
-		t.Fatalf("unexpected fallback text: %s", sender.lastReplyText)
+	for i := range expected {
+		if sender.replyTexts[i] != expected[i] {
+			t.Fatalf("unexpected reply text at %d: want %q got %q", i, expected[i], sender.replyTexts[i])
+		}
+		if sender.replyTargets[i] != "om_src" {
+			t.Fatalf("reply %d should target original source message, got %q", i, sender.replyTargets[i])
+		}
 	}
 }
 
-func TestProcessor_FinalCardRemovesThinkingMessage(t *testing.T) {
+func TestProcessor_DeduplicatesFinalReplyWhenAlreadySentViaAgentMessage(t *testing.T) {
 	fakeCodex := codexStub{resp: "final answer"}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
@@ -312,11 +295,40 @@ func TestProcessor_FinalCardRemovesThinkingMessage(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.patchCardCalls != 1 {
-		t.Fatalf("expected 1 patch call, got %d", sender.patchCardCalls)
+	if sender.replyTextCalls != 2 {
+		t.Fatalf("expected ack + final reply, got %d", sender.replyTextCalls)
 	}
-	if strings.Contains(sender.lastPatchedCard, "正在思考中...") {
-		t.Fatalf("final card should not keep thinking placeholder: %s", sender.lastPatchedCard)
+	if len(sender.replyTexts) != 2 {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
+	}
+	if sender.replyTexts[0] != "收到！" || sender.replyTexts[1] != "final answer" {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
+	}
+}
+
+func TestProcessor_SkipsDuplicateAgentMessages(t *testing.T) {
+	fakeCodex := codexStreamingStub{
+		resp:          "最终答复",
+		agentMessages: []string{"阶段提示", "阶段提示", "最终答复"},
+	}
+	sender := &senderStub{}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_src",
+		Text:            "hello",
+	})
+
+	expected := []string{"收到！", "阶段提示", "最终答复"}
+	if len(sender.replyTexts) != len(expected) {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
+	}
+	for i := range expected {
+		if sender.replyTexts[i] != expected[i] {
+			t.Fatalf("unexpected reply text at %d: want %q got %q", i, expected[i], sender.replyTexts[i])
+		}
 	}
 }
 
@@ -359,14 +371,20 @@ func TestProcessor_CanceledReplyMarksInterruptedInsteadOfFailure(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.patchCardCalls != 1 {
-		t.Fatalf("expected 1 patch call, got %d", sender.patchCardCalls)
+	if sender.replyTextCalls != 2 {
+		t.Fatalf("expected ack + interrupted message, got %d", sender.replyTextCalls)
 	}
-	if !strings.Contains(sender.lastPatchedCard, "已中断") {
-		t.Fatalf("interrupted card should include interrupted status: %s", sender.lastPatchedCard)
+	if len(sender.replyTexts) != 2 {
+		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
 	}
-	if strings.Contains(sender.lastPatchedCard, "Codex 暂时不可用，请稍后重试") {
-		t.Fatalf("interrupted card should not include failure message: %s", sender.lastPatchedCard)
+	if sender.replyTexts[0] != "收到！" {
+		t.Fatalf("first reply should be ack, got %q", sender.replyTexts[0])
+	}
+	if !strings.Contains(sender.replyTexts[1], "已中断") {
+		t.Fatalf("second reply should be interrupted message, got %q", sender.replyTexts[1])
+	}
+	if strings.Contains(sender.replyTexts[1], "Codex 暂时不可用，请稍后重试") {
+		t.Fatalf("interrupted reply should not include failure message: %q", sender.replyTexts[1])
 	}
 	if memory.saveCalls != 0 {
 		t.Fatalf("canceled job should not be saved to memory, got %d", memory.saveCalls)

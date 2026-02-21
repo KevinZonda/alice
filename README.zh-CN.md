@@ -145,19 +145,18 @@ log_level: "info"
 - 每个聊天（`chat_id`，没有则 `open_id`）始终复用同一个 Codex 线程。
 - 若某聊天连续空闲达到 `idle_summary_hours`（默认 8 小时），后台会异步 resume 该线程并将“空闲摘要”追加到 `daily/YYYY-MM-DD.md`，同一段空闲期仅写一次。
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
-- 机器人会使用“**卡片消息 + 引用回复原消息**”方式返回结果。
-- Codex 执行期间，会把思考过程持续同步到同一条卡片消息。
+- 收到用户消息后，机器人会第一时间引用回复 `收到！`。
+- Codex 执行期间，流式返回的每条 `agent_message` 都会作为新的文本消息，继续引用回复用户原消息。
 - 同一会话内若收到新的用户消息，会立即中断旧任务并切换到最新消息（steer）。
-- Codex 完成后，会把同一条卡片更新为最终答案。
-- 回复目标优先级（非卡片回退路径）：`chat_id`，没有则回退到发送者 `open_id`。
+- 若执行过程中没有任何流式 `agent_message`，会在完成后引用回复最终答案。
+- 回复目标优先级（回退路径）：`chat_id`，没有则回退到发送者 `open_id`。
 - Codex 超时或失败时，发送 `failure_message`。
 
-说明：飞书 IM 官方目录里有“回复消息/卡片更新”接口，但没有独立的机器人“正在输入”状态接口。本项目使用“卡片增量更新”来提供接近打字中的体验。
+说明：当前会话输出已使用纯文本回复，不再依赖卡片增量更新链路。
 
 ## 飞书 API 参考
 
 - 回复消息: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/reply
-- 更新消息卡片: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/patch
 - API 目录: https://open.feishu.cn/api_explorer/v1/api_catalog
 
 ## 项目结构

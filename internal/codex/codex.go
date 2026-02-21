@@ -128,9 +128,8 @@ func (r Runner) RunWithThreadAndProgress(
 			activeThreadID = strings.TrimSpace(parsedThreadID)
 			logging.Debugf("codex thread started thread_id=%s", activeThreadID)
 		}
-		if strings.TrimSpace(reasoning) != "" && onThinking != nil {
+		if strings.TrimSpace(reasoning) != "" {
 			logging.Debugf("codex reasoning=%q", strings.TrimSpace(reasoning))
-			onThinking(strings.TrimSpace(reasoning))
 		}
 		if strings.TrimSpace(agentMessage) != "" {
 			finalMessage = strings.TrimSpace(agentMessage)

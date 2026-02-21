@@ -139,19 +139,18 @@ Optional:
 - For each chat (`chat_id`, fallback `open_id`), the connector always reuses one Codex thread.
 - If a chat stays idle for `idle_summary_hours` (default 8), a background task asynchronously resumes that thread and appends an "idle summary" to `daily/YYYY-MM-DD.md` once per idle period.
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
-- The bot replies with an **interactive card** quoting the source message (`reply` API).
-- While Codex is running, the card is patched incrementally with Codex reasoning.
+- The bot immediately replies to the source message with `收到！`.
+- During Codex execution, each streamed `agent_message` is sent as a new text reply to the same source message.
 - If a newer user message arrives in the same session, the running task is interrupted immediately and switched to the latest message (steer behavior).
-- After completion, the same card is patched with final answer (`patch` API).
-- Reply target priority (fallback path for non-card mode): `chat_id`, fallback to sender `open_id`.
+- If no streamed `agent_message` was sent, the final Codex answer is sent as a text reply.
+- Reply target priority (fallback path): `chat_id`, fallback to sender `open_id`.
 - On Codex failure/timeout, sends `failure_message`.
 
-Note: Feishu OpenAPI currently has reply/patch APIs, but no dedicated bot typing-status API in the IM catalog. This project uses card incremental patches as a typing-like experience.
+Note: this project now uses pure text replies for conversation output and no longer uses interactive card patch flow.
 
 ## Feishu API references
 
 - Reply message: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/reply
-- Patch message card: https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/patch
 - API catalog: https://open.feishu.cn/api_explorer/v1/api_catalog
 
 ## Project layout

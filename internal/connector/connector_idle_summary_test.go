@@ -246,9 +246,9 @@ func (c codexStub) Run(_ context.Context, _ string) (string, error) {
 }
 
 type codexStreamingStub struct {
-	resp      string
-	err       error
-	reasoning []string
+	resp          string
+	err           error
+	agentMessages []string
 }
 
 func (c codexStreamingStub) Run(_ context.Context, _ string) (string, error) {
@@ -260,7 +260,7 @@ func (c codexStreamingStub) RunWithProgress(
 	_ string,
 	onThinking func(step string),
 ) (string, error) {
-	for _, step := range c.reasoning {
+	for _, step := range c.agentMessages {
 		onThinking(step)
 	}
 	return c.resp, c.err
@@ -420,6 +420,8 @@ type senderStub struct {
 	lastSendText   string
 	replyTextCalls int
 	lastReplyText  string
+	replyTexts     []string
+	replyTargets   []string
 
 	replyCardCalls  int
 	lastReplyCard   string
@@ -438,9 +440,11 @@ func (s *senderStub) SendText(_ context.Context, _, _ string, text string) error
 	return nil
 }
 
-func (s *senderStub) ReplyText(_ context.Context, _ string, text string) (string, error) {
+func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text string) (string, error) {
 	s.replyTextCalls++
 	s.lastReplyText = text
+	s.replyTexts = append(s.replyTexts, text)
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
 	return "om_reply_text", nil
 }
 
