@@ -76,6 +76,9 @@ func TestBuildExecArgs_ResumeThread(t *testing.T) {
 	if slices.Contains(args, "--sandbox") {
 		t.Fatalf("resume args should not include --sandbox, got: %#v", args)
 	}
+	if !slices.Contains(args, "--") {
+		t.Fatalf("resume args should include option terminator, got: %#v", args)
+	}
 }
 
 func TestBuildExecArgs_NewThreadUsesDangerousBypass(t *testing.T) {
@@ -85,6 +88,9 @@ func TestBuildExecArgs_NewThreadUsesDangerousBypass(t *testing.T) {
 	}
 	if slices.Contains(args, "--sandbox") {
 		t.Fatalf("new thread args should not include --sandbox, got: %#v", args)
+	}
+	if !slices.Contains(args, "--") {
+		t.Fatalf("new thread args should include option terminator, got: %#v", args)
 	}
 }
 

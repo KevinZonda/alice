@@ -271,6 +271,7 @@ func buildExecArgs(threadID string, prompt string) []string {
 			"--json",
 			"--skip-git-repo-check",
 			"--dangerously-bypass-approvals-and-sandbox",
+			"--",
 			threadID,
 			prompt,
 		}
@@ -280,6 +281,7 @@ func buildExecArgs(threadID string, prompt string) []string {
 		"--json",
 		"--skip-git-repo-check",
 		"--dangerously-bypass-approvals-and-sandbox",
+		"--",
 		prompt,
 	}
 }
