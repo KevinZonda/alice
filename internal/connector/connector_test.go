@@ -98,6 +98,28 @@ func TestShouldProcessIncomingMessage_GroupMentionWithBotOpenID(t *testing.T) {
 	}
 }
 
+func TestShouldProcessIncomingMessage_GroupMentionWithoutBotIDConfigIgnored(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				ChatType: strPtr("group"),
+				Content:  strPtr(`{"text":"<at user_id=\"ou_other\">Tom</at> 你好"}`),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_other"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if shouldProcessIncomingMessage(event, "", "") {
+		t.Fatal("group message should be ignored when bot IDs are not configured")
+	}
+}
+
 func TestShouldProcessIncomingMessage_PrivateChatNoMention(t *testing.T) {
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
@@ -168,6 +190,38 @@ func TestApp_OnMessageReceive_GroupMentionQueued(t *testing.T) {
 	}
 	if got := len(app.queue); got != 1 {
 		t.Fatalf("expected queue len 1, got %d", got)
+	}
+}
+
+func TestApp_OnMessageReceive_GroupMentionWithoutBotIDConfigNotQueued(t *testing.T) {
+	cfg := configForTest()
+	app := NewApp(cfg, nil)
+
+	event := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_mention_without_botid"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_mention_without_botid"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_other\">Tom</at> hi"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_other"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(app.queue); got != 0 {
+		t.Fatalf("expected queue len 0, got %d", got)
 	}
 }
 

@@ -124,7 +124,7 @@ log_level: "info"
 - `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
-- `feishu_bot_open_id` / `feishu_bot_user_id`：用于群聊严格艾特过滤的机器人 ID。配置后，只有艾特到该 ID 的群消息才会触发处理。
+- `feishu_bot_open_id` / `feishu_bot_user_id`：用于群聊严格艾特过滤的机器人 ID。群聊中只有艾特命中这些 ID 的消息才会触发处理。
 
 ## 隔离运行（独立用户）
 
@@ -136,8 +136,7 @@ log_level: "info"
 
 - 非文本消息会忽略。
 - 群聊/话题群中，仅处理艾特机器人的消息。
-  - 严格模式：若配置了 `feishu_bot_open_id` 或 `feishu_bot_user_id`，仅当艾特命中配置 ID 时触发。
-  - 回退模式：若两个字段都为空，默认“有用户艾特（不含 `@all`）就触发”。
+  - 若 `feishu_bot_open_id` 与 `feishu_bot_user_id` 都为空，则群聊/话题群消息全部忽略。
 - 群聊中的 `<at ...>...</at>` 会先清理，再发送给 Codex。
 - 默认启用记忆模块，文件写入 `memory_dir`：长期记忆 `MEMORY.md`，分日期记忆在 `daily/YYYY-MM-DD.md`。
 - 首次启动时会自动创建 `memory_dir` 及其 `daily/` 子目录。

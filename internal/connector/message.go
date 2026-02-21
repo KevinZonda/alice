@@ -81,10 +81,10 @@ func isGroupMentionAccepted(message *larkim.EventMessage, botOpenID, botUserID s
 	normalizedBotUserID := strings.TrimSpace(botUserID)
 	hasConfiguredBotID := normalizedBotOpenID != "" || normalizedBotUserID != ""
 
-	if hasConfiguredBotID {
-		return isBotMentioned(message, normalizedBotOpenID, normalizedBotUserID)
+	if !hasConfiguredBotID {
+		return false
 	}
-	return hasAnyUserMention(message)
+	return isBotMentioned(message, normalizedBotOpenID, normalizedBotUserID)
 }
 
 func isBotMentioned(message *larkim.EventMessage, botOpenID, botUserID string) bool {
@@ -111,30 +111,6 @@ func isBotMentioned(message *larkim.EventMessage, botOpenID, botUserID string) b
 			return true
 		}
 		if botUserID != "" && mentionedUserID == botUserID {
-			return true
-		}
-	}
-	return false
-}
-
-func hasAnyUserMention(message *larkim.EventMessage) bool {
-	if message == nil {
-		return false
-	}
-
-	for _, mentionedUserID := range extractMentionUserIDs(message.Content) {
-		if !isMentionAll(mentionedUserID) {
-			return true
-		}
-	}
-	for _, mention := range message.Mentions {
-		if mention == nil || mention.Id == nil {
-			continue
-		}
-		if mentionID := strings.TrimSpace(deref(mention.Id.OpenId)); mentionID != "" && !isMentionAll(mentionID) {
-			return true
-		}
-		if mentionID := strings.TrimSpace(deref(mention.Id.UserId)); mentionID != "" && !isMentionAll(mentionID) {
 			return true
 		}
 	}
@@ -174,10 +150,6 @@ func extractMentionUserIDs(content *string) []string {
 		userIDs = append(userIDs, userID)
 	}
 	return userIDs
-}
-
-func isMentionAll(userID string) bool {
-	return strings.EqualFold(strings.TrimSpace(userID), "all")
 }
 
 func logIncomingEventDebug(event *larkim.P2MessageReceiveV1) {

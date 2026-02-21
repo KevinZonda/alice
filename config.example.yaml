@@ -4,8 +4,8 @@ feishu_app_secret: "xxxxxx"
 
 # Optional, default is https://open.feishu.cn
 feishu_base_url: "https://open.feishu.cn"
-# Optional: use these for strict group mention filtering (only respond when @this bot)
-# If both are empty, group chat falls back to "has any @mention" filtering.
+# Optional but recommended for group chats: strict bot mention filtering
+# If both are empty, all group/topic-group messages are ignored.
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
 
