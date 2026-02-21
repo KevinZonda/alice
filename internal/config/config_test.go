@@ -45,6 +45,9 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.MemoryDir != ".memory" {
 		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
 	}
+	if cfg.CodexPromptPrefix != "" {
+		t.Fatalf("unexpected codex_prompt_prefix: %q", cfg.CodexPromptPrefix)
+	}
 	if len(cfg.CodexEnv) != 0 {
 		t.Fatalf("unexpected codex_env: %#v", cfg.CodexEnv)
 	}

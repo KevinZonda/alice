@@ -101,7 +101,7 @@ env:
   ALL_PROXY: "socks5://127.0.0.1:7891"
 memory_dir: ".memory"
 
-codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
+codex_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
 
@@ -120,6 +120,7 @@ log_level: "info"
 可选项：
 
 - `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
+- `codex_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
 
 ## 隔离运行（独立用户）

@@ -101,7 +101,7 @@ env:
   ALL_PROXY: "socks5://127.0.0.1:7891"
 memory_dir: ".memory"
 
-codex_prompt_prefix: "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
+codex_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
 
@@ -120,6 +120,7 @@ Required keys:
 Optional:
 
 - `env`: key-value environment variables injected into `codex` process (for example HTTP/HTTPS/SOCKS proxy settings).
+- `codex_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
 
 ## Runtime behavior

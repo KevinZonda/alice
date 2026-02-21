@@ -43,7 +43,6 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("feishu_base_url", "https://open.feishu.cn")
 	v.SetDefault("codex_command", "codex")
 	v.SetDefault("codex_timeout_secs", 120)
-	v.SetDefault("codex_prompt_prefix", "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
 	v.SetDefault("thinking_message", "正在思考中...")
 	v.SetDefault("workspace_dir", ".")
@@ -98,9 +97,6 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
-	}
-	if cfg.CodexPromptPrefix == "" {
-		cfg.CodexPromptPrefix = "你是一个助手，请用中文简洁回答，不要使用 Markdown 标题。"
 	}
 	if cfg.FailureMessage == "" {
 		cfg.FailureMessage = "Codex 暂时不可用，请稍后重试。"

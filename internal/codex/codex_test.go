@@ -95,6 +95,13 @@ func TestBuildPrompt_NewThreadIncludesPrefix(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_NewThreadWithEmptyPrefix(t *testing.T) {
+	prompt := buildPrompt("", "", "你好")
+	if prompt != "你好" {
+		t.Fatalf("unexpected prompt: %q", prompt)
+	}
+}
+
 func TestBuildPrompt_ResumeThreadSkipsPrefix(t *testing.T) {
 	prompt := buildPrompt("thread_123", "你是助手Alice。", "你好")
 	if prompt != "你好" {
