@@ -308,13 +308,8 @@ func parseFileChangeMessage(item map[string]any) string {
 		return ""
 	}
 
-	path := extractString(item, "path", "file_path", "filename", "file")
-	if path == "" {
-		if changed, ok := item["changed_file"].(map[string]any); ok {
-			path = extractString(changed, "path", "file_path", "filename", "file")
-		}
-	}
-	if path == "" {
+	paths := collectFileChangePaths(item)
+	if len(paths) == 0 {
 		return ""
 	}
 
@@ -329,7 +324,18 @@ func parseFileChangeMessage(item map[string]any) string {
 		}
 	}
 
-	return fmt.Sprintf("%s已更改，+%d-%d", strings.TrimSpace(path), additions, deletions)
+	messages := make([]string, 0, len(paths))
+	for _, path := range paths {
+		normalizedPath := normalizeFileChangePath(path)
+		if normalizedPath == "" {
+			continue
+		}
+		messages = append(messages, formatFileChangeMessage(normalizedPath, fileDiffStat{
+			Additions: additions,
+			Deletions: deletions,
+		}))
+	}
+	return strings.Join(messages, "\n")
 }
 
 func extractString(payload map[string]any, keys ...string) string {
@@ -597,6 +603,54 @@ func parseNumstatValue(raw string) int {
 
 func formatFileChangeMessage(path string, stat fileDiffStat) string {
 	return fmt.Sprintf("%s已更改，+%d-%d", strings.TrimSpace(path), stat.Additions, stat.Deletions)
+}
+
+func collectFileChangePaths(item map[string]any) []string {
+	if item == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, 4)
+	addPath := func(raw string) {
+		path := strings.TrimSpace(raw)
+		if path == "" {
+			return
+		}
+		seen[path] = struct{}{}
+	}
+
+	addPath(extractString(item, "path", "file_path", "filename", "file"))
+	if changed, ok := item["changed_file"].(map[string]any); ok {
+		addPath(extractString(changed, "path", "file_path", "filename", "file"))
+	}
+	if changes, ok := item["changes"].([]any); ok {
+		for _, change := range changes {
+			entry, ok := change.(map[string]any)
+			if !ok {
+				continue
+			}
+			addPath(extractString(entry, "path", "file_path", "filename", "file"))
+		}
+	}
+
+	paths := make([]string, 0, len(seen))
+	for path := range seen {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func normalizeFileChangePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	path = filepath.ToSlash(path)
+	path = strings.TrimPrefix(path, "./")
+	const aliceRepoPrefix = "/home/codexbot/alice/"
+	path = strings.TrimPrefix(path, aliceRepoPrefix)
+	return strings.TrimSpace(path)
 }
 
 func buildExecArgs(threadID string, prompt string) []string {
