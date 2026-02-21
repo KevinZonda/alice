@@ -142,7 +142,7 @@ Optional:
 - If a chat stays idle for `idle_summary_hours` (default 8), a background task asynchronously resumes that thread and appends an "idle summary" to `daily/YYYY-MM-DD.md` once per idle period.
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
 - The bot immediately replies to the source message with `收到！`.
-- During Codex execution, each streamed `agent_message` is sent as a new text reply to the same source message.
+- During Codex execution, each streamed `agent_message` (Markdown content) is sent as a rich-text (`post`) reply to the same source message.
 - During Codex execution, each streamed `file_change` event is sent as a rich-text (`post`) reply, for example: `internal/x.go已更改，+23-34`.
 - If a newer user message arrives in the same session, the running task is interrupted immediately and switched to the latest message (steer behavior).
 - If no streamed `agent_message` was sent, the final Codex answer is sent as a text reply.

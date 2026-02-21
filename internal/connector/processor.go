@@ -27,7 +27,7 @@ type Processor struct {
 }
 
 const interruptedReplyMessage = "已收到你的新消息，当前回复已中断并切换到最新输入。"
-const fileChangeEventPrefix = "[filechange] "
+const fileChangeEventPrefix = "[file_change] "
 const idleSummaryPrompt = "请基于当前会话上下文，提炼后续仍有价值的信息摘要。\n" +
 	"要求：\n" +
 	"1. 只提炼：事实、约束、决策、待办、偏好变化。\n" +
@@ -132,9 +132,11 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) bool {
 				}
 			}
 		} else {
-			if _, sendErr := p.sender.ReplyText(ctx, job.SourceMessageID, normalized); sendErr != nil {
-				log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
-				return
+			if _, richErr := p.sender.ReplyRichTextMarkdown(ctx, job.SourceMessageID, normalized); richErr != nil {
+				if _, sendErr := p.sender.ReplyText(ctx, job.SourceMessageID, normalized); sendErr != nil {
+					log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
+					return
+				}
 			}
 		}
 		lastSentAgentMessage = normalized

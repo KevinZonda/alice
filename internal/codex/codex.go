@@ -26,7 +26,7 @@ type Runner struct {
 	WorkspaceDir string
 }
 
-const fileChangeCallbackPrefix = "[filechange] "
+const fileChangeCallbackPrefix = "[file_change] "
 
 func (r Runner) Run(ctx context.Context, userText string) (string, error) {
 	reply, _, err := r.RunWithThreadAndProgress(ctx, "", userText, nil)
@@ -265,7 +265,7 @@ func parseEventLine(line string) (reasoning string, agentMessage string, fileCha
 		return text, "", "", ""
 	case "agent_message":
 		return "", text, "", ""
-	case "file_change", "filechange":
+	case "file_change":
 		return "", "", parseFileChangeMessage(item), ""
 	default:
 		return "", "", "", ""

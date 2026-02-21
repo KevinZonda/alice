@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,6 +20,14 @@ type LarkSender struct {
 	client      *lark.Client
 	resourceDir string
 }
+
+var markdownLinkPattern = regexp.MustCompile(`\[(.*?)\]\((https?://[^\s)]+)\)`)
+var markdownInlineCodePattern = regexp.MustCompile("`([^`]+)`")
+var markdownStrongPattern = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+var markdownEmPattern = regexp.MustCompile(`\*([^*]+)\*`)
+var markdownStrongUnderscorePattern = regexp.MustCompile(`__([^_]+)__`)
+var markdownEmUnderscorePattern = regexp.MustCompile(`_([^_]+)_`)
+var markdownStrikePattern = regexp.MustCompile(`~~([^~]+)~~`)
 
 func NewLarkSender(client *lark.Client, resourceDir string) *LarkSender {
 	return &LarkSender{
@@ -91,6 +100,29 @@ func (s *LarkSender) ReplyRichText(ctx context.Context, sourceMessageID string, 
 	}
 	if resp.Data == nil || resp.Data.MessageId == nil {
 		return "", errors.New("reply rich text success but response message_id is empty")
+	}
+	return strings.TrimSpace(*resp.Data.MessageId), nil
+}
+
+func (s *LarkSender) ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(sourceMessageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType("post").
+			Content(richTextMarkdownMessageContent(markdown)).
+			ReplyInThread(false).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	if resp.Data == nil || resp.Data.MessageId == nil {
+		return "", errors.New("reply markdown rich text success but response message_id is empty")
 	}
 	return strings.TrimSpace(*resp.Data.MessageId), nil
 }
@@ -464,17 +496,32 @@ func extractTextFromPost(content string) string {
 				continue
 			}
 			tag, _ := item["tag"].(string)
-			if strings.ToLower(strings.TrimSpace(tag)) != "text" {
-				continue
+			normalizedTag := strings.ToLower(strings.TrimSpace(tag))
+			switch normalizedTag {
+			case "text":
+				text, _ := item["text"].(string)
+				if strings.TrimSpace(text) == "" {
+					continue
+				}
+				if lineBuilder.Len() > 0 {
+					lineBuilder.WriteString(" ")
+				}
+				lineBuilder.WriteString(strings.TrimSpace(text))
+			case "a":
+				text, _ := item["text"].(string)
+				href, _ := item["href"].(string)
+				value := strings.TrimSpace(text)
+				if value == "" {
+					value = strings.TrimSpace(href)
+				}
+				if value == "" {
+					continue
+				}
+				if lineBuilder.Len() > 0 {
+					lineBuilder.WriteString(" ")
+				}
+				lineBuilder.WriteString(value)
 			}
-			text, _ := item["text"].(string)
-			if strings.TrimSpace(text) == "" {
-				continue
-			}
-			if lineBuilder.Len() > 0 {
-				lineBuilder.WriteString(" ")
-			}
-			lineBuilder.WriteString(strings.TrimSpace(text))
 		}
 		line := strings.TrimSpace(lineBuilder.String())
 		if line != "" {
@@ -493,13 +540,13 @@ func textMessageContent(text string) string {
 }
 
 func richTextMessageContent(lines []string) string {
-	paragraphs := make([][]map[string]string, 0, len(lines))
+	paragraphs := make([][]map[string]any, 0, len(lines))
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if line == "" {
 			continue
 		}
-		paragraphs = append(paragraphs, []map[string]string{
+		paragraphs = append(paragraphs, []map[string]any{
 			{
 				"tag":  "text",
 				"text": line,
@@ -507,7 +554,7 @@ func richTextMessageContent(lines []string) string {
 		})
 	}
 	if len(paragraphs) == 0 {
-		paragraphs = append(paragraphs, []map[string]string{
+		paragraphs = append(paragraphs, []map[string]any{
 			{
 				"tag":  "text",
 				"text": " ",
@@ -522,4 +569,146 @@ func richTextMessageContent(lines []string) string {
 		},
 	})
 	return string(contentBytes)
+}
+
+func richTextMarkdownMessageContent(markdown string) string {
+	normalized := strings.ReplaceAll(markdown, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	paragraphs := make([][]map[string]any, 0, len(lines))
+
+	inCodeBlock := false
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+		if line == "" {
+			continue
+		}
+
+		if !inCodeBlock {
+			line = normalizeMarkdownLine(line)
+		}
+		if line == "" {
+			continue
+		}
+
+		paragraph := markdownLineToPostParagraph(line)
+		if len(paragraph) == 0 {
+			continue
+		}
+		paragraphs = append(paragraphs, paragraph)
+	}
+
+	if len(paragraphs) == 0 {
+		paragraphs = append(paragraphs, []map[string]any{
+			{
+				"tag":  "text",
+				"text": " ",
+			},
+		})
+	}
+
+	contentBytes, _ := json.Marshal(map[string]any{
+		"zh_cn": map[string]any{
+			"title":   "",
+			"content": paragraphs,
+		},
+	})
+	return string(contentBytes)
+}
+
+func normalizeMarkdownLine(line string) string {
+	line = strings.TrimSpace(line)
+	for strings.HasPrefix(line, "#") {
+		line = strings.TrimSpace(strings.TrimPrefix(line, "#"))
+	}
+
+	switch {
+	case strings.HasPrefix(line, "- [ ] "), strings.HasPrefix(line, "* [ ] "):
+		line = "☐ " + strings.TrimSpace(line[6:])
+	case strings.HasPrefix(line, "- [x] "), strings.HasPrefix(line, "- [X] "), strings.HasPrefix(line, "* [x] "), strings.HasPrefix(line, "* [X] "):
+		line = "☑ " + strings.TrimSpace(line[6:])
+	case strings.HasPrefix(line, "- "), strings.HasPrefix(line, "* "), strings.HasPrefix(line, "+ "):
+		line = "• " + strings.TrimSpace(line[2:])
+	}
+
+	line = markdownInlineCodePattern.ReplaceAllString(line, "$1")
+	line = markdownStrongPattern.ReplaceAllString(line, "$1")
+	line = markdownEmPattern.ReplaceAllString(line, "$1")
+	line = markdownStrongUnderscorePattern.ReplaceAllString(line, "$1")
+	line = markdownEmUnderscorePattern.ReplaceAllString(line, "$1")
+	line = markdownStrikePattern.ReplaceAllString(line, "$1")
+	return strings.TrimSpace(line)
+}
+
+func markdownLineToPostParagraph(line string) []map[string]any {
+	matches := markdownLinkPattern.FindAllStringSubmatchIndex(line, -1)
+	if len(matches) == 0 {
+		return []map[string]any{
+			{
+				"tag":  "text",
+				"text": line,
+			},
+		}
+	}
+
+	paragraph := make([]map[string]any, 0, len(matches)*2+1)
+	cursor := 0
+	for _, match := range matches {
+		if len(match) < 6 {
+			continue
+		}
+		start := match[0]
+		end := match[1]
+		labelStart := match[2]
+		labelEnd := match[3]
+		hrefStart := match[4]
+		hrefEnd := match[5]
+
+		if start > cursor {
+			text := strings.TrimSpace(line[cursor:start])
+			if text != "" {
+				paragraph = append(paragraph, map[string]any{
+					"tag":  "text",
+					"text": text,
+				})
+			}
+		}
+
+		label := strings.TrimSpace(line[labelStart:labelEnd])
+		href := strings.TrimSpace(line[hrefStart:hrefEnd])
+		if href != "" {
+			if label == "" {
+				label = href
+			}
+			paragraph = append(paragraph, map[string]any{
+				"tag":  "a",
+				"text": label,
+				"href": href,
+			})
+		}
+		cursor = end
+	}
+
+	if cursor < len(line) {
+		text := strings.TrimSpace(line[cursor:])
+		if text != "" {
+			paragraph = append(paragraph, map[string]any{
+				"tag":  "text",
+				"text": text,
+			})
+		}
+	}
+
+	if len(paragraph) == 0 {
+		return []map[string]any{
+			{
+				"tag":  "text",
+				"text": line,
+			},
+		}
+	}
+	return paragraph
 }

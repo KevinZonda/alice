@@ -43,6 +43,7 @@ type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
 	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
 	ReplyRichText(ctx context.Context, sourceMessageID string, lines []string) (string, error)
+	ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error)
 	ReplyCard(ctx context.Context, sourceMessageID, cardContent string) (string, error)
 	PatchCard(ctx context.Context, messageID, cardContent string) error
 }

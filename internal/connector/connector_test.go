@@ -364,7 +364,7 @@ func TestProcessor_ReplyMessageFlow_OnFailureSendsAckThenFallback(t *testing.T) 
 	}
 }
 
-func TestProcessor_SendsAgentMessagesAsReplyTexts(t *testing.T) {
+func TestProcessor_SendsAgentMessagesAsRichTextMarkdown(t *testing.T) {
 	fakeCodex := codexStreamingStub{
 		resp:          "最终答复",
 		agentMessages: []string{"阶段提示", "最终答复"},
@@ -379,19 +379,22 @@ func TestProcessor_SendsAgentMessagesAsReplyTexts(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.replyTextCalls != 3 {
-		t.Fatalf("expected ack + 2 agent messages, got %d", sender.replyTextCalls)
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
 	}
-	expected := []string{"收到！", "阶段提示", "最终答复"}
-	if len(sender.replyTexts) != len(expected) {
-		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
+	if len(sender.replyTexts) != 1 || sender.replyTexts[0] != "收到！" {
+		t.Fatalf("unexpected ack reply text history: %#v", sender.replyTexts)
 	}
-	for i := range expected {
-		if sender.replyTexts[i] != expected[i] {
-			t.Fatalf("unexpected reply text at %d: want %q got %q", i, expected[i], sender.replyTexts[i])
-		}
-		if sender.replyTargets[i] != "om_src" {
-			t.Fatalf("reply %d should target original source message, got %q", i, sender.replyTargets[i])
+	if sender.replyRichMarkdownCalls != 2 {
+		t.Fatalf("expected 2 markdown rich replies, got %d", sender.replyRichMarkdownCalls)
+	}
+	expectedMarkdown := []string{"阶段提示", "最终答复"}
+	if len(sender.replyMarkdownTexts) != len(expectedMarkdown) {
+		t.Fatalf("unexpected markdown rich reply history: %#v", sender.replyMarkdownTexts)
+	}
+	for i := range expectedMarkdown {
+		if sender.replyMarkdownTexts[i] != expectedMarkdown[i] {
+			t.Fatalf("unexpected markdown rich reply at %d: want %q got %q", i, expectedMarkdown[i], sender.replyMarkdownTexts[i])
 		}
 	}
 }
@@ -399,7 +402,7 @@ func TestProcessor_SendsAgentMessagesAsReplyTexts(t *testing.T) {
 func TestProcessor_FileChangeEventUsesRichTextReply(t *testing.T) {
 	fakeCodex := codexStreamingStub{
 		resp:          "最终答复",
-		agentMessages: []string{"[filechange] internal/connector/processor.go已更改，+23-34"},
+		agentMessages: []string{"[file_change] internal/connector/processor.go已更改，+23-34"},
 	}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
@@ -463,13 +466,20 @@ func TestProcessor_SkipsDuplicateAgentMessages(t *testing.T) {
 		Text:            "hello",
 	})
 
-	expected := []string{"收到！", "阶段提示", "最终答复"}
-	if len(sender.replyTexts) != len(expected) {
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
+	}
+	if len(sender.replyTexts) != 1 || sender.replyTexts[0] != "收到！" {
 		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
 	}
+
+	expected := []string{"阶段提示", "最终答复"}
+	if len(sender.replyMarkdownTexts) != len(expected) {
+		t.Fatalf("unexpected markdown rich reply history: %#v", sender.replyMarkdownTexts)
+	}
 	for i := range expected {
-		if sender.replyTexts[i] != expected[i] {
-			t.Fatalf("unexpected reply text at %d: want %q got %q", i, expected[i], sender.replyTexts[i])
+		if sender.replyMarkdownTexts[i] != expected[i] {
+			t.Fatalf("unexpected markdown rich reply at %d: want %q got %q", i, expected[i], sender.replyMarkdownTexts[i])
 		}
 	}
 }

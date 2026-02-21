@@ -170,7 +170,7 @@ EOF
 	if slices.Contains(updates, "分析步骤") {
 		t.Fatalf("reasoning should not be synced to user updates, got: %#v", updates)
 	}
-	if !slices.Contains(updates, "[filechange] internal/connector/processor.go已更改，+2-1") {
+	if !slices.Contains(updates, "[file_change] internal/connector/processor.go已更改，+2-1") {
 		t.Fatalf("file change should be synced to updates, got: %#v", updates)
 	}
 	if !slices.Contains(updates, "最终答复") {
