@@ -141,7 +141,9 @@ Optional:
 - The connector persists queued/in-progress jobs in `memory_dir/runtime_state.json`; after restart it resumes replying jobs that were unfinished or not replied.
 - If a job text clearly indicates "self-update + restart", and shutdown happens while handling it, that job is treated as completed to avoid self-update loops after restart.
 - Before each Codex call, only long-term memory is injected; date-based memory is exposed as a directory path for Codex to search on demand.
-- For each chat (`chat_id`, fallback `open_id`), the connector always reuses one Codex thread.
+- Session reuse is now thread-aware:
+  - Messages in the same Feishu thread/topic (`thread_id`, fallback `root_id`) reuse one Codex thread.
+  - Messages without thread context start a new Codex session per incoming message.
 - If a chat stays idle for `idle_summary_hours` (default 8), a background task asynchronously resumes that thread and appends an "idle summary" to `daily/YYYY-MM-DD.md` once per idle period.
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
 - In reply flow, the bot prefers topic replies (`reply_in_thread=true`) for ack/progress/final messages; if Feishu rejects topic mode, it falls back to normal replies.

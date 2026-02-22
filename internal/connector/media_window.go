@@ -209,7 +209,7 @@ func (a *App) buildSyntheticMentionJob(event *larkim.P2MessageReceiveV1) (*Job, 
 		RawContent:           strings.TrimSpace(deref(message.Content)),
 		EventID:              eventID(event),
 		ReceivedAt:           a.now(),
-		SessionKey:           buildSessionKey(receiveIDType, receiveID),
+		SessionKey:           buildSessionKeyForMessage(receiveIDType, receiveID, message),
 	}, true
 }
 

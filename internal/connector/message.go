@@ -61,7 +61,7 @@ func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
 		RawContent:           strings.TrimSpace(deref(message.Content)),
 		EventID:              eventID(event),
 		ReceivedAt:           time.Now(),
-		SessionKey:           buildSessionKey(receiveIDType, receiveID),
+		SessionKey:           buildSessionKeyForMessage(receiveIDType, receiveID, message),
 	}, nil
 }
 
@@ -345,6 +345,39 @@ func buildSessionKey(receiveIDType, receiveID string) string {
 		return ""
 	}
 	return idType + ":" + id
+}
+
+func buildSessionKeyForMessage(receiveIDType, receiveID string, message *larkim.EventMessage) string {
+	base := buildSessionKey(receiveIDType, receiveID)
+	if base == "" {
+		return ""
+	}
+
+	if threadKey := extractFeishuThreadKey(message); threadKey != "" {
+		return base + "|thread:" + threadKey
+	}
+
+	sourceMessageID := ""
+	if message != nil {
+		sourceMessageID = strings.TrimSpace(deref(message.MessageId))
+	}
+	if sourceMessageID != "" {
+		return base + "|message:" + sourceMessageID
+	}
+	return base
+}
+
+func extractFeishuThreadKey(message *larkim.EventMessage) string {
+	if message == nil {
+		return ""
+	}
+	if threadID := strings.TrimSpace(deref(message.ThreadId)); threadID != "" {
+		return threadID
+	}
+	if rootID := strings.TrimSpace(deref(message.RootId)); rootID != "" {
+		return rootID
+	}
+	return ""
 }
 
 func extractText(content *string) (string, error) {
