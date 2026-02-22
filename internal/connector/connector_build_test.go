@@ -46,6 +46,61 @@ func TestBuildJob_TextMessage(t *testing.T) {
 	}
 }
 
+func TestBuildJob_TextMessageStripsMentionKey(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_plain_mention"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"@_user_1 帮我重启连接器"}`),
+				ChatId:      strPtr("oc_chat"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Key: strPtr("@_user_1"),
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	job, err := BuildJob(event)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if job.Text != "帮我重启连接器" {
+		t.Fatalf("unexpected text: %q", job.Text)
+	}
+}
+
+func TestBuildJob_TextMessageMentionOnlyWithKeyIgnored(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_plain_mention_only"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"@_user_1"}`),
+				ChatId:      strPtr("oc_chat"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Key: strPtr("@_user_1"),
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := BuildJob(event)
+	if !errors.Is(err, ErrIgnoreMessage) {
+		t.Fatalf("expected ErrIgnoreMessage, got: %v", err)
+	}
+}
+
 func TestBuildJob_SessionKeyPrefersThreadID(t *testing.T) {
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{

@@ -24,7 +24,7 @@ func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
 	}
 	sourceMessageID := strings.TrimSpace(deref(message.MessageId))
 
-	text, attachments, err := extractIncomingMessageContent(messageType, message.Content)
+	text, attachments, err := extractIncomingMessageContent(messageType, message.Content, message.Mentions)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +83,10 @@ func isMediaMessageType(messageType string) bool {
 	}
 }
 
-func extractIncomingMessageContent(messageType string, content *string) (string, []Attachment, error) {
+func extractIncomingMessageContent(messageType string, content *string, mentions []*larkim.MentionEvent) (string, []Attachment, error) {
 	switch strings.ToLower(strings.TrimSpace(messageType)) {
 	case "text":
-		text, err := extractText(content)
+		text, err := extractTextWithMentions(content, mentions)
 		return text, nil, err
 	case "image":
 		attachment, err := extractImageAttachment(content)
@@ -400,6 +400,10 @@ func appendSessionKeyCandidate(candidates *[]string, candidate string) {
 }
 
 func extractText(content *string) (string, error) {
+	return extractTextWithMentions(content, nil)
+}
+
+func extractTextWithMentions(content *string, mentions []*larkim.MentionEvent) (string, error) {
 	if strings.TrimSpace(deref(content)) == "" {
 		return "", ErrIgnoreMessage
 	}
@@ -412,11 +416,27 @@ func extractText(content *string) (string, error) {
 	}
 
 	text := mentionPattern.ReplaceAllString(payload.Text, "")
+	text = stripMentionKeys(text, mentions)
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", ErrIgnoreMessage
 	}
 	return text, nil
+}
+
+func stripMentionKeys(text string, mentions []*larkim.MentionEvent) string {
+	cleaned := text
+	for _, mention := range mentions {
+		if mention == nil {
+			continue
+		}
+		key := strings.TrimSpace(deref(mention.Key))
+		if key == "" {
+			continue
+		}
+		cleaned = strings.ReplaceAll(cleaned, key, "")
+	}
+	return cleaned
 }
 
 func extractOpenID(event *larkim.P2MessageReceiveV1) string {
