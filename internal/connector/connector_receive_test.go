@@ -151,6 +151,111 @@ func TestApp_OnMessageReceive_SameFeishuThreadSharesSessionKey(t *testing.T) {
 	}
 }
 
+func TestApp_OnMessageReceive_ThreadReplyReusesRootMessageSessionKey(t *testing.T) {
+	cfg := configForTest()
+	app := NewApp(cfg, nil)
+
+	event1 := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_root_1"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"first"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+	event2 := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_reply_1"),
+				ThreadId:    strPtr("omt_thread_1"),
+				RootId:      strPtr("om_root_1"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"second"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event1); err != nil {
+		t.Fatalf("unexpected first event error: %v", err)
+	}
+	if err := app.onMessageReceive(context.Background(), event2); err != nil {
+		t.Fatalf("unexpected second event error: %v", err)
+	}
+
+	job1 := <-app.queue
+	job2 := <-app.queue
+	if job1.SessionKey != "chat_id:oc_chat|message:om_root_1" {
+		t.Fatalf("unexpected first session key: %s", job1.SessionKey)
+	}
+	if job2.SessionKey != "chat_id:oc_chat|message:om_root_1" {
+		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
+	}
+	if job1.SessionVersion != 1 {
+		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
+	}
+	if job2.SessionVersion != 2 {
+		t.Fatalf("unexpected second session version: %d", job2.SessionVersion)
+	}
+}
+
+func TestApp_OnMessageReceive_ExistingThreadSessionPreferredWhenRootAppears(t *testing.T) {
+	cfg := configForTest()
+	app := NewApp(cfg, nil)
+
+	event1 := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_thread_first"),
+				ThreadId:    strPtr("omt_thread_1"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"first"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+	event2 := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_thread_reply"),
+				ThreadId:    strPtr("omt_thread_1"),
+				RootId:      strPtr("om_root_any"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"second"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event1); err != nil {
+		t.Fatalf("unexpected first event error: %v", err)
+	}
+	if err := app.onMessageReceive(context.Background(), event2); err != nil {
+		t.Fatalf("unexpected second event error: %v", err)
+	}
+
+	job1 := <-app.queue
+	job2 := <-app.queue
+	if job1.SessionKey != "chat_id:oc_chat|thread:omt_thread_1" {
+		t.Fatalf("unexpected first session key: %s", job1.SessionKey)
+	}
+	if job2.SessionKey != "chat_id:oc_chat|thread:omt_thread_1" {
+		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
+	}
+	if job1.SessionVersion != 1 {
+		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
+	}
+	if job2.SessionVersion != 2 {
+		t.Fatalf("unexpected second session version: %d", job2.SessionVersion)
+	}
+}
+
 func TestApp_OnMessageReceive_NonThreadMessagesUseNewSessionKey(t *testing.T) {
 	cfg := configForTest()
 	app := NewApp(cfg, nil)

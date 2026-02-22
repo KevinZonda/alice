@@ -348,36 +348,55 @@ func buildSessionKey(receiveIDType, receiveID string) string {
 }
 
 func buildSessionKeyForMessage(receiveIDType, receiveID string, message *larkim.EventMessage) string {
-	base := buildSessionKey(receiveIDType, receiveID)
-	if base == "" {
+	candidates := buildSessionKeyCandidatesForMessage(receiveIDType, receiveID, message)
+	if len(candidates) == 0 {
 		return ""
 	}
-
-	if threadKey := extractFeishuThreadKey(message); threadKey != "" {
-		return base + "|thread:" + threadKey
-	}
-
-	sourceMessageID := ""
-	if message != nil {
-		sourceMessageID = strings.TrimSpace(deref(message.MessageId))
-	}
-	if sourceMessageID != "" {
-		return base + "|message:" + sourceMessageID
-	}
-	return base
+	return candidates[0]
 }
 
-func extractFeishuThreadKey(message *larkim.EventMessage) string {
-	if message == nil {
-		return ""
+func buildSessionKeyCandidatesForMessage(receiveIDType, receiveID string, message *larkim.EventMessage) []string {
+	base := buildSessionKey(receiveIDType, receiveID)
+	if base == "" {
+		return nil
 	}
-	if threadID := strings.TrimSpace(deref(message.ThreadId)); threadID != "" {
-		return threadID
+
+	candidates := make([]string, 0, 4)
+	if message != nil {
+		threadID := strings.TrimSpace(deref(message.ThreadId))
+		rootID := strings.TrimSpace(deref(message.RootId))
+		sourceMessageID := strings.TrimSpace(deref(message.MessageId))
+
+		if threadID != "" {
+			appendSessionKeyCandidate(&candidates, base+"|thread:"+threadID)
+		}
+		if rootID != "" {
+			// Keep historical thread-key fallback, and also provide message-key alias for root.
+			appendSessionKeyCandidate(&candidates, base+"|thread:"+rootID)
+			appendSessionKeyCandidate(&candidates, base+"|message:"+rootID)
+		}
+		if sourceMessageID != "" {
+			appendSessionKeyCandidate(&candidates, base+"|message:"+sourceMessageID)
+		}
 	}
-	if rootID := strings.TrimSpace(deref(message.RootId)); rootID != "" {
-		return rootID
+
+	if len(candidates) == 0 {
+		appendSessionKeyCandidate(&candidates, base)
 	}
-	return ""
+	return candidates
+}
+
+func appendSessionKeyCandidate(candidates *[]string, candidate string) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return
+	}
+	for _, existing := range *candidates {
+		if existing == candidate {
+			return
+		}
+	}
+	*candidates = append(*candidates, candidate)
 }
 
 func extractText(content *string) (string, error) {

@@ -252,6 +252,9 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 		logging.Debugf("incoming message rejected source=feishu_im event_id=%s err=%v", eventID(event), err)
 		return nil
 	}
+	if event != nil && event.Event != nil {
+		a.resolveJobSessionKey(job, event.Event.Message)
+	}
 	a.mergeRecentGroupMediaWindow(job)
 
 	queued, _, _ := a.enqueueJob(job)
@@ -277,6 +280,93 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 	)
 
 	return nil
+}
+
+func (a *App) resolveJobSessionKey(job *Job, message *larkim.EventMessage) {
+	if job == nil {
+		return
+	}
+	candidates := buildSessionKeyCandidatesForMessage(job.ReceiveIDType, job.ReceiveID, message)
+	if len(candidates) == 0 {
+		return
+	}
+
+	resolved := a.findExistingSessionKey(candidates)
+	if resolved == "" {
+		resolved = candidates[0]
+	}
+	if resolved == "" {
+		return
+	}
+
+	original := strings.TrimSpace(job.SessionKey)
+	if original == resolved {
+		return
+	}
+	job.SessionKey = resolved
+	logging.Debugf(
+		"job session key normalized event_id=%s original=%s resolved=%s candidates=%q",
+		job.EventID,
+		original,
+		resolved,
+		candidates,
+	)
+}
+
+func (a *App) findExistingSessionKey(candidates []string) string {
+	normalized := make([]string, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		key := strings.TrimSpace(candidate)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, key)
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+
+	a.mu.Lock()
+	latest := make(map[string]struct{}, len(a.latest))
+	for key := range a.latest {
+		trimmed := strings.TrimSpace(key)
+		if trimmed == "" {
+			continue
+		}
+		latest[trimmed] = struct{}{}
+	}
+	pending := make(map[string]struct{}, len(a.pending))
+	for _, pendingJob := range a.pending {
+		trimmed := strings.TrimSpace(pendingJob.SessionKey)
+		if trimmed == "" {
+			continue
+		}
+		pending[trimmed] = struct{}{}
+	}
+	a.mu.Unlock()
+
+	for _, candidate := range normalized {
+		if _, ok := latest[candidate]; ok {
+			return candidate
+		}
+		if _, ok := pending[candidate]; ok {
+			return candidate
+		}
+	}
+
+	if a.processor != nil {
+		for _, candidate := range normalized {
+			if strings.TrimSpace(a.processor.getThreadID(candidate)) != "" {
+				return candidate
+			}
+		}
+	}
+	return ""
 }
 
 func (a *App) enqueueJob(job *Job) (queued bool, cancelActive context.CancelFunc, canceledEventID string) {
