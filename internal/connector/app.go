@@ -22,6 +22,7 @@ type App struct {
 	cfg         config.Config
 	queue       chan Job
 	processor   *Processor
+	workerWG    sync.WaitGroup
 	mu          sync.Mutex
 	latest      map[string]uint64
 	pending     map[string]Job
@@ -58,12 +59,15 @@ func (a *App) Run(ctx context.Context) error {
 	defer a.flushRuntimeState()
 	defer a.flushSessionState()
 
+	workerCtx, stopWorkers := context.WithCancel(ctx)
+	defer stopWorkers()
+
 	for i := 0; i < a.cfg.WorkerConcurrency; i++ {
-		go a.workerLoop(ctx, i)
+		a.startWorker(workerCtx, i)
 	}
 	if a.processor != nil {
-		go a.idleSummaryLoop(ctx)
-		go a.sessionStateFlushLoop(ctx)
+		go a.idleSummaryLoop(workerCtx)
+		go a.sessionStateFlushLoop(workerCtx)
 	}
 
 	eventHandler := larkdispatcher.NewEventDispatcher("", "").OnP2MessageReceiveV1(a.onMessageReceive)
@@ -82,13 +86,29 @@ func (a *App) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		stopWorkers()
+		a.waitWorkers()
 		return nil
 	case err := <-errCh:
+		stopWorkers()
+		a.waitWorkers()
 		if err != nil {
 			return fmt.Errorf("ws client stopped: %w", err)
 		}
 		return nil
 	}
+}
+
+func (a *App) startWorker(ctx context.Context, idx int) {
+	a.workerWG.Add(1)
+	go func() {
+		defer a.workerWG.Done()
+		a.workerLoop(ctx, idx)
+	}()
+}
+
+func (a *App) waitWorkers() {
+	a.workerWG.Wait()
 }
 
 func (a *App) idleSummaryLoop(ctx context.Context) {
@@ -171,6 +191,9 @@ func (a *App) workerLoop(ctx context.Context, idx int) {
 				a.completePendingJob(job)
 			case JobProcessPostRestartFinalize:
 				a.updatePendingJobWorkflowPhase(job, jobWorkflowPhasePostRestartFinalize)
+				if err := a.FlushRuntimeState(); err != nil {
+					log.Printf("flush runtime state failed after post restart phase update: %v", err)
+				}
 				log.Printf(
 					"job state updated event_id=%s session=%s version=%d state=%s",
 					job.EventID,

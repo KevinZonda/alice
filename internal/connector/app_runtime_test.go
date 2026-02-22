@@ -2,6 +2,8 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -458,4 +460,56 @@ func TestApp_SelfUpdateInterruptedJobFinalizesAfterRestart(t *testing.T) {
 	if !strings.Contains(finalizeSender.replyTexts[0], "重启操作已完成") {
 		t.Fatalf("unexpected finalize reply: %q", finalizeSender.replyTexts[0])
 	}
+}
+
+func TestApp_SelfUpdateInterruptedJobPersistsFinalizePhaseImmediately(t *testing.T) {
+	cfg := configForTest()
+	statePath := t.TempDir() + "/runtime_state.json"
+	blockingCodex := newBlockingResumableCodexStub()
+	sender := &senderStub{}
+	processor := NewProcessor(
+		blockingCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+	)
+	app := NewApp(cfg, processor)
+	if err := app.LoadRuntimeState(statePath); err != nil {
+		t.Fatalf("load runtime state failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go app.workerLoop(ctx, 0)
+
+	job := &Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_self_update_persist",
+		EventID:         "evt_self_update_persist",
+		Text:            "请修改后重启你自己",
+	}
+	if queued, _, _ := app.enqueueJob(job); !queued {
+		t.Fatal("expected job to be queued")
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return blockingCodex.CallCount() == 1
+	}, "expected codex call to start")
+
+	cancel()
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		data, err := os.ReadFile(statePath)
+		if err != nil {
+			return false
+		}
+		var snapshot runtimeStateSnapshot
+		if err := json.Unmarshal(data, &snapshot); err != nil {
+			return false
+		}
+		if len(snapshot.Pending) != 1 {
+			return false
+		}
+		return normalizeJobWorkflowPhase(snapshot.Pending[0].WorkflowPhase) == jobWorkflowPhasePostRestartFinalize
+	}, "post restart finalize phase should be flushed immediately")
 }
