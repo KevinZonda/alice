@@ -38,6 +38,20 @@ func (s *LarkSender) SendImage(ctx context.Context, receiveIDType, receiveID, im
 	return nil
 }
 
+func (s *LarkSender) ReplyImage(ctx context.Context, sourceMessageID, imageKey string) (string, error) {
+	imageKey = strings.TrimSpace(imageKey)
+	if imageKey == "" {
+		return "", errors.New("image key is empty")
+	}
+	return s.replyMessagePreferThread(
+		ctx,
+		sourceMessageID,
+		"image",
+		imageMessageContent(imageKey),
+		"reply image success but response message_id is empty",
+	)
+}
+
 func (s *LarkSender) SendFile(ctx context.Context, receiveIDType, receiveID, fileKey string) error {
 	fileKey = strings.TrimSpace(fileKey)
 	if fileKey == "" {
@@ -61,6 +75,20 @@ func (s *LarkSender) SendFile(ctx context.Context, receiveIDType, receiveID, fil
 		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
 	}
 	return nil
+}
+
+func (s *LarkSender) ReplyFile(ctx context.Context, sourceMessageID, fileKey string) (string, error) {
+	fileKey = strings.TrimSpace(fileKey)
+	if fileKey == "" {
+		return "", errors.New("file key is empty")
+	}
+	return s.replyMessagePreferThread(
+		ctx,
+		sourceMessageID,
+		"file",
+		fileMessageContent(fileKey),
+		"reply file success but response message_id is empty",
+	)
 }
 
 func (s *LarkSender) UploadImage(ctx context.Context, localPath string) (string, error) {

@@ -3,7 +3,12 @@ package mcpbridge
 import "testing"
 
 func TestSessionContext_ToEnv(t *testing.T) {
-	ctx := SessionContext{ReceiveIDType: "chat_id", ReceiveID: "oc_chat", ResourceRoot: "/tmp/root"}
+	ctx := SessionContext{
+		ReceiveIDType:   "chat_id",
+		ReceiveID:       "oc_chat",
+		ResourceRoot:    "/tmp/root",
+		SourceMessageID: "om_source",
+	}
 	env := ctx.ToEnv()
 	if env[EnvReceiveIDType] != "chat_id" {
 		t.Fatalf("unexpected receive id type env: %#v", env)
@@ -13,6 +18,9 @@ func TestSessionContext_ToEnv(t *testing.T) {
 	}
 	if env[EnvResourceRoot] != "/tmp/root" {
 		t.Fatalf("unexpected resource root env: %#v", env)
+	}
+	if env[EnvSourceMessageID] != "om_source" {
+		t.Fatalf("unexpected source message env: %#v", env)
 	}
 }
 
@@ -25,11 +33,16 @@ func TestSessionContextFromEnv(t *testing.T) {
 			return "oc_chat"
 		case EnvResourceRoot:
 			return "/tmp/root"
+		case EnvSourceMessageID:
+			return "om_source"
 		default:
 			return ""
 		}
 	})
-	if ctx.ReceiveIDType != "chat_id" || ctx.ReceiveID != "oc_chat" || ctx.ResourceRoot != "/tmp/root" {
+	if ctx.ReceiveIDType != "chat_id" ||
+		ctx.ReceiveID != "oc_chat" ||
+		ctx.ResourceRoot != "/tmp/root" ||
+		ctx.SourceMessageID != "om_source" {
 		t.Fatalf("unexpected context: %+v", ctx)
 	}
 }

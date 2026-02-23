@@ -23,9 +23,10 @@ func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {
 	)
 
 	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:     "oc_chat",
-		ReceiveIDType: "chat_id",
-		Text:          "hello",
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_source",
+		Text:            "hello",
 	})
 
 	if memory.buildCalls != 1 || memory.lastBuildInput != "hello" {
@@ -51,6 +52,9 @@ func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {
 	}
 	if fakeCodex.lastEnv[mcpbridge.EnvReceiveID] != "oc_chat" {
 		t.Fatalf("missing mcp receive id env: %#v", fakeCodex.lastEnv)
+	}
+	if fakeCodex.lastEnv[mcpbridge.EnvSourceMessageID] != "om_source" {
+		t.Fatalf("missing mcp source message env: %#v", fakeCodex.lastEnv)
 	}
 }
 
@@ -278,8 +282,10 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	if len(fakeCodex.receivedInputs) != 2 {
 		t.Fatalf("expected 2 codex inputs, got %d", len(fakeCodex.receivedInputs))
 	}
-	if fakeCodex.receivedInputs[1] != "C" {
-		t.Fatalf("second input should be direct follow-up text C, got %q", fakeCodex.receivedInputs[1])
+	if !strings.Contains(fakeCodex.receivedInputs[1], "receive_id_type=\"chat_id\"") ||
+		!strings.Contains(fakeCodex.receivedInputs[1], "receive_id=\"oc_chat\"") ||
+		!strings.Contains(fakeCodex.receivedInputs[1], "C") {
+		t.Fatalf("second input should include mcp tool context hint and follow-up text, got %q", fakeCodex.receivedInputs[1])
 	}
 	if sender.getMessageTextCalls != 0 {
 		t.Fatalf("resume mode should not fetch parent text, got %d", sender.getMessageTextCalls)

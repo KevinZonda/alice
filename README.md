@@ -153,6 +153,7 @@ Optional:
 - If a chat stays idle for `idle_summary_hours` (default 8), a background task asynchronously resumes that thread and appends an "idle summary" to `daily/YYYY-MM-DD.md` once per idle period.
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
 - In reply flow, the bot prefers topic replies (`reply_in_thread=true`) for ack/progress/final messages; if Feishu rejects topic mode, it falls back to normal replies.
+- For MCP `alice-feishu` tools (`send_image`/`send_file`), if session context includes `source_message_id`, media and captions are sent by replying to that source message (thread-preferred); otherwise they are sent to `receive_id_type/receive_id`.
 - The bot immediately replies to the source message with `收到！`.
 - During Codex execution, streamed `agent_message` updates are sent as card replies first; if card reply fails, fallback is rich-text (`post`) then plain text.
 - Streamed `file_change` updates use the same card-first reply path, for example: `internal/x.go已更改，+23-34`.

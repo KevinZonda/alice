@@ -57,6 +57,7 @@ func (p *Processor) runLLM(
 func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID string) string {
 	userText := p.buildUserTextWithReplyContext(ctx, job, threadID)
 	if strings.TrimSpace(threadID) != "" {
+		userText = appendMCPToolContextHint(userText, job)
 		logging.Debugf(
 			"prompt assemble event_id=%s strategy=resume_direct thread_id=%s final_prompt=%q",
 			job.EventID,
@@ -80,6 +81,24 @@ func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID
 	}
 	logging.Debugf("prompt assemble event_id=%s strategy=memory final_prompt=%q", job.EventID, prompt)
 	return prompt
+}
+
+func appendMCPToolContextHint(userText string, job Job) string {
+	if strings.TrimSpace(job.SourceMessageID) == "" {
+		return userText
+	}
+	receiveIDType := strings.TrimSpace(job.ReceiveIDType)
+	receiveID := strings.TrimSpace(job.ReceiveID)
+	if receiveIDType == "" || receiveID == "" {
+		return userText
+	}
+
+	hint := fmt.Sprintf(
+		"工具调用上下文：当你调用 alice-feishu 的 send_image/send_file 工具时，必须显式传入 receive_id_type=%q 和 receive_id=%q，且不要改成其他接收目标。\n\n",
+		receiveIDType,
+		receiveID,
+	)
+	return hint + strings.TrimSpace(userText)
 }
 
 func (p *Processor) buildUserTextWithReplyContext(ctx context.Context, job Job, threadID string) string {
@@ -147,8 +166,9 @@ func sessionKeyForJob(job Job) string {
 
 func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 	sessionContext := mcpbridge.SessionContext{
-		ReceiveIDType: strings.TrimSpace(job.ReceiveIDType),
-		ReceiveID:     strings.TrimSpace(job.ReceiveID),
+		ReceiveIDType:   strings.TrimSpace(job.ReceiveIDType),
+		ReceiveID:       strings.TrimSpace(job.ReceiveID),
+		SourceMessageID: strings.TrimSpace(job.SourceMessageID),
 	}
 	type resourceRootProvider interface {
 		ResourceRoot() string
