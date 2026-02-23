@@ -89,27 +89,55 @@ func extractIncomingMessageContent(messageType string, content *string, mentions
 		text, err := extractTextWithMentions(content, mentions)
 		return text, nil, err
 	case "image":
+		text, err := extractOptionalTextWithMentions(content, mentions)
+		if err != nil {
+			return "", nil, err
+		}
 		attachment, err := extractImageAttachment(content)
 		if err != nil {
 			return "", nil, err
 		}
-		return "用户发送了一张图片。", []Attachment{attachment}, nil
+		if strings.TrimSpace(text) == "" {
+			text = "用户发送了一张图片。"
+		}
+		return text, []Attachment{attachment}, nil
 	case "sticker":
+		text, err := extractOptionalTextWithMentions(content, mentions)
+		if err != nil {
+			return "", nil, err
+		}
 		attachment, err := extractStickerAttachment(content)
 		if err != nil {
 			return "", nil, err
 		}
-		return "用户发送了一个表情包。", []Attachment{attachment}, nil
+		if strings.TrimSpace(text) == "" {
+			text = "用户发送了一个表情包。"
+		}
+		return text, []Attachment{attachment}, nil
 	case "audio":
+		text, err := extractOptionalTextWithMentions(content, mentions)
+		if err != nil {
+			return "", nil, err
+		}
 		attachment, err := extractAudioAttachment(content)
 		if err != nil {
 			return "", nil, err
 		}
-		return "用户发送了一段语音。", []Attachment{attachment}, nil
+		if strings.TrimSpace(text) == "" {
+			text = "用户发送了一段语音。"
+		}
+		return text, []Attachment{attachment}, nil
 	case "file":
-		text, attachment, err := extractFileAttachment(content)
+		defaultText, attachment, err := extractFileAttachment(content)
 		if err != nil {
 			return "", nil, err
+		}
+		text, err := extractOptionalTextWithMentions(content, mentions)
+		if err != nil {
+			return "", nil, err
+		}
+		if strings.TrimSpace(text) == "" {
+			text = defaultText
 		}
 		return text, []Attachment{attachment}, nil
 	default:
@@ -401,6 +429,17 @@ func appendSessionKeyCandidate(candidates *[]string, candidate string) {
 
 func extractText(content *string) (string, error) {
 	return extractTextWithMentions(content, nil)
+}
+
+func extractOptionalTextWithMentions(content *string, mentions []*larkim.MentionEvent) (string, error) {
+	text, err := extractTextWithMentions(content, mentions)
+	if err != nil {
+		if errors.Is(err, ErrIgnoreMessage) {
+			return "", nil
+		}
+		return "", err
+	}
+	return text, nil
 }
 
 func extractTextWithMentions(content *string, mentions []*larkim.MentionEvent) (string, error) {

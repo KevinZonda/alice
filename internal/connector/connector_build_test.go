@@ -192,6 +192,44 @@ func TestBuildJob_ImageMessage(t *testing.T) {
 	}
 }
 
+func TestBuildJob_ImageMessageWithTextAndMentions(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_img_text"),
+				MessageType: strPtr("image"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> @_user_1 看这张图","image_key":"img_456"}`),
+				ChatId:      strPtr("oc_chat"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Key: strPtr("@_user_1"),
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	job, err := BuildJob(event)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if job.Text != "看这张图" {
+		t.Fatalf("unexpected text: %q", job.Text)
+	}
+	if len(job.Attachments) != 1 {
+		t.Fatalf("expected 1 attachment, got %d", len(job.Attachments))
+	}
+	if job.Attachments[0].ImageKey != "img_456" {
+		t.Fatalf("unexpected image key: %s", job.Attachments[0].ImageKey)
+	}
+	if job.Attachments[0].SourceMessageID != "om_img_text" {
+		t.Fatalf("unexpected image source message id: %s", job.Attachments[0].SourceMessageID)
+	}
+}
+
 func TestBuildJob_StickerMessage(t *testing.T) {
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
@@ -274,6 +312,9 @@ func TestBuildJob_FileMessage(t *testing.T) {
 	if len(job.Attachments) != 1 {
 		t.Fatalf("expected 1 attachment, got %d", len(job.Attachments))
 	}
+	if job.Text != "用户发送了一个文件：report.pdf" {
+		t.Fatalf("unexpected text: %q", job.Text)
+	}
 	if job.Attachments[0].FileKey != "file_123" {
 		t.Fatalf("unexpected file key: %s", job.Attachments[0].FileKey)
 	}
@@ -281,6 +322,47 @@ func TestBuildJob_FileMessage(t *testing.T) {
 		t.Fatalf("unexpected file name: %s", job.Attachments[0].FileName)
 	}
 	if job.Attachments[0].SourceMessageID != "om_file" {
+		t.Fatalf("unexpected file source message id: %s", job.Attachments[0].SourceMessageID)
+	}
+}
+
+func TestBuildJob_FileMessageWithTextAndMentions(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_file_text"),
+				MessageType: strPtr("file"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> @_user_2 请处理这个文件","file_key":"file_456","file_name":"design.docx"}`),
+				ChatId:      strPtr("oc_chat"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Key: strPtr("@_user_2"),
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	job, err := BuildJob(event)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if job.Text != "请处理这个文件" {
+		t.Fatalf("unexpected text: %q", job.Text)
+	}
+	if len(job.Attachments) != 1 {
+		t.Fatalf("expected 1 attachment, got %d", len(job.Attachments))
+	}
+	if job.Attachments[0].FileKey != "file_456" {
+		t.Fatalf("unexpected file key: %s", job.Attachments[0].FileKey)
+	}
+	if job.Attachments[0].FileName != "design.docx" {
+		t.Fatalf("unexpected file name: %s", job.Attachments[0].FileName)
+	}
+	if job.Attachments[0].SourceMessageID != "om_file_text" {
 		t.Fatalf("unexpected file source message id: %s", job.Attachments[0].SourceMessageID)
 	}
 }
