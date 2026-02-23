@@ -10,6 +10,10 @@ import (
 	"gitee.com/alicespace/alice/internal/logging"
 )
 
+const mediaActionPromptGuide = "如果需要发送图片或文件，请在最终回复中加入 ```alice_action``` JSON 代码块，格式：\n" +
+	"{\"actions\":[{\"type\":\"send_image|send_file\",\"path\":\"绝对路径\",\"image_key\":\"可选\",\"file_key\":\"可选\",\"file_name\":\"可选\",\"caption\":\"可选\"}],\"reply\":\"可选文本\"}\n" +
+	"仅在需要发送多媒体时输出 actions。"
+
 func defaultIfEmpty(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -28,6 +32,27 @@ func splitMessageLines(message string) []string {
 		lines = append(lines, trimmed)
 	}
 	return lines
+}
+
+func shouldAppendMediaActionGuide(job Job) bool {
+	if len(job.Attachments) > 0 {
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(job.Text))
+	if text == "" {
+		return false
+	}
+	keywords := []string{
+		"发图", "发图片", "发送图片",
+		"发文件", "发送文件", "附件",
+		"send image", "send file", "upload",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Processor) runLLM(
@@ -214,41 +239,46 @@ func (p *Processor) buildCurrentUserInput(job Job) string {
 		builder.WriteString(baseText)
 	}
 
-	if len(job.Attachments) == 0 {
-		return strings.TrimSpace(builder.String())
+	if len(job.Attachments) > 0 {
+		if builder.Len() > 0 {
+			builder.WriteString("\n\n")
+		}
+		builder.WriteString("附加资源信息：\n")
+		for idx, attachment := range job.Attachments {
+			builder.WriteString(fmt.Sprintf("%d. 类型：%s\n", idx+1, strings.TrimSpace(attachment.Kind)))
+			if name := strings.TrimSpace(attachment.FileName); name != "" {
+				builder.WriteString("   文件名：")
+				builder.WriteString(name)
+				builder.WriteString("\n")
+			}
+			if key := strings.TrimSpace(attachment.ImageKey); key != "" {
+				builder.WriteString("   image_key：")
+				builder.WriteString(key)
+				builder.WriteString("\n")
+			}
+			if key := strings.TrimSpace(attachment.FileKey); key != "" {
+				builder.WriteString("   file_key：")
+				builder.WriteString(key)
+				builder.WriteString("\n")
+			}
+			if localPath := strings.TrimSpace(attachment.LocalPath); localPath != "" {
+				builder.WriteString("   本地路径：")
+				builder.WriteString(localPath)
+				builder.WriteString("\n")
+			}
+			if errText := strings.TrimSpace(attachment.DownloadError); errText != "" {
+				builder.WriteString("   下载状态：失败（")
+				builder.WriteString(errText)
+				builder.WriteString("）\n")
+			}
+		}
 	}
 
-	if builder.Len() > 0 {
-		builder.WriteString("\n\n")
-	}
-	builder.WriteString("附加资源信息：\n")
-	for idx, attachment := range job.Attachments {
-		builder.WriteString(fmt.Sprintf("%d. 类型：%s\n", idx+1, strings.TrimSpace(attachment.Kind)))
-		if name := strings.TrimSpace(attachment.FileName); name != "" {
-			builder.WriteString("   文件名：")
-			builder.WriteString(name)
-			builder.WriteString("\n")
+	if shouldAppendMediaActionGuide(job) {
+		if builder.Len() > 0 {
+			builder.WriteString("\n\n")
 		}
-		if key := strings.TrimSpace(attachment.ImageKey); key != "" {
-			builder.WriteString("   image_key：")
-			builder.WriteString(key)
-			builder.WriteString("\n")
-		}
-		if key := strings.TrimSpace(attachment.FileKey); key != "" {
-			builder.WriteString("   file_key：")
-			builder.WriteString(key)
-			builder.WriteString("\n")
-		}
-		if localPath := strings.TrimSpace(attachment.LocalPath); localPath != "" {
-			builder.WriteString("   本地路径：")
-			builder.WriteString(localPath)
-			builder.WriteString("\n")
-		}
-		if errText := strings.TrimSpace(attachment.DownloadError); errText != "" {
-			builder.WriteString("   下载状态：失败（")
-			builder.WriteString(errText)
-			builder.WriteString("）\n")
-		}
+		builder.WriteString(mediaActionPromptGuide)
 	}
 	return strings.TrimSpace(builder.String())
 }

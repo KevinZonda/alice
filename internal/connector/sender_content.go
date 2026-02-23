@@ -125,6 +125,16 @@ func textMessageContent(text string) string {
 	return string(contentBytes)
 }
 
+func imageMessageContent(imageKey string) string {
+	contentBytes, _ := json.Marshal(map[string]string{"image_key": strings.TrimSpace(imageKey)})
+	return string(contentBytes)
+}
+
+func fileMessageContent(fileKey string) string {
+	contentBytes, _ := json.Marshal(map[string]string{"file_key": strings.TrimSpace(fileKey)})
+	return string(contentBytes)
+}
+
 func richTextMessageContent(lines []string) string {
 	paragraphs := make([][]map[string]any, 0, len(lines))
 	for _, raw := range lines {

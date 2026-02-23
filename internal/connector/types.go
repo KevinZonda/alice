@@ -21,6 +21,10 @@ type MemoryManager interface {
 
 type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
+	SendImage(ctx context.Context, receiveIDType, receiveID, imageKey string) error
+	SendFile(ctx context.Context, receiveIDType, receiveID, fileKey string) error
+	UploadImage(ctx context.Context, localPath string) (string, error)
+	UploadFile(ctx context.Context, localPath, fileName string) (string, error)
 	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
 	ReplyRichText(ctx context.Context, sourceMessageID string, lines []string) (string, error)
 	ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error)

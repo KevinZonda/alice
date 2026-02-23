@@ -203,6 +203,14 @@ type senderStub struct {
 
 	sendCalls      int
 	lastSendText   string
+	sendImages     []string
+	sendImageCalls int
+	sendFiles      []string
+	sendFileCalls  int
+	uploadImageErr error
+	uploadFileErr  error
+	imageKeyByPath map[string]string
+	fileKeyByPath  map[string]string
 	sendCardCalls  int
 	lastSendCard   string
 	sendCards      []string
@@ -253,6 +261,54 @@ func (s *senderStub) SendText(_ context.Context, _, _ string, text string) error
 	s.sendCalls++
 	s.lastSendText = text
 	return nil
+}
+
+func (s *senderStub) SendImage(_ context.Context, _, _ string, imageKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sendImageCalls++
+	s.sendImages = append(s.sendImages, strings.TrimSpace(imageKey))
+	return nil
+}
+
+func (s *senderStub) SendFile(_ context.Context, _, _ string, fileKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sendFileCalls++
+	s.sendFiles = append(s.sendFiles, strings.TrimSpace(fileKey))
+	return nil
+}
+
+func (s *senderStub) UploadImage(_ context.Context, localPath string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.uploadImageErr != nil {
+		return "", s.uploadImageErr
+	}
+	key := ""
+	if s.imageKeyByPath != nil {
+		key = strings.TrimSpace(s.imageKeyByPath[strings.TrimSpace(localPath)])
+	}
+	if key == "" {
+		key = "img_uploaded"
+	}
+	return key, nil
+}
+
+func (s *senderStub) UploadFile(_ context.Context, localPath, _ string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.uploadFileErr != nil {
+		return "", s.uploadFileErr
+	}
+	key := ""
+	if s.fileKeyByPath != nil {
+		key = strings.TrimSpace(s.fileKeyByPath[strings.TrimSpace(localPath)])
+	}
+	if key == "" {
+		key = "file_uploaded"
+	}
+	return key, nil
 }
 
 func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string) error {
