@@ -105,14 +105,48 @@ func TestProcessor_FileChangeEventRepliesInThread(t *testing.T) {
 	if len(sender.replyTargets) != 3 {
 		t.Fatalf("unexpected reply targets: %#v", sender.replyTargets)
 	}
-	if sender.replyTargets[1] != "om_parent" {
-		t.Fatalf("filechange should reply to parent message id, got %q", sender.replyTargets[1])
+	if sender.replyTargets[1] != "om_src" {
+		t.Fatalf("filechange should reply to current source message id, got %q", sender.replyTargets[1])
 	}
 	if !strings.Contains(sender.replyCards[1], "internal/connector/processor.go已更改，+23-34") {
 		t.Fatalf("filechange should be sent as thread reply card, got %q", sender.replyCards[1])
 	}
 	if !strings.Contains(sender.replyCards[2], "最终答复") {
 		t.Fatalf("final reply should be card markdown, got %q", sender.replyCards[2])
+	}
+}
+
+func TestProcessor_FileChangeEventUsesPerSessionSourceWhenParentShared(t *testing.T) {
+	fakeCodex := codexStreamingStub{
+		resp:          "最终答复",
+		agentMessages: []string{"[file_change] internal/connector/processor.go已更改，+23-34"},
+	}
+	sender := &senderStub{}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:            "oc_chat",
+		ReceiveIDType:        "chat_id",
+		SourceMessageID:      "om_src_a",
+		ReplyParentMessageID: "om_shared_parent",
+		Text:                 "hello A",
+	})
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:            "oc_chat",
+		ReceiveIDType:        "chat_id",
+		SourceMessageID:      "om_src_b",
+		ReplyParentMessageID: "om_shared_parent",
+		Text:                 "hello B",
+	})
+
+	if len(sender.replyTargets) != 6 {
+		t.Fatalf("unexpected reply targets: %#v", sender.replyTargets)
+	}
+	if sender.replyTargets[1] != "om_src_a" {
+		t.Fatalf("first filechange should stay in source A thread, got %q", sender.replyTargets[1])
+	}
+	if sender.replyTargets[4] != "om_src_b" {
+		t.Fatalf("second filechange should stay in source B thread, got %q", sender.replyTargets[4])
 	}
 }
 

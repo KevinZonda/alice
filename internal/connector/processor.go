@@ -165,9 +165,9 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			return
 		}
 		if isFileChange {
-			replyTarget := strings.TrimSpace(job.ReplyParentMessageID)
+			replyTarget := strings.TrimSpace(job.SourceMessageID)
 			if replyTarget == "" {
-				replyTarget = strings.TrimSpace(job.SourceMessageID)
+				replyTarget = strings.TrimSpace(job.ReplyParentMessageID)
 			}
 			if replyTarget == "" {
 				if sendErr := p.sendCardWithFallback(ctx, job.ReceiveIDType, job.ReceiveID, normalized); sendErr != nil {
