@@ -40,8 +40,10 @@ type replyFileSender interface {
 }
 
 type service struct {
-	sender Sender
-	getenv func(string) string
+	sender   Sender
+	getenv   func(string) string
+	getppid  func() int
+	readFile func(string) ([]byte, error)
 }
 
 func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
@@ -53,6 +55,8 @@ func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
 	}
 
 	svc := &service{sender: sender, getenv: getenv}
+	svc.getppid = os.Getppid
+	svc.readFile = os.ReadFile
 	mcpServer := server.NewMCPServer(
 		"alice-feishu-tools",
 		"1.0.0",
@@ -164,10 +168,16 @@ func (s *service) handleSendFile(ctx context.Context, request mcp.CallToolReques
 func (s *service) loadSessionContext() (mcpbridge.SessionContext, error) {
 	sessionContext := mcpbridge.SessionContextFromEnv(s.getenv)
 	if err := sessionContext.Validate(); err != nil {
-		return mcpbridge.SessionContext{}, fmt.Errorf(
-			"mcp session context invalid: %w (send_image/send_file must run in connector session context)",
-			err,
-		)
+		if s.getppid != nil && s.readFile != nil {
+			fallbackContext := mcpbridge.SessionContextFromProcessTree(s.getppid(), s.readFile, 8)
+			sessionContext = mcpbridge.MergeSessionContext(sessionContext, fallbackContext)
+		}
+		if err := sessionContext.Validate(); err != nil {
+			return mcpbridge.SessionContext{}, fmt.Errorf(
+				"mcp session context invalid: %w (send_image/send_file must run in connector session context)",
+				err,
+			)
+		}
 	}
 	return sessionContext, nil
 }

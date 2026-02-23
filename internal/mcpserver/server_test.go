@@ -198,6 +198,48 @@ func TestHandleSendImage_MissingSessionContext(t *testing.T) {
 	}
 }
 
+func TestHandleSendImage_LoadSessionContextFromParentProcessFallback(t *testing.T) {
+	sender := &senderStub{}
+	svc := &service{
+		sender:  sender,
+		getenv:  func(string) string { return "" },
+		getppid: func() int { return 200 },
+		readFile: func(path string) ([]byte, error) {
+			switch path {
+			case "/proc/200/environ":
+				return []byte(
+					"ALICE_MCP_RECEIVE_ID_TYPE=chat_id\x00" +
+						"ALICE_MCP_RECEIVE_ID=oc_chat\x00" +
+						"ALICE_MCP_SOURCE_MESSAGE_ID=om_source\x00",
+				), nil
+			case "/proc/200/status":
+				return []byte("Name:\tcodex\nPPid:\t1\n"), nil
+			default:
+				return nil, errors.New("not found")
+			}
+		},
+	}
+
+	result, err := svc.handleSendImage(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"image_key": "img_123",
+			"caption":   "done",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected non-error result, got %#v", result)
+	}
+	if sender.replyImageCalls != 1 || sender.lastReplyImageKey != "img_123" || sender.lastReplyImageMsgID != "om_source" {
+		t.Fatalf("expected thread image reply from fallback context, got %+v", sender)
+	}
+	if sender.replyTextCalls != 1 || sender.lastReplyText != "done" || sender.lastReplyTextMsgID != "om_source" {
+		t.Fatalf("expected thread caption reply from fallback context, got %+v", sender)
+	}
+}
+
 func TestHandleSendImage_DoesNotAllowTargetOverrideArguments(t *testing.T) {
 	sender := &senderStub{}
 	svc := &service{sender: sender, getenv: func(string) string { return "" }}
