@@ -85,16 +85,16 @@ func TestProcessor_IdleSummaryOncePerIdlePeriod(t *testing.T) {
 
 	processor.RunIdleSummaryScan(context.Background(), 8*time.Hour)
 	waitForCondition(t, 2*time.Second, func() bool {
-		return mem.dailySummaryCalls == 1
+		return mem.DailySummaryCalls() == 1
 	}, "idle summary should be written once")
-	if mem.lastSummarySession != sessionKey {
-		t.Fatalf("unexpected summary session key: %s", mem.lastSummarySession)
+	if mem.LastSummarySession() != sessionKey {
+		t.Fatalf("unexpected summary session key: %s", mem.LastSummarySession())
 	}
 
 	processor.RunIdleSummaryScan(context.Background(), 8*time.Hour)
 	time.Sleep(120 * time.Millisecond)
-	if mem.dailySummaryCalls != 1 {
-		t.Fatalf("same idle period should only write once, got %d", mem.dailySummaryCalls)
+	if mem.DailySummaryCalls() != 1 {
+		t.Fatalf("same idle period should only write once, got %d", mem.DailySummaryCalls())
 	}
 
 	newMessageAt := base.Add(10 * time.Hour)
@@ -102,7 +102,7 @@ func TestProcessor_IdleSummaryOncePerIdlePeriod(t *testing.T) {
 	now = newMessageAt.Add(9 * time.Hour)
 	processor.RunIdleSummaryScan(context.Background(), 8*time.Hour)
 	waitForCondition(t, 2*time.Second, func() bool {
-		return mem.dailySummaryCalls == 2
+		return mem.DailySummaryCalls() == 2
 	}, "new idle period should trigger another summary")
 }
 
@@ -138,8 +138,8 @@ func TestProcessor_IdleSummaryAnchorChangedSkipsWriteAndNoParallelRun(t *testing
 	fakeCodex.Release()
 
 	time.Sleep(120 * time.Millisecond)
-	if mem.dailySummaryCalls != 0 {
-		t.Fatalf("summary should be skipped when anchor changes, got %d writes", mem.dailySummaryCalls)
+	if mem.DailySummaryCalls() != 0 {
+		t.Fatalf("summary should be skipped when anchor changes, got %d writes", mem.DailySummaryCalls())
 	}
 }
 

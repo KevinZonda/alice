@@ -139,6 +139,8 @@ func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool
 }
 
 type memoryStub struct {
+	mu sync.Mutex
+
 	prompt string
 
 	buildCalls     int
@@ -157,12 +159,16 @@ type memoryStub struct {
 }
 
 func (m *memoryStub) BuildPrompt(userText string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.buildCalls++
 	m.lastBuildInput = userText
 	return m.prompt, nil
 }
 
 func (m *memoryStub) SaveInteraction(userText, assistantText string, failed bool) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.saveCalls++
 	m.lastSaveUser = userText
 	m.lastSaveReply = assistantText
@@ -171,6 +177,8 @@ func (m *memoryStub) SaveInteraction(userText, assistantText string, failed bool
 }
 
 func (m *memoryStub) AppendDailySummary(sessionKey, summary string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.dailySummaryCalls++
 	m.lastSummarySession = sessionKey
 	m.lastSummaryText = summary
@@ -178,7 +186,21 @@ func (m *memoryStub) AppendDailySummary(sessionKey, summary string, at time.Time
 	return m.appendSummaryErr
 }
 
+func (m *memoryStub) DailySummaryCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dailySummaryCalls
+}
+
+func (m *memoryStub) LastSummarySession() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastSummarySession
+}
+
 type senderStub struct {
+	mu sync.Mutex
+
 	sendCalls      int
 	lastSendText   string
 	sendCardCalls  int
@@ -218,12 +240,16 @@ type senderStub struct {
 }
 
 func (s *senderStub) SendText(_ context.Context, _, _ string, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.sendCalls++
 	s.lastSendText = text
 	return nil
 }
 
 func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.sendCardCalls++
 	s.lastSendCard = cardContent
 	s.sendCards = append(s.sendCards, cardContent)
@@ -231,6 +257,8 @@ func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string
 }
 
 func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.replyTextCalls++
 	s.lastReplyText = text
 	s.replyTexts = append(s.replyTexts, text)
@@ -242,6 +270,8 @@ func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text s
 }
 
 func (s *senderStub) ReplyRichText(_ context.Context, sourceMessageID string, lines []string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.replyRichCalls++
 	cloned := append([]string(nil), lines...)
 	s.lastReplyRich = cloned
@@ -251,6 +281,8 @@ func (s *senderStub) ReplyRichText(_ context.Context, sourceMessageID string, li
 }
 
 func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, markdown string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.replyRichMarkdownCalls++
 	s.lastReplyMarkdown = markdown
 	s.replyMarkdownTexts = append(s.replyMarkdownTexts, markdown)
@@ -262,6 +294,8 @@ func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, m
 }
 
 func (s *senderStub) ReplyCard(_ context.Context, _ string, cardContent string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.replyCardCalls++
 	s.lastReplyCard = cardContent
 	s.replyCards = append(s.replyCards, cardContent)
@@ -272,12 +306,16 @@ func (s *senderStub) ReplyCard(_ context.Context, _ string, cardContent string) 
 }
 
 func (s *senderStub) PatchCard(_ context.Context, _ string, cardContent string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.patchCardCalls++
 	s.lastPatchedCard = cardContent
 	return s.patchCardErr
 }
 
 func (s *senderStub) GetMessageText(_ context.Context, messageID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.getMessageTextCalls++
 	if s.getMessageTextErr != nil {
 		return "", s.getMessageTextErr
@@ -289,6 +327,8 @@ func (s *senderStub) GetMessageText(_ context.Context, messageID string) (string
 }
 
 func (s *senderStub) DownloadAttachment(_ context.Context, sourceMessageID string, attachment *Attachment) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.downloadCalls++
 	s.downloadSourceMessageIDs = append(s.downloadSourceMessageIDs, strings.TrimSpace(sourceMessageID))
 	if attachment == nil {
@@ -317,6 +357,18 @@ func (s *senderStub) DownloadAttachment(_ context.Context, sourceMessageID strin
 		attachment.FileName = filepath.Base(localPath)
 	}
 	return nil
+}
+
+func (s *senderStub) SendCardCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sendCardCalls
+}
+
+func (s *senderStub) LastSendCard() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastSendCard
 }
 
 func strPtr(s string) *string { return &s }

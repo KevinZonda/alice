@@ -150,15 +150,15 @@ Optional:
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
 - In reply flow, the bot prefers topic replies (`reply_in_thread=true`) for ack/progress/final messages; if Feishu rejects topic mode, it falls back to normal replies.
 - The bot immediately replies to the source message with `收到！`.
-- During Codex execution, each streamed `agent_message` (Markdown content) is sent as a rich-text (`post`) reply to the same source message.
-- During Codex execution, each streamed `file_change` event is sent as a rich-text (`post`) reply, for example: `internal/x.go已更改，+23-34`.
+- During Codex execution, streamed `agent_message` updates are sent as card replies first; if card reply fails, fallback is rich-text (`post`) then plain text.
+- Streamed `file_change` updates use the same card-first reply path, for example: `internal/x.go已更改，+23-34`.
 - If the current Codex CLI does not emit native `file_change` events, the connector falls back to repo diff snapshots (git numstat) and still emits `file_change`-style updates.
 - If a newer user message arrives in the same session, the running task is interrupted immediately and switched to the latest message (steer behavior).
-- If no streamed `agent_message` was sent, the final Codex answer is sent as a text reply.
+- If no streamed `agent_message` was sent, the final Codex answer is sent via the same card-first fallback chain.
 - Reply target priority (fallback path): `chat_id`, fallback to sender `open_id`.
 - On Codex failure/timeout, sends `failure_message`.
 
-Note: this project now uses reply-message flow (text replies + rich-text file-change replies) and no longer uses interactive card patch flow.
+Note: this project now uses a card-first reply flow and no longer uses interactive card patch flow.
 
 ## Feishu API references
 

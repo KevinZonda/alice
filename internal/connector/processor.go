@@ -119,13 +119,13 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 			)
 			return JobProcessPostRestartFinalize
 		}
-		log.Printf("codex canceled event_id=%s", job.EventID)
-		logging.Debugf("memory update skipped event_id=%s changed=false reason=codex_canceled", job.EventID)
+		log.Printf("llm canceled event_id=%s", job.EventID)
+		logging.Debugf("memory update skipped event_id=%s changed=false reason=llm_canceled", job.EventID)
 		return JobProcessRetryAfterRestart
 	}
 	failed := err != nil
 	if err != nil {
-		log.Printf("codex failed event_id=%s: %v", job.EventID, err)
+		log.Printf("llm failed event_id=%s: %v", job.EventID, err)
 		reply = p.failureMessage
 	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), reply, failed)
@@ -198,7 +198,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	}
 	failed := runErr != nil
 	if failed {
-		log.Printf("codex failed event_id=%s: %v", job.EventID, runErr)
+		log.Printf("llm failed event_id=%s: %v", job.EventID, runErr)
 		finalReply = p.failureMessage
 	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
