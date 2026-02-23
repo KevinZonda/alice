@@ -57,7 +57,6 @@ func (p *Processor) runLLM(
 func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID string) string {
 	userText := p.buildUserTextWithReplyContext(ctx, job, threadID)
 	if strings.TrimSpace(threadID) != "" {
-		userText = appendMCPToolContextHint(userText, job)
 		logging.Debugf(
 			"prompt assemble event_id=%s strategy=resume_direct thread_id=%s final_prompt=%q",
 			job.EventID,
@@ -66,6 +65,7 @@ func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID
 		)
 		return userText
 	}
+	userText = appendMCPToolContextHint(userText, job)
 
 	logging.Debugf("prompt assemble start event_id=%s memory_enabled=%t user_text=%q", job.EventID, p.memory != nil, userText)
 	if p.memory == nil {
@@ -88,7 +88,7 @@ func appendMCPToolContextHint(userText string, job Job) string {
 		return userText
 	}
 
-	hint := "工具调用上下文：当你调用 alice-feishu 的 send_image/send_file 工具时，不要传 receive_id_type、receive_id、source_message_id；系统会自动路由到当前会话（私聊发私聊，群聊有 thread 则发在当前 thread）。\n\n"
+	hint := "工具调用说明：alice-feishu 的 send_image/send_file 无需传 receive_id_type、receive_id、source_message_id，系统会按当前会话自动路由。\n\n"
 	return hint + strings.TrimSpace(userText)
 }
 

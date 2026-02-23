@@ -29,8 +29,12 @@ func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if memory.buildCalls != 1 || memory.lastBuildInput != "hello" {
-		t.Fatalf("unexpected memory build call: %+v", memory)
+	if memory.buildCalls != 1 {
+		t.Fatalf("unexpected memory build call count: %+v", memory)
+	}
+	if !strings.Contains(memory.lastBuildInput, "send_image/send_file 无需传 receive_id_type、receive_id、source_message_id") ||
+		!strings.Contains(memory.lastBuildInput, "hello") {
+		t.Fatalf("first memory build input should include concise tool hint and user text, got: %q", memory.lastBuildInput)
 	}
 	if fakeCodex.lastInput != "记忆上下文 + 用户消息" {
 		t.Fatalf("codex should receive memory prompt, got: %s", fakeCodex.lastInput)
@@ -232,8 +236,9 @@ func TestProcessor_ReplyParentContextFetchFailureFallsBackToUserText(t *testing.
 		Text:                 "继续",
 	})
 
-	if fakeCodex.lastInput != "继续" {
-		t.Fatalf("expected fallback to user text, got: %s", fakeCodex.lastInput)
+	if !strings.Contains(fakeCodex.lastInput, "send_image/send_file 无需传 receive_id_type、receive_id、source_message_id") ||
+		!strings.Contains(fakeCodex.lastInput, "继续") {
+		t.Fatalf("expected fallback input to include concise tool hint and user text, got: %s", fakeCodex.lastInput)
 	}
 }
 
@@ -255,10 +260,11 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	)
 
 	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:     "oc_chat",
-		ReceiveIDType: "chat_id",
-		Text:          "A",
-		SessionKey:    "chat_id:oc_chat",
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_first",
+		Text:            "A",
+		SessionKey:      "chat_id:oc_chat",
 	})
 
 	processor.ProcessJob(context.Background(), Job{
@@ -282,14 +288,12 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	if len(fakeCodex.receivedInputs) != 2 {
 		t.Fatalf("expected 2 codex inputs, got %d", len(fakeCodex.receivedInputs))
 	}
-	if !strings.Contains(fakeCodex.receivedInputs[1], "不要传 receive_id_type、receive_id、source_message_id") ||
-		!strings.Contains(fakeCodex.receivedInputs[1], "自动路由到当前会话") ||
-		!strings.Contains(fakeCodex.receivedInputs[1], "C") {
-		t.Fatalf("second input should include mcp auto-route hint and follow-up text, got %q", fakeCodex.receivedInputs[1])
+	if !strings.Contains(fakeCodex.receivedInputs[0], "send_image/send_file 无需传 receive_id_type、receive_id、source_message_id") ||
+		!strings.Contains(fakeCodex.receivedInputs[0], "A") {
+		t.Fatalf("first input should include concise mcp auto-route hint and first text, got %q", fakeCodex.receivedInputs[0])
 	}
-	if strings.Contains(fakeCodex.receivedInputs[1], "receive_id_type=\"chat_id\"") ||
-		strings.Contains(fakeCodex.receivedInputs[1], "source_message_id=\"om_src\"") {
-		t.Fatalf("second input should not require explicit target ids, got %q", fakeCodex.receivedInputs[1])
+	if fakeCodex.receivedInputs[1] != "C" {
+		t.Fatalf("resume input should not include repeated tool hint, got %q", fakeCodex.receivedInputs[1])
 	}
 	if sender.getMessageTextCalls != 0 {
 		t.Fatalf("resume mode should not fetch parent text, got %d", sender.getMessageTextCalls)
