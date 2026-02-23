@@ -67,7 +67,7 @@ func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
 
 func isSupportedIncomingMessageType(messageType string) bool {
 	switch strings.ToLower(strings.TrimSpace(messageType)) {
-	case "text", "image", "sticker", "audio", "file":
+	case "text", "image", "sticker", "audio", "file", "post":
 		return true
 	default:
 		return false
@@ -76,7 +76,7 @@ func isSupportedIncomingMessageType(messageType string) bool {
 
 func isMediaMessageType(messageType string) bool {
 	switch strings.ToLower(strings.TrimSpace(messageType)) {
-	case "image", "sticker", "audio", "file":
+	case "image", "sticker", "audio", "file", "post":
 		return true
 	default:
 		return false
@@ -140,6 +140,8 @@ func extractIncomingMessageContent(messageType string, content *string, mentions
 			text = defaultText
 		}
 		return text, []Attachment{attachment}, nil
+	case "post":
+		return extractPostContentWithMentions(content, mentions)
 	default:
 		return "", nil, ErrIgnoreMessage
 	}
@@ -305,41 +307,6 @@ func isBotMentioned(message *larkim.EventMessage, botOpenID, botUserID string) b
 		}
 	}
 	return false
-}
-
-func extractMentionUserIDs(content *string) []string {
-	rawContent := strings.TrimSpace(deref(content))
-	if rawContent == "" {
-		return nil
-	}
-
-	var payload struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal([]byte(rawContent), &payload); err != nil {
-		return nil
-	}
-	if strings.TrimSpace(payload.Text) == "" {
-		return nil
-	}
-
-	matches := mentionUserIDPattern.FindAllStringSubmatch(payload.Text, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	userIDs := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-		userID := strings.TrimSpace(match[1])
-		if userID == "" {
-			continue
-		}
-		userIDs = append(userIDs, userID)
-	}
-	return userIDs
 }
 
 func logIncomingEventDebug(event *larkim.P2MessageReceiveV1) {
