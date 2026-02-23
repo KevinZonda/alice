@@ -27,6 +27,13 @@ func NewLarkSender(client *lark.Client, resourceDir string) *LarkSender {
 	}
 }
 
+func (s *LarkSender) ResourceRoot() string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.resourceDir)
+}
+
 func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, text string) error {
 	content := textMessageContent(text)
 

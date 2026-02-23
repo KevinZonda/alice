@@ -173,6 +173,37 @@ func TestBuildPrompt_ResumeThreadSkipsPrefix(t *testing.T) {
 	}
 }
 
+func TestRunnerRunWithThreadAndProgress_PassesPerRunEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	fakeCodexPath := filepath.Join(tempDir, "fake-codex.sh")
+	script := `#!/bin/sh
+cat <<EOF
+{"type":"item.completed","item":{"type":"agent_message","text":"$ALICE_TEST_ENV"}}
+EOF
+`
+	if err := os.WriteFile(fakeCodexPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake codex script failed: %v", err)
+	}
+
+	runner := Runner{
+		Command: fakeCodexPath,
+		Timeout: 3 * time.Second,
+	}
+	reply, _, err := runner.RunWithThreadAndProgress(
+		context.Background(),
+		"",
+		"hello",
+		map[string]string{"ALICE_TEST_ENV": "env_ok"},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run with env failed: %v", err)
+	}
+	if reply != "env_ok" {
+		t.Fatalf("unexpected reply from env: %q", reply)
+	}
+}
+
 func TestRunnerRunWithProgress_OnlyIncludesAgentMessageUpdates(t *testing.T) {
 	tempDir := t.TempDir()
 	fakeCodexPath := filepath.Join(tempDir, "fake-codex.sh")

@@ -8,11 +8,8 @@ import (
 
 	"gitee.com/alicespace/alice/internal/llm"
 	"gitee.com/alicespace/alice/internal/logging"
+	"gitee.com/alicespace/alice/internal/mcpbridge"
 )
-
-const mediaActionPromptGuide = "如果需要发送图片或文件，请在最终回复中加入 ```alice_action``` JSON 代码块，格式：\n" +
-	"{\"actions\":[{\"type\":\"send_image|send_file\",\"path\":\"绝对路径\",\"image_key\":\"可选\",\"file_key\":\"可选\",\"file_name\":\"可选\",\"caption\":\"可选\"}],\"reply\":\"可选文本\"}\n" +
-	"仅在需要发送多媒体时输出 actions。"
 
 func defaultIfEmpty(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
@@ -38,6 +35,7 @@ func (p *Processor) runLLM(
 	ctx context.Context,
 	threadID string,
 	userText string,
+	env map[string]string,
 	onAgentMessage func(message string),
 ) (string, string, error) {
 	if p.llm == nil {
@@ -46,6 +44,7 @@ func (p *Processor) runLLM(
 	result, err := p.llm.Run(ctx, llm.RunRequest{
 		ThreadID:   strings.TrimSpace(threadID),
 		UserText:   userText,
+		Env:        env,
 		OnProgress: onAgentMessage,
 	})
 	nextThreadID := strings.TrimSpace(result.NextThreadID)
@@ -144,6 +143,23 @@ func sessionKeyForJob(job Job) string {
 		return sessionKey
 	}
 	return buildSessionKey(job.ReceiveIDType, job.ReceiveID)
+}
+
+func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
+	sessionContext := mcpbridge.SessionContext{
+		ReceiveIDType: strings.TrimSpace(job.ReceiveIDType),
+		ReceiveID:     strings.TrimSpace(job.ReceiveID),
+	}
+	type resourceRootProvider interface {
+		ResourceRoot() string
+	}
+	if provider, ok := p.sender.(resourceRootProvider); ok {
+		sessionContext.ResourceRoot = strings.TrimSpace(provider.ResourceRoot())
+	}
+	if err := sessionContext.Validate(); err != nil {
+		return nil
+	}
+	return sessionContext.ToEnv()
 }
 
 func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
@@ -253,10 +269,6 @@ func (p *Processor) buildCurrentUserInput(job Job) string {
 		}
 	}
 
-	if builder.Len() > 0 {
-		builder.WriteString("\n\n")
-	}
-	builder.WriteString(mediaActionPromptGuide)
 	return strings.TrimSpace(builder.String())
 }
 

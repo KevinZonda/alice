@@ -23,15 +23,18 @@ type Config struct {
 
 	LLMProvider string `mapstructure:"llm_provider"`
 
-	CodexCommand      string            `mapstructure:"codex_command"`
-	CodexTimeout      time.Duration     `mapstructure:"-"`
-	CodexTimeoutSecs  int               `mapstructure:"codex_timeout_secs"`
-	CodexEnv          map[string]string `mapstructure:"env"`
-	CodexPromptPrefix string            `mapstructure:"codex_prompt_prefix"`
-	FailureMessage    string            `mapstructure:"failure_message"`
-	ThinkingMessage   string            `mapstructure:"thinking_message"`
-	WorkspaceDir      string            `mapstructure:"workspace_dir"`
-	MemoryDir         string            `mapstructure:"memory_dir"`
+	CodexCommand           string            `mapstructure:"codex_command"`
+	CodexTimeout           time.Duration     `mapstructure:"-"`
+	CodexTimeoutSecs       int               `mapstructure:"codex_timeout_secs"`
+	CodexEnv               map[string]string `mapstructure:"env"`
+	CodexPromptPrefix      string            `mapstructure:"codex_prompt_prefix"`
+	CodexMCPAutoRegister   bool              `mapstructure:"codex_mcp_auto_register"`
+	CodexMCPRegisterStrict bool              `mapstructure:"codex_mcp_register_strict"`
+	CodexMCPServerName     string            `mapstructure:"codex_mcp_server_name"`
+	FailureMessage         string            `mapstructure:"failure_message"`
+	ThinkingMessage        string            `mapstructure:"thinking_message"`
+	WorkspaceDir           string            `mapstructure:"workspace_dir"`
+	MemoryDir              string            `mapstructure:"memory_dir"`
 
 	QueueCapacity     int `mapstructure:"queue_capacity"`
 	WorkerConcurrency int `mapstructure:"worker_concurrency"`
@@ -49,6 +52,9 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("llm_provider", DefaultLLMProvider)
 	v.SetDefault("codex_command", "codex")
 	v.SetDefault("codex_timeout_secs", 120)
+	v.SetDefault("codex_mcp_auto_register", true)
+	v.SetDefault("codex_mcp_register_strict", false)
+	v.SetDefault("codex_mcp_server_name", "alice-feishu")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
 	v.SetDefault("thinking_message", "正在思考中...")
 	v.SetDefault("workspace_dir", ".")
@@ -80,6 +86,7 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
 	cfg.CodexEnv = normalizeEnvMap(envMap)
 	cfg.CodexPromptPrefix = strings.TrimSpace(cfg.CodexPromptPrefix)
+	cfg.CodexMCPServerName = strings.TrimSpace(cfg.CodexMCPServerName)
 	cfg.FailureMessage = strings.TrimSpace(cfg.FailureMessage)
 	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
 	cfg.WorkspaceDir = strings.TrimSpace(cfg.WorkspaceDir)
@@ -100,6 +107,9 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.CodexCommand == "" {
 		cfg.CodexCommand = "codex"
+	}
+	if cfg.CodexMCPServerName == "" {
+		cfg.CodexMCPServerName = "alice-feishu"
 	}
 	if cfg.WorkspaceDir == "" {
 		cfg.WorkspaceDir = "."

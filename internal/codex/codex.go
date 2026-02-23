@@ -33,7 +33,7 @@ type fileDiffStat struct {
 type repoDiffSnapshot map[string]fileDiffStat
 
 func (r Runner) Run(ctx context.Context, userText string) (string, error) {
-	reply, _, err := r.RunWithThreadAndProgress(ctx, "", userText, nil)
+	reply, _, err := r.RunWithThreadAndProgress(ctx, "", userText, nil, nil)
 	return reply, err
 }
 
@@ -42,7 +42,7 @@ func (r Runner) RunWithProgress(
 	userText string,
 	onThinking func(step string),
 ) (string, error) {
-	reply, _, err := r.RunWithThreadAndProgress(ctx, "", userText, onThinking)
+	reply, _, err := r.RunWithThreadAndProgress(ctx, "", userText, nil, onThinking)
 	return reply, err
 }
 
@@ -51,13 +51,14 @@ func (r Runner) RunWithThread(
 	threadID string,
 	userText string,
 ) (string, string, error) {
-	return r.RunWithThreadAndProgress(ctx, threadID, userText, nil)
+	return r.RunWithThreadAndProgress(ctx, threadID, userText, nil, nil)
 }
 
 func (r Runner) RunWithThreadAndProgress(
 	ctx context.Context,
 	threadID string,
 	userText string,
+	env map[string]string,
 	onThinking func(step string),
 ) (string, string, error) {
 	prompt := buildPrompt(threadID, r.PromptPrefix, userText)
@@ -85,7 +86,7 @@ func (r Runner) RunWithThreadAndProgress(
 	if strings.TrimSpace(r.WorkspaceDir) != "" {
 		cmd.Dir = r.WorkspaceDir
 	}
-	cmd.Env = mergeEnv(os.Environ(), r.Env)
+	cmd.Env = mergeEnv(mergeEnv(os.Environ(), r.Env), env)
 	logging.Debugf(
 		"run codex command command=%q thread_id=%s args=%q cwd=%q timeout=%s",
 		r.Command,

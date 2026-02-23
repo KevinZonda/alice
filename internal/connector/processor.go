@@ -109,7 +109,13 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
 	promptText := p.buildPromptWithMemory(ctx, job, currentThreadID)
-	reply, nextThreadID, err := p.runLLM(ctx, currentThreadID, promptText, nil)
+	reply, nextThreadID, err := p.runLLM(
+		ctx,
+		currentThreadID,
+		promptText,
+		p.buildLLMRunEnv(job),
+		nil,
+	)
 	p.setThreadID(sessionKey, nextThreadID)
 	if errors.Is(err, context.Canceled) {
 		if ctx.Err() != nil && isRestartIntentJob(job) {
@@ -129,23 +135,10 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 		log.Printf("llm failed event_id=%s: %v", job.EventID, err)
 		reply = p.failureMessage
 	}
-	handledMediaActions := false
-	if !failed {
-		mediaReply, mediaHandled, mediaErr := p.executeMediaActions(ctx, job.ReceiveIDType, job.ReceiveID, reply)
-		if mediaHandled {
-			handledMediaActions = true
-			reply = mediaReply
-			if mediaErr != nil {
-				log.Printf("send media actions failed event_id=%s: %v", job.EventID, mediaErr)
-			}
-		}
-	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), reply, failed)
 
-	if !handledMediaActions || strings.TrimSpace(reply) != "" {
-		if sendErr := p.sendCardWithFallback(ctx, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
-			log.Printf("send message failed event_id=%s: %v", job.EventID, sendErr)
-		}
+	if sendErr := p.sendCardWithFallback(ctx, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
+		log.Printf("send message failed event_id=%s: %v", job.EventID, sendErr)
 	}
 	return JobProcessCompleted
 }
@@ -165,7 +158,6 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		if isFileChange {
 			normalized = strings.TrimSpace(strings.TrimPrefix(normalized, fileChangeEventPrefix))
 		}
-		normalized = stripMediaActionFromReply(normalized)
 		if normalized == "" {
 			return
 		}
@@ -198,7 +190,13 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
 	promptText := p.buildPromptWithMemory(ctx, job, currentThreadID)
-	finalReply, nextThreadID, runErr := p.runLLM(ctx, currentThreadID, promptText, sendAgentMessage)
+	finalReply, nextThreadID, runErr := p.runLLM(
+		ctx,
+		currentThreadID,
+		promptText,
+		p.buildLLMRunEnv(job),
+		sendAgentMessage,
+	)
 	p.setThreadID(sessionKey, nextThreadID)
 	if errors.Is(runErr, context.Canceled) {
 		// Parent context cancellation usually means app shutdown.
@@ -233,20 +231,8 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		log.Printf("llm failed event_id=%s: %v", job.EventID, runErr)
 		finalReply = p.failureMessage
 	}
-	handledMediaActions := false
-	if !failed {
-		mediaReply, mediaHandled, mediaErr := p.executeMediaActions(ctx, job.ReceiveIDType, job.ReceiveID, finalReply)
-		if mediaHandled {
-			handledMediaActions = true
-			finalReply = mediaReply
-			if mediaErr != nil {
-				log.Printf("send media actions failed event_id=%s: %v", job.EventID, mediaErr)
-			}
-		}
-	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
-	if (!handledMediaActions || strings.TrimSpace(finalReply) != "") &&
-		strings.TrimSpace(finalReply) != "" &&
+	if strings.TrimSpace(finalReply) != "" &&
 		strings.TrimSpace(finalReply) != lastSentAgentMessage {
 		if _, replyErr := p.replyCardWithFallback(ctx, job.SourceMessageID, finalReply); replyErr != nil {
 			log.Printf("send final reply failed event_id=%s: %v", job.EventID, replyErr)

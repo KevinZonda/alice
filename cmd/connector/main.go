@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
+	corecodex "gitee.com/alicespace/alice/internal/codex"
 	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/connector"
 	"gitee.com/alicespace/alice/internal/llm"
@@ -31,6 +33,26 @@ func main() {
 	}
 	logging.SetLevel(cfg.LogLevel)
 	logging.Debugf("debug logging enabled log_level=%s config=%s", cfg.LogLevel, configPath)
+	configAbsPath := resolveConfigPath(configPath)
+
+	if cfg.CodexMCPAutoRegister {
+		mcpRegisterCtx, cancelRegister := context.WithTimeout(context.Background(), 20*time.Second)
+		err = corecodex.EnsureMCPServerRegistered(mcpRegisterCtx, corecodex.MCPRegistration{
+			CodexCommand:  cfg.CodexCommand,
+			ServerName:    cfg.CodexMCPServerName,
+			ServerCommand: resolveMCPServerCommand(configAbsPath),
+			ServerArgs:    []string{"-c", configAbsPath},
+		})
+		cancelRegister()
+		if err != nil {
+			if cfg.CodexMCPRegisterStrict {
+				log.Fatalf("register codex mcp server failed: %v", err)
+			}
+			log.Printf("register codex mcp server failed but ignored: %v", err)
+		} else {
+			log.Printf("codex mcp server ready name=%s", cfg.CodexMCPServerName)
+		}
+	}
 
 	botClient := lark.NewClient(
 		cfg.FeishuAppID,
@@ -107,4 +129,30 @@ func resolveMemoryDir(workspaceDir, memoryDir string) string {
 		base = "."
 	}
 	return filepath.Join(base, dir)
+}
+
+func resolveConfigPath(configPath string) string {
+	configPath = strings.TrimSpace(configPath)
+	if configPath == "" {
+		return config.DefaultConfigPath
+	}
+	abs, err := filepath.Abs(configPath)
+	if err != nil {
+		return configPath
+	}
+	return abs
+}
+
+func resolveMCPServerCommand(configAbsPath string) string {
+	if executablePath, err := os.Executable(); err == nil {
+		sibling := filepath.Join(filepath.Dir(executablePath), "alice-mcp-server")
+		if stat, statErr := os.Stat(sibling); statErr == nil && !stat.IsDir() {
+			return sibling
+		}
+	}
+	configDir := filepath.Dir(strings.TrimSpace(configAbsPath))
+	if configDir == "" {
+		configDir = "."
+	}
+	return filepath.Join(configDir, "bin", "alice-mcp-server")
 }
