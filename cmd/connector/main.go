@@ -13,6 +13,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
+	"gitee.com/alicespace/alice/internal/automation"
 	corecodex "gitee.com/alicespace/alice/internal/codex"
 	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/connector"
@@ -80,10 +81,11 @@ func main() {
 		log.Fatalf("init memory module failed: %v", err)
 	}
 	resourceDir := filepath.Join(memoryDir, "resources")
+	sender := connector.NewLarkSender(botClient, resourceDir)
 
 	processor := connector.NewProcessorWithMemory(
 		backend,
-		connector.NewLarkSender(botClient, resourceDir),
+		sender,
 		cfg.FailureMessage,
 		cfg.ThinkingMessage,
 		memoryManager,
@@ -101,12 +103,31 @@ func main() {
 	} else {
 		log.Printf("runtime state enabled file=%s", runtimeStatePath)
 	}
+	automationStatePath := filepath.Join(memoryDir, "automation_state.json")
+	automationEngine := automation.NewEngine(automation.NewStore(automationStatePath), sender)
+	if err := automationEngine.RegisterSystemTask("system.idle_summary_scan", 60*time.Second, func(runCtx context.Context) {
+		processor.RunIdleSummaryScan(runCtx, cfg.IdleSummaryIdle)
+	}); err != nil {
+		log.Fatalf("register idle summary automation task failed: %v", err)
+	}
+	if err := automationEngine.RegisterSystemTask("system.state_flush", 1*time.Second, func(context.Context) {
+		if err := processor.FlushSessionStateIfDirty(); err != nil {
+			log.Printf("flush session state failed: %v", err)
+		}
+		if err := app.FlushRuntimeStateIfDirty(); err != nil {
+			log.Printf("flush runtime state failed: %v", err)
+		}
+	}); err != nil {
+		log.Fatalf("register state flush automation task failed: %v", err)
+	}
+	app.SetAutomationRunner(automationEngine)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	log.Printf("feishu-codex connector started (long connection mode)")
 	log.Printf("memory module enabled dir=%s", memoryDir)
+	log.Printf("automation engine enabled state_file=%s", automationStatePath)
 	if err := app.Run(ctx); err != nil {
 		log.Fatalf("connector stopped with error: %v", err)
 	}

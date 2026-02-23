@@ -33,6 +33,7 @@ type App struct {
 	runtimeStateVersion        uint64
 	runtimeStateFlushedVersion uint64
 	now                        func() time.Time
+	automationRunner           AutomationRunner
 }
 
 const (
@@ -65,10 +66,7 @@ func (a *App) Run(ctx context.Context) error {
 	for i := 0; i < a.cfg.WorkerConcurrency; i++ {
 		a.startWorker(workerCtx, i)
 	}
-	if a.processor != nil {
-		go a.idleSummaryLoop(workerCtx)
-		go a.sessionStateFlushLoop(workerCtx)
-	}
+	a.startBackgroundAutomation(workerCtx)
 
 	eventHandler := larkdispatcher.NewEventDispatcher("", "").OnP2MessageReceiveV1(a.onMessageReceive)
 	wsClient := larkws.NewClient(

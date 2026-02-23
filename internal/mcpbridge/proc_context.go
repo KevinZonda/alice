@@ -17,6 +17,9 @@ func MergeSessionContext(primary, fallback SessionContext) SessionContext {
 		ReceiveID:       strings.TrimSpace(primary.ReceiveID),
 		ResourceRoot:    strings.TrimSpace(primary.ResourceRoot),
 		SourceMessageID: strings.TrimSpace(primary.SourceMessageID),
+		ActorUserID:     strings.TrimSpace(primary.ActorUserID),
+		ActorOpenID:     strings.TrimSpace(primary.ActorOpenID),
+		ChatType:        strings.TrimSpace(primary.ChatType),
 	}
 	if merged.ReceiveIDType == "" {
 		merged.ReceiveIDType = strings.TrimSpace(fallback.ReceiveIDType)
@@ -29,6 +32,15 @@ func MergeSessionContext(primary, fallback SessionContext) SessionContext {
 	}
 	if merged.SourceMessageID == "" {
 		merged.SourceMessageID = strings.TrimSpace(fallback.SourceMessageID)
+	}
+	if merged.ActorUserID == "" {
+		merged.ActorUserID = strings.TrimSpace(fallback.ActorUserID)
+	}
+	if merged.ActorOpenID == "" {
+		merged.ActorOpenID = strings.TrimSpace(fallback.ActorOpenID)
+	}
+	if merged.ChatType == "" {
+		merged.ChatType = strings.TrimSpace(fallback.ChatType)
 	}
 	return merged
 }
@@ -77,6 +89,9 @@ func sessionContextFromEnviron(raw []byte) SessionContext {
 		ReceiveID:       strings.TrimSpace(readEnvValue(raw, EnvReceiveID)),
 		ResourceRoot:    strings.TrimSpace(readEnvValue(raw, EnvResourceRoot)),
 		SourceMessageID: strings.TrimSpace(readEnvValue(raw, EnvSourceMessageID)),
+		ActorUserID:     strings.TrimSpace(readEnvValue(raw, EnvActorUserID)),
+		ActorOpenID:     strings.TrimSpace(readEnvValue(raw, EnvActorOpenID)),
+		ChatType:        strings.TrimSpace(readEnvValue(raw, EnvChatType)),
 	}
 }
 

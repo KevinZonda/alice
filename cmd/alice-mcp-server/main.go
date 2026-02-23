@@ -9,6 +9,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/mark3labs/mcp-go/server"
 
+	"gitee.com/alicespace/alice/internal/automation"
 	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/connector"
 	"gitee.com/alicespace/alice/internal/mcpserver"
@@ -33,8 +34,9 @@ func main() {
 
 	memoryDir := resolveMemoryDir(cfg.WorkspaceDir, cfg.MemoryDir)
 	resourceDir := filepath.Join(memoryDir, "resources")
+	automationStatePath := filepath.Join(memoryDir, "automation_state.json")
 	sender := connector.NewLarkSender(botClient, resourceDir)
-	mcpSrv, err := mcpserver.New(sender, nil)
+	mcpSrv, err := mcpserver.New(sender, nil, automation.NewStore(automationStatePath))
 	if err != nil {
 		log.Fatalf("init mcp server failed: %v", err)
 	}

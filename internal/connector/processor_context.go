@@ -160,6 +160,9 @@ func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 		ReceiveIDType:   strings.TrimSpace(job.ReceiveIDType),
 		ReceiveID:       strings.TrimSpace(job.ReceiveID),
 		SourceMessageID: strings.TrimSpace(job.SourceMessageID),
+		ActorUserID:     strings.TrimSpace(job.SenderUserID),
+		ActorOpenID:     strings.TrimSpace(job.SenderOpenID),
+		ChatType:        strings.TrimSpace(job.ChatType),
 	}
 	type resourceRootProvider interface {
 		ResourceRoot() string

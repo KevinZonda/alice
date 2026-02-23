@@ -10,6 +10,9 @@ const (
 	EnvReceiveID       = "ALICE_MCP_RECEIVE_ID"
 	EnvResourceRoot    = "ALICE_MCP_RESOURCE_ROOT"
 	EnvSourceMessageID = "ALICE_MCP_SOURCE_MESSAGE_ID"
+	EnvActorUserID     = "ALICE_MCP_ACTOR_USER_ID"
+	EnvActorOpenID     = "ALICE_MCP_ACTOR_OPEN_ID"
+	EnvChatType        = "ALICE_MCP_CHAT_TYPE"
 )
 
 type SessionContext struct {
@@ -17,6 +20,9 @@ type SessionContext struct {
 	ReceiveID       string
 	ResourceRoot    string
 	SourceMessageID string
+	ActorUserID     string
+	ActorOpenID     string
+	ChatType        string
 }
 
 func (c SessionContext) Validate() error {
@@ -30,7 +36,7 @@ func (c SessionContext) Validate() error {
 }
 
 func (c SessionContext) ToEnv() map[string]string {
-	env := make(map[string]string, 4)
+	env := make(map[string]string, 7)
 	env[EnvReceiveIDType] = strings.TrimSpace(c.ReceiveIDType)
 	env[EnvReceiveID] = strings.TrimSpace(c.ReceiveID)
 	if root := strings.TrimSpace(c.ResourceRoot); root != "" {
@@ -38,6 +44,15 @@ func (c SessionContext) ToEnv() map[string]string {
 	}
 	if sourceMessageID := strings.TrimSpace(c.SourceMessageID); sourceMessageID != "" {
 		env[EnvSourceMessageID] = sourceMessageID
+	}
+	if actorUserID := strings.TrimSpace(c.ActorUserID); actorUserID != "" {
+		env[EnvActorUserID] = actorUserID
+	}
+	if actorOpenID := strings.TrimSpace(c.ActorOpenID); actorOpenID != "" {
+		env[EnvActorOpenID] = actorOpenID
+	}
+	if chatType := strings.TrimSpace(c.ChatType); chatType != "" {
+		env[EnvChatType] = chatType
 	}
 	return env
 }
@@ -51,5 +66,8 @@ func SessionContextFromEnv(getenv func(key string) string) SessionContext {
 		ReceiveID:       strings.TrimSpace(getenv(EnvReceiveID)),
 		ResourceRoot:    strings.TrimSpace(getenv(EnvResourceRoot)),
 		SourceMessageID: strings.TrimSpace(getenv(EnvSourceMessageID)),
+		ActorUserID:     strings.TrimSpace(getenv(EnvActorUserID)),
+		ActorOpenID:     strings.TrimSpace(getenv(EnvActorOpenID)),
+		ChatType:        strings.TrimSpace(getenv(EnvChatType)),
 	}
 }

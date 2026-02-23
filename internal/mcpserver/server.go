@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"gitee.com/alicespace/alice/internal/automation"
 	"gitee.com/alicespace/alice/internal/mcpbridge"
 )
 
@@ -40,13 +41,14 @@ type replyFileSender interface {
 }
 
 type service struct {
-	sender   Sender
-	getenv   func(string) string
-	getppid  func() int
-	readFile func(string) ([]byte, error)
+	sender          Sender
+	getenv          func(string) string
+	getppid         func() int
+	readFile        func(string) ([]byte, error)
+	automationStore *automation.Store
 }
 
-func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
+func New(sender Sender, getenv func(string) string, automationStore *automation.Store) (*server.MCPServer, error) {
 	if sender == nil {
 		return nil, errors.New("sender is nil")
 	}
@@ -54,7 +56,7 @@ func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
 		getenv = os.Getenv
 	}
 
-	svc := &service{sender: sender, getenv: getenv}
+	svc := &service{sender: sender, getenv: getenv, automationStore: automationStore}
 	svc.getppid = os.Getppid
 	svc.readFile = os.ReadFile
 	mcpServer := server.NewMCPServer(
@@ -80,6 +82,7 @@ func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
 		mcp.WithString("file_name", mcp.Description("可选文件名，path上传时生效")),
 		mcp.WithString("caption", mcp.Description("可选文字说明，发送在文件之后")),
 	), svc.handleSendFile)
+	svc.registerAutomationTools(mcpServer)
 
 	return mcpServer, nil
 }

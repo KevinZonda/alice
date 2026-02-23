@@ -15,6 +15,9 @@ func TestMergeSessionContext(t *testing.T) {
 		ReceiveID:       "ou_123",
 		ResourceRoot:    "/tmp/root",
 		SourceMessageID: "om_source",
+		ActorUserID:     "ou_actor",
+		ActorOpenID:     "ou_open",
+		ChatType:        "group",
 	}
 
 	merged := MergeSessionContext(primary, fallback)
@@ -23,7 +26,10 @@ func TestMergeSessionContext(t *testing.T) {
 	}
 	if merged.ReceiveID != "ou_123" ||
 		merged.ResourceRoot != "/tmp/root" ||
-		merged.SourceMessageID != "om_source" {
+		merged.SourceMessageID != "om_source" ||
+		merged.ActorUserID != "ou_actor" ||
+		merged.ActorOpenID != "ou_open" ||
+		merged.ChatType != "group" {
 		t.Fatalf("unexpected merge result: %+v", merged)
 	}
 }
@@ -36,7 +42,12 @@ func TestSessionContextFromProcessTree(t *testing.T) {
 		case "/proc/300/status":
 			return []byte("Name:\tbash\nPPid:\t200\n"), nil
 		case "/proc/200/environ":
-			return []byte("ALICE_MCP_RECEIVE_ID_TYPE=chat_id\x00ALICE_MCP_RECEIVE_ID=oc_chat\x00"), nil
+			return []byte(
+				"ALICE_MCP_RECEIVE_ID_TYPE=chat_id\x00" +
+					"ALICE_MCP_RECEIVE_ID=oc_chat\x00" +
+					"ALICE_MCP_ACTOR_USER_ID=ou_actor\x00" +
+					"ALICE_MCP_CHAT_TYPE=group\x00",
+			), nil
 		case "/proc/200/status":
 			return []byte("Name:\tcodex\nPPid:\t1\n"), nil
 		default:
@@ -45,7 +56,10 @@ func TestSessionContextFromProcessTree(t *testing.T) {
 	}
 
 	ctx := SessionContextFromProcessTree(300, readFile, 8)
-	if ctx.ReceiveIDType != "chat_id" || ctx.ReceiveID != "oc_chat" {
+	if ctx.ReceiveIDType != "chat_id" ||
+		ctx.ReceiveID != "oc_chat" ||
+		ctx.ActorUserID != "ou_actor" ||
+		ctx.ChatType != "group" {
 		t.Fatalf("unexpected process tree context: %+v", ctx)
 	}
 }
