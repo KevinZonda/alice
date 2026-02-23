@@ -74,7 +74,7 @@ func TestParseEventLine_FileChange(t *testing.T) {
 	if message != "" {
 		t.Fatalf("unexpected message: %q", message)
 	}
-	if fileChange != "internal/connector/processor.go已更改，+23-34" {
+	if fileChange != "- `internal/connector/processor.go` 已更改 (+23/-34)" {
 		t.Fatalf("unexpected file change message: %q", fileChange)
 	}
 	if threadID != "" {
@@ -84,15 +84,27 @@ func TestParseEventLine_FileChange(t *testing.T) {
 
 func TestParseEventLine_FileChangeWithChangesArray(t *testing.T) {
 	_, _, fileChange, _ := parseEventLine(`{"type":"item.completed","item":{"id":"item_28","type":"file_change","changes":[{"path":"/home/codexbot/alice/internal/codex/codex.go","kind":"update"}],"status":"completed"}}`)
-	if fileChange != "internal/codex/codex.go已更改，+0-0" {
+	if fileChange != "- `internal/codex/codex.go` 已更改" {
 		t.Fatalf("unexpected file change message from changes array: %q", fileChange)
 	}
 }
 
 func TestParseEventLine_FileChangeLegacyType(t *testing.T) {
 	_, _, fileChange, _ := parseEventLine(`{"type":"item.completed","item":{"type":"filechange","path":"internal/connector/processor.go","added_lines":2,"removed_lines":1}}`)
-	if fileChange != "internal/connector/processor.go已更改，+2-1" {
+	if fileChange != "- `internal/connector/processor.go` 已更改 (+2/-1)" {
 		t.Fatalf("unexpected file change message for legacy type: %q", fileChange)
+	}
+}
+
+func TestParseEventLine_FileChangeDetectsAddedAndDeleted(t *testing.T) {
+	_, _, added, _ := parseEventLine(`{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"new.txt","kind":"create"}]}}`)
+	if added != "- `new.txt` 已新增" {
+		t.Fatalf("unexpected added file change message: %q", added)
+	}
+
+	_, _, deleted, _ := parseEventLine(`{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"old.txt","kind":"delete"}]}}`)
+	if deleted != "- `old.txt` 已删除" {
+		t.Fatalf("unexpected deleted file change message: %q", deleted)
 	}
 }
 
@@ -197,7 +209,7 @@ EOF
 	if slices.Contains(updates, "分析步骤") {
 		t.Fatalf("reasoning should not be synced to user updates, got: %#v", updates)
 	}
-	if !slices.Contains(updates, "[file_change] internal/connector/processor.go已更改，+2-1") {
+	if !slices.Contains(updates, "[file_change] - `internal/connector/processor.go` 已更改 (+2/-1)") {
 		t.Fatalf("file change should be synced to updates, got: %#v", updates)
 	}
 	if !slices.Contains(updates, "最终答复") {
@@ -258,7 +270,7 @@ EOF
 	if reply != "完成" {
 		t.Fatalf("unexpected reply: %q", reply)
 	}
-	if !slices.Contains(updates, "[file_change] a.txt已更改，+1-1") {
+	if !slices.Contains(updates, "[file_change] - `a.txt` 已更改 (+1/-1)") {
 		t.Fatalf("expected synthetic file_change update, got: %#v", updates)
 	}
 }
@@ -297,7 +309,7 @@ func TestCollectRepoDiffMessages_DetectsChangedFile(t *testing.T) {
 	}
 
 	messages, _ := collectRepoDiffMessages(context.Background(), repos, previous)
-	if !slices.Contains(messages, "a.txt已更改，+1-1") {
+	if !slices.Contains(messages, "- `a.txt` 已更改 (+1/-1)") {
 		t.Fatalf("expected repo diff message, got %#v", messages)
 	}
 }
@@ -330,7 +342,7 @@ func TestEnrichFileChangeMessageStats_UsesGitDiffForZeroStats(t *testing.T) {
 	}
 
 	got := enrichFileChangeMessageStats(context.Background(), "a.txt已更改，+0-0", []string{repoDir})
-	if got != "a.txt已更改，+2-1" {
+	if got != "- `a.txt` 已更改 (+2/-1)" {
 		t.Fatalf("unexpected enriched message: %q", got)
 	}
 }
@@ -359,7 +371,7 @@ func TestEnrichFileChangeMessageStats_StripsZeroStatsWhenNoDiffFound(t *testing.
 	runInRepo("git", "commit", "-m", "init")
 
 	got := enrichFileChangeMessageStats(context.Background(), "a.txt已更改，+0-0", []string{repoDir})
-	if got != "a.txt已更改" {
+	if got != "- `a.txt` 已更改" {
 		t.Fatalf("unexpected fallback message: %q", got)
 	}
 }
@@ -387,7 +399,41 @@ func TestEnrichFileChangeMessageStats_UsesNoIndexDiffForUntrackedFile(t *testing
 	}
 
 	got := enrichFileChangeMessageStats(context.Background(), "new.txt已更改，+0-0", []string{repoDir})
-	if got != "new.txt已更改，+3-0" {
+	if got != "- `new.txt` 已新增 (+3/-0)" {
 		t.Fatalf("unexpected untracked message: %q", got)
+	}
+}
+
+func TestEnrichFileChangeMessageStats_DetectsDeletedFile(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("create repo dir failed: %v", err)
+	}
+	runInRepo := func(args ...string) {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("run %v failed: %v output=%s", args, err, string(out))
+		}
+	}
+	runInRepo("git", "init")
+	runInRepo("git", "config", "user.email", "bot@example.com")
+	runInRepo("git", "config", "user.name", "Bot")
+
+	if err := os.WriteFile(filepath.Join(repoDir, "old.txt"), []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatalf("write tracked file failed: %v", err)
+	}
+	runInRepo("git", "add", "old.txt")
+	runInRepo("git", "commit", "-m", "init")
+
+	if err := os.Remove(filepath.Join(repoDir, "old.txt")); err != nil {
+		t.Fatalf("delete tracked file failed: %v", err)
+	}
+
+	got := enrichFileChangeMessageStats(context.Background(), "old.txt已更改，+0-0", []string{repoDir})
+	if got != "- `old.txt` 已删除 (+0/-2)" {
+		t.Fatalf("unexpected deleted file message: %q", got)
 	}
 }

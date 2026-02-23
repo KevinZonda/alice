@@ -11,6 +11,22 @@ import (
 	"strings"
 )
 
+type fileChangeStatus int
+
+const (
+	fileChangeStatusUnknown fileChangeStatus = iota
+	fileChangeStatusModified
+	fileChangeStatusAdded
+	fileChangeStatusDeleted
+)
+
+type parsedFileChangeLine struct {
+	Path     string
+	Status   fileChangeStatus
+	Stat     fileDiffStat
+	HasStats bool
+}
+
 func discoverWatchRepos(workspaceDir string) []string {
 	workspaceDir = strings.TrimSpace(workspaceDir)
 	if workspaceDir == "" {
@@ -98,7 +114,11 @@ func collectRepoDiffMessages(
 			if !ok {
 				continue
 			}
-			messages = append(messages, formatFileChangeMessage(path, stat))
+			status := resolveFileChangeStatusByGit(ctx, repo, path)
+			if status == fileChangeStatusUnknown {
+				status = fileChangeStatusModified
+			}
+			messages = append(messages, formatFileChangeMessageWithStatus(path, status, stat))
 		}
 		previous[repo] = current
 	}
@@ -160,7 +180,12 @@ func readRepoDiffSnapshot(ctx context.Context, repo string) (repoDiffSnapshot, e
 			if _, exists := snapshot[path]; exists {
 				continue
 			}
-			snapshot[path] = fileDiffStat{Additions: 0, Deletions: 0}
+			absPath := filepath.Join(repo, filepath.FromSlash(path))
+			if stat, found := readNoIndexDiffStat(ctx, absPath); found {
+				snapshot[path] = stat
+				continue
+			}
+			snapshot[path] = fileDiffStat{}
 		}
 	}
 
@@ -180,7 +205,82 @@ func parseNumstatValue(raw string) int {
 }
 
 func formatFileChangeMessage(path string, stat fileDiffStat) string {
-	return fmt.Sprintf("%s已更改，+%d-%d", strings.TrimSpace(path), stat.Additions, stat.Deletions)
+	return formatFileChangeMessageWithStatus(path, fileChangeStatusModified, stat)
+}
+
+func formatFileChangeMessageWithStatus(path string, status fileChangeStatus, stat fileDiffStat) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	label := fileChangeStatusLabel(status)
+	if stat.Additions == 0 && stat.Deletions == 0 {
+		return fmt.Sprintf("- `%s` %s", path, label)
+	}
+	return fmt.Sprintf("- `%s` %s (+%d/-%d)", path, label, stat.Additions, stat.Deletions)
+}
+
+func fileChangeStatusLabel(status fileChangeStatus) string {
+	switch status {
+	case fileChangeStatusAdded:
+		return "已新增"
+	case fileChangeStatusDeleted:
+		return "已删除"
+	default:
+		return "已更改"
+	}
+}
+
+func normalizeFileChangeStatus(raw string) fileChangeStatus {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	if normalized == "" {
+		return fileChangeStatusUnknown
+	}
+
+	switch normalized {
+	case "已更改", "更改", "修改", "updated", "update", "modified", "modify", "changed", "change", "edit", "edited", "rewrite", "rewritten":
+		return fileChangeStatusModified
+	case "已新增", "新增", "新建", "create", "created", "add", "added", "new", "created_file":
+		return fileChangeStatusAdded
+	case "已删除", "删除", "delete", "deleted", "remove", "removed", "rm", "unlink":
+		return fileChangeStatusDeleted
+	default:
+		return fileChangeStatusUnknown
+	}
+}
+
+func detectGitPathStatus(ctx context.Context, repo, relPath string) fileChangeStatus {
+	cmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--", relPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return fileChangeStatusUnknown
+	}
+
+	for _, rawLine := range strings.Split(string(out), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		if len(line) < 2 {
+			continue
+		}
+
+		code := line[:2]
+		if code == "??" {
+			return fileChangeStatusAdded
+		}
+		if strings.Contains(code, "D") {
+			return fileChangeStatusDeleted
+		}
+		if strings.Contains(code, "A") {
+			return fileChangeStatusAdded
+		}
+		if strings.ContainsAny(code, "MRCUT") {
+			return fileChangeStatusModified
+		}
+	}
+
+	return fileChangeStatusUnknown
 }
 
 func enrichFileChangeMessageStats(ctx context.Context, message string, repos []string) string {
@@ -196,71 +296,247 @@ func enrichFileChangeMessageStats(ctx context.Context, message string, repos []s
 			continue
 		}
 
-		path, additions, deletions, ok := parseFormattedFileChangeLine(line)
+		parsedLine, ok := parseFormattedFileChangeLine(line)
 		if !ok {
 			updated = append(updated, line)
 			continue
 		}
-		if additions != 0 || deletions != 0 {
-			updated = append(updated, line)
-			continue
+
+		status := parsedLine.Status
+		if status == fileChangeStatusUnknown {
+			status = fileChangeStatusModified
+		}
+		stat := parsedLine.Stat
+		hasNumbers := stat.Additions != 0 || stat.Deletions != 0
+
+		resolvedStatus, resolvedStat, resolved := resolveFileChangeInfoByGitDiff(ctx, repos, parsedLine.Path)
+		if resolved {
+			if status == fileChangeStatusModified &&
+				(resolvedStatus == fileChangeStatusAdded || resolvedStatus == fileChangeStatusDeleted) {
+				status = resolvedStatus
+			}
+			if !hasNumbers && (resolvedStat.Additions != 0 || resolvedStat.Deletions != 0) {
+				stat = resolvedStat
+				hasNumbers = true
+			}
+			if status == fileChangeStatusUnknown {
+				status = resolvedStatus
+			}
+		}
+		if status == fileChangeStatusUnknown {
+			status = fileChangeStatusModified
 		}
 
-		stat, found := resolveFileChangeStatByGitDiff(ctx, repos, path)
-		if found && (stat.Additions != 0 || stat.Deletions != 0) {
-			updated = append(updated, formatFileChangeMessage(path, stat))
-			continue
+		if !hasNumbers {
+			stat = fileDiffStat{}
 		}
-
-		updated = append(updated, fmt.Sprintf("%s已更改", strings.TrimSpace(path)))
+		updated = append(updated, formatFileChangeMessageWithStatus(parsedLine.Path, status, stat))
 	}
 
 	return strings.Join(updated, "\n")
 }
 
-func parseFormattedFileChangeLine(line string) (path string, additions int, deletions int, ok bool) {
+func parseFormattedFileChangeLine(line string) (parsedFileChangeLine, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return "", 0, 0, false
+		return parsedFileChangeLine{}, false
 	}
 
-	const marker = "已更改，+"
-	idx := strings.LastIndex(line, marker)
-	if idx < 0 {
-		return "", 0, 0, false
+	if parsed, ok := parseMarkdownFileChangeLine(line); ok {
+		return parsed, true
 	}
-	path = strings.TrimSpace(line[:idx])
+	if parsed, ok := parseLegacyFileChangeLine(line); ok {
+		return parsed, true
+	}
+	return parsedFileChangeLine{}, false
+}
+
+func parseMarkdownFileChangeLine(line string) (parsedFileChangeLine, bool) {
+	const prefix = "- `"
+	if !strings.HasPrefix(line, prefix) {
+		return parsedFileChangeLine{}, false
+	}
+	rest := strings.TrimPrefix(line, prefix)
+	endPath := strings.Index(rest, "`")
+	if endPath <= 0 {
+		return parsedFileChangeLine{}, false
+	}
+	path := strings.TrimSpace(rest[:endPath])
 	if path == "" {
-		return "", 0, 0, false
+		return parsedFileChangeLine{}, false
+	}
+	tail := strings.TrimSpace(rest[endPath+1:])
+	if tail == "" {
+		return parsedFileChangeLine{}, false
 	}
 
-	statsPart := strings.TrimSpace(line[idx+len(marker):])
-	parts := strings.SplitN(statsPart, "-", 2)
+	statusPart := tail
+	stat := fileDiffStat{}
+	hasStats := false
+	if idx := strings.Index(tail, " (+"); idx >= 0 && strings.HasSuffix(tail, ")") {
+		statusPart = strings.TrimSpace(tail[:idx])
+		statsPart := strings.TrimSpace(tail[idx+2 : len(tail)-1])
+		additions, deletions, ok := parseMarkdownStats(statsPart)
+		if ok {
+			stat = fileDiffStat{Additions: additions, Deletions: deletions}
+			hasStats = true
+		}
+	}
+
+	status := normalizeFileChangeStatus(statusPart)
+	if status == fileChangeStatusUnknown {
+		return parsedFileChangeLine{}, false
+	}
+
+	return parsedFileChangeLine{
+		Path:     path,
+		Status:   status,
+		Stat:     stat,
+		HasStats: hasStats,
+	}, true
+}
+
+func parseMarkdownStats(statsPart string) (additions int, deletions int, ok bool) {
+	statsPart = strings.TrimSpace(statsPart)
+	if !strings.HasPrefix(statsPart, "+") {
+		return 0, 0, false
+	}
+	trimmed := strings.TrimPrefix(statsPart, "+")
+	parts := strings.SplitN(trimmed, "/-", 2)
 	if len(parts) != 2 {
-		return path, 0, 0, false
+		return 0, 0, false
 	}
-
 	add, addErr := strconv.Atoi(strings.TrimSpace(parts[0]))
 	del, delErr := strconv.Atoi(strings.TrimSpace(parts[1]))
 	if addErr != nil || delErr != nil {
-		return path, 0, 0, false
+		return 0, 0, false
 	}
-	return path, add, del, true
+	return add, del, true
+}
+
+func parseLegacyFileChangeLine(line string) (parsedFileChangeLine, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return parsedFileChangeLine{}, false
+	}
+
+	legacyMarkers := []struct {
+		Marker string
+		Status fileChangeStatus
+	}{
+		{Marker: "已新增，+", Status: fileChangeStatusAdded},
+		{Marker: "已删除，+", Status: fileChangeStatusDeleted},
+		{Marker: "已更改，+", Status: fileChangeStatusModified},
+	}
+	for _, marker := range legacyMarkers {
+		idx := strings.LastIndex(line, marker.Marker)
+		if idx < 0 {
+			continue
+		}
+		path := strings.TrimSpace(line[:idx])
+		if path == "" {
+			return parsedFileChangeLine{}, false
+		}
+
+		statsPart := strings.TrimSpace(line[idx+len(marker.Marker):])
+		parts := strings.SplitN(statsPart, "-", 2)
+		if len(parts) != 2 {
+			return parsedFileChangeLine{}, false
+		}
+		add, addErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+		del, delErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if addErr != nil || delErr != nil {
+			return parsedFileChangeLine{}, false
+		}
+
+		return parsedFileChangeLine{
+			Path:     path,
+			Status:   marker.Status,
+			Stat:     fileDiffStat{Additions: add, Deletions: del},
+			HasStats: true,
+		}, true
+	}
+
+	legacyNoStatMarkers := []struct {
+		Suffix string
+		Status fileChangeStatus
+	}{
+		{Suffix: "已新增", Status: fileChangeStatusAdded},
+		{Suffix: "已删除", Status: fileChangeStatusDeleted},
+		{Suffix: "已更改", Status: fileChangeStatusModified},
+	}
+	for _, marker := range legacyNoStatMarkers {
+		if !strings.HasSuffix(line, marker.Suffix) {
+			continue
+		}
+		path := strings.TrimSpace(strings.TrimSuffix(line, marker.Suffix))
+		if path == "" {
+			return parsedFileChangeLine{}, false
+		}
+		return parsedFileChangeLine{
+			Path:   path,
+			Status: marker.Status,
+		}, true
+	}
+
+	return parsedFileChangeLine{}, false
 }
 
 func resolveFileChangeStatByGitDiff(ctx context.Context, repos []string, path string) (fileDiffStat, bool) {
+	_, stat, found := resolveFileChangeInfoByGitDiff(ctx, repos, path)
+	return stat, found
+}
+
+func resolveFileChangeInfoByGitDiff(
+	ctx context.Context,
+	repos []string,
+	path string,
+) (fileChangeStatus, fileDiffStat, bool) {
 	path = strings.TrimSpace(path)
 	if path == "" || len(repos) == 0 {
-		return fileDiffStat{}, false
+		return fileChangeStatusUnknown, fileDiffStat{}, false
 	}
 
 	for _, repo := range repos {
-		stat, ok := readRepoPathDiffStat(ctx, repo, path)
+		status, stat, ok := readRepoPathDiffInfo(ctx, repo, path)
 		if ok {
-			return stat, true
+			return status, stat, true
 		}
 	}
-	return fileDiffStat{}, false
+	return fileChangeStatusUnknown, fileDiffStat{}, false
+}
+
+func resolveFileChangeStatusByGit(ctx context.Context, repo, path string) fileChangeStatus {
+	relPath, _, ok := resolvePathForRepo(repo, path)
+	if !ok {
+		return fileChangeStatusUnknown
+	}
+	return detectGitPathStatus(ctx, repo, relPath)
+}
+
+func readRepoPathDiffInfo(ctx context.Context, repo, path string) (fileChangeStatus, fileDiffStat, bool) {
+	relPath, absPath, ok := resolvePathForRepo(repo, path)
+	if !ok {
+		return fileChangeStatusUnknown, fileDiffStat{}, false
+	}
+
+	status := detectGitPathStatus(ctx, repo, relPath)
+	stat, statFound := readRepoPathDiffStat(ctx, repo, relPath)
+	if !statFound && status == fileChangeStatusAdded {
+		if untrackedStat, found := readNoIndexDiffStat(ctx, absPath); found {
+			stat = untrackedStat
+			statFound = true
+		}
+	}
+
+	if status == fileChangeStatusUnknown {
+		if statFound {
+			status = fileChangeStatusModified
+		} else {
+			return fileChangeStatusUnknown, fileDiffStat{}, false
+		}
+	}
+	return status, stat, true
 }
 
 func readRepoPathDiffStat(ctx context.Context, repo, path string) (fileDiffStat, bool) {
@@ -269,14 +545,14 @@ func readRepoPathDiffStat(ctx context.Context, repo, path string) (fileDiffStat,
 		return fileDiffStat{}, false
 	}
 
-	if stat, found := readGitNumstatForPath(ctx, repo, relPath, false); found && (stat.Additions != 0 || stat.Deletions != 0) {
+	if stat, found := readGitNumstatForPath(ctx, repo, relPath, false); found {
 		return stat, true
 	}
-	if stat, found := readGitNumstatForPath(ctx, repo, relPath, true); found && (stat.Additions != 0 || stat.Deletions != 0) {
+	if stat, found := readGitNumstatForPath(ctx, repo, relPath, true); found {
 		return stat, true
 	}
 	if isUntrackedPath(ctx, repo, relPath) {
-		if stat, found := readNoIndexDiffStat(ctx, absPath); found && (stat.Additions != 0 || stat.Deletions != 0) {
+		if stat, found := readNoIndexDiffStat(ctx, absPath); found {
 			return stat, true
 		}
 	}
