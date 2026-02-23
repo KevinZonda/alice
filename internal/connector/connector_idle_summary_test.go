@@ -232,3 +232,32 @@ func TestBuildProgressCardContent_UsesCardSchemaV2BodyElements(t *testing.T) {
 		t.Fatalf("card should include elapsed duration: %s", all)
 	}
 }
+
+func TestBuildReplyCardContent_PreservesCodeFenceMarkdown(t *testing.T) {
+	content := buildReplyCardContent("```go\nfmt.Println(\"hello\")\n```")
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+		t.Fatalf("unmarshal reply card content failed: %v", err)
+	}
+
+	body, ok := payload["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected body object, got %#v", payload["body"])
+	}
+	elements, ok := body["elements"].([]any)
+	if !ok || len(elements) != 1 {
+		t.Fatalf("expected one markdown element, got %#v", body["elements"])
+	}
+	element, ok := elements[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected markdown element object, got %#v", elements[0])
+	}
+	if element["tag"] != "markdown" {
+		t.Fatalf("expected markdown tag, got %#v", element["tag"])
+	}
+	markdown, _ := element["content"].(string)
+	if !strings.Contains(markdown, "```go") || !strings.Contains(markdown, "fmt.Println(\"hello\")") {
+		t.Fatalf("reply card markdown should preserve code fence, got %q", markdown)
+	}
+}

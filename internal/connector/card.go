@@ -59,6 +59,27 @@ func buildProgressCardContent(thinkingText, answerText string, failed bool, inte
 	return string(raw)
 }
 
+func buildReplyCardContent(markdown string) string {
+	reply := strings.TrimSpace(markdown)
+	if reply == "" {
+		reply = " "
+	}
+	card := map[string]any{
+		"schema": "2.0",
+		"config": map[string]any{
+			"enable_forward": true,
+			"update_multi":   true,
+		},
+		"body": map[string]any{
+			"elements": []any{
+				cardMarkdown("**回复**\n" + reply),
+			},
+		},
+	}
+	raw, _ := json.Marshal(card)
+	return string(raw)
+}
+
 func cardMarkdown(content string) map[string]any {
 	return map[string]any{
 		"tag":     "markdown",

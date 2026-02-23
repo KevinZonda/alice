@@ -165,7 +165,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 				}
 			}
 		} else {
-			if sendErr := p.replyMarkdownWithFallback(ctx, job.SourceMessageID, normalized); sendErr != nil {
+			if sendErr := p.replyMarkdownPostWithFallback(ctx, job.SourceMessageID, normalized); sendErr != nil {
 				log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
 				return
 			}
@@ -213,14 +213,14 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
 	if strings.TrimSpace(finalReply) != "" && strings.TrimSpace(finalReply) != lastSentAgentMessage {
-		if replyErr := p.replyMarkdownWithFallback(ctx, job.SourceMessageID, finalReply); replyErr != nil {
+		if replyErr := p.replyMarkdownCardWithFallback(ctx, job.SourceMessageID, finalReply); replyErr != nil {
 			log.Printf("send final reply failed event_id=%s: %v", job.EventID, replyErr)
 		}
 	}
 	return JobProcessCompleted
 }
 
-func (p *Processor) replyMarkdownWithFallback(ctx context.Context, sourceMessageID, markdown string) error {
+func (p *Processor) replyMarkdownPostWithFallback(ctx context.Context, sourceMessageID, markdown string) error {
 	normalized := strings.TrimSpace(markdown)
 	if normalized == "" {
 		return nil
@@ -232,6 +232,17 @@ func (p *Processor) replyMarkdownWithFallback(ctx context.Context, sourceMessage
 		return textErr
 	}
 	return nil
+}
+
+func (p *Processor) replyMarkdownCardWithFallback(ctx context.Context, sourceMessageID, markdown string) error {
+	normalized := strings.TrimSpace(markdown)
+	if normalized == "" {
+		return nil
+	}
+	if _, cardErr := p.sender.ReplyCard(ctx, sourceMessageID, buildReplyCardContent(normalized)); cardErr == nil {
+		return nil
+	}
+	return p.replyMarkdownPostWithFallback(ctx, sourceMessageID, normalized)
 }
 
 func isRestartIntentJob(job Job) bool {

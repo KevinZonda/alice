@@ -210,6 +210,7 @@ type senderStub struct {
 
 	replyCardCalls  int
 	lastReplyCard   string
+	replyCardErr    error
 	patchCardCalls  int
 	lastPatchedCard string
 	patchCardErr    error
@@ -264,6 +265,9 @@ func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, m
 func (s *senderStub) ReplyCard(_ context.Context, _ string, cardContent string) (string, error) {
 	s.replyCardCalls++
 	s.lastReplyCard = cardContent
+	if s.replyCardErr != nil {
+		return "", s.replyCardErr
+	}
 	return "om_reply_card", nil
 }
 

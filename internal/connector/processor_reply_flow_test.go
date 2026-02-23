@@ -28,11 +28,11 @@ func TestProcessor_ReplyMessageFlow_OnFailureSendsAckThenFallback(t *testing.T) 
 	if sender.replyTexts[0] != "收到！" {
 		t.Fatalf("first reply should be ack, got %q", sender.replyTexts[0])
 	}
-	if sender.replyRichMarkdownCalls != 1 {
-		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected one card final reply, got %d", sender.replyCardCalls)
 	}
-	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "Codex 暂时不可用，请稍后重试。" {
-		t.Fatalf("unexpected markdown reply history: %#v", sender.replyMarkdownTexts)
+	if !strings.Contains(sender.lastReplyCard, "Codex 暂时不可用，请稍后重试。") {
+		t.Fatalf("card reply should include failure message, got %q", sender.lastReplyCard)
 	}
 }
 
@@ -98,11 +98,11 @@ func TestProcessor_FileChangeEventUsesRichTextReply(t *testing.T) {
 	if sender.replyTextCalls != 1 {
 		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
 	}
-	if sender.replyRichMarkdownCalls != 1 {
-		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected one card final reply, got %d", sender.replyCardCalls)
 	}
-	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "最终答复" {
-		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
+	if !strings.Contains(sender.lastReplyCard, "最终答复") {
+		t.Fatalf("card final reply should include final text, got %q", sender.lastReplyCard)
 	}
 }
 
@@ -124,17 +124,20 @@ func TestProcessor_DeduplicatesFinalReplyWhenAlreadySentViaAgentMessage(t *testi
 	if len(sender.replyTexts) != 1 || sender.replyTexts[0] != "收到！" {
 		t.Fatalf("unexpected ack reply text history: %#v", sender.replyTexts)
 	}
-	if sender.replyRichMarkdownCalls != 1 {
-		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected one card final reply, got %d", sender.replyCardCalls)
 	}
-	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "final answer" {
-		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
+	if !strings.Contains(sender.lastReplyCard, "final answer") {
+		t.Fatalf("card final reply should include final answer, got %q", sender.lastReplyCard)
 	}
 }
 
-func TestProcessor_FallsBackToTextWhenFinalMarkdownReplyFails(t *testing.T) {
+func TestProcessor_FallsBackToTextWhenFinalCardAndMarkdownReplyFail(t *testing.T) {
 	fakeCodex := codexStub{resp: "final answer"}
-	sender := &senderStub{replyRichMarkdownErr: errors.New("rich markdown unavailable")}
+	sender := &senderStub{
+		replyCardErr:         errors.New("card unavailable"),
+		replyRichMarkdownErr: errors.New("rich markdown unavailable"),
+	}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
 
 	processor.ProcessJob(context.Background(), Job{
@@ -144,8 +147,11 @@ func TestProcessor_FallsBackToTextWhenFinalMarkdownReplyFails(t *testing.T) {
 		Text:            "hello",
 	})
 
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected one card attempt for final reply, got %d", sender.replyCardCalls)
+	}
 	if sender.replyRichMarkdownCalls != 1 {
-		t.Fatalf("expected one markdown attempt for final reply, got %d", sender.replyRichMarkdownCalls)
+		t.Fatalf("expected one markdown fallback attempt for final reply, got %d", sender.replyRichMarkdownCalls)
 	}
 	if sender.replyTextCalls != 2 {
 		t.Fatalf("expected ack + fallback text reply, got %d", sender.replyTextCalls)
@@ -243,11 +249,11 @@ func TestProcessor_ResolvesAttachmentsAndPassesLocalPathToCodex(t *testing.T) {
 	if sender.replyTextCalls != 1 {
 		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
 	}
-	if sender.replyRichMarkdownCalls != 1 {
-		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected one card final reply, got %d", sender.replyCardCalls)
 	}
-	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "final answer" {
-		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
+	if !strings.Contains(sender.lastReplyCard, "final answer") {
+		t.Fatalf("card final reply should include final answer, got %q", sender.lastReplyCard)
 	}
 }
 
