@@ -138,7 +138,7 @@ Optional:
 - For group/topic-group messages without mention, the connector caches a per-user sliding window (`group_context_window_minutes`) with both text and multimedia entries.
 - When the same user later sends an `@bot` trigger in that group, cached text and multimedia inside the window are merged into that request context; thread messages are isolated by `thread_id`/`root_id` scope.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
-- Prompt speaker context still injects id mappings and mention text for participants, but it filters out the bot's own identity (`feishu_bot_open_id`/`feishu_bot_user_id`) from those injected lines.
+- Prompt speaker context still injects id mappings and mention text for participants, with an explicit hint that `@name`/`@id` can be used directly, but it filters out the bot's own identity (`feishu_bot_open_id`/`feishu_bot_user_id`) from those injected lines.
 - Outgoing replies auto-normalize `@name`/`@id` to Feishu mention tags (`<at user_id="...">...</at>`) using identities in the current message context.
 - User display-name enrichment first uses Contact `GetUser`; if name is empty in group/topic-group chats, it falls back to `GetChatMembers` by `chat_id`.
 - To enable the group member name fallback, grant one of: `im:chat.members:read`, `im:chat.group_info:readonly`, `im:chat:readonly`, `im:chat`.

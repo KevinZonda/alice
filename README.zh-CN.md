@@ -144,7 +144,7 @@ log_level: "info"
 - 群聊/话题群中未艾特机器人的消息会按“同群同人”进入滑动窗口缓存（时长由 `group_context_window_minutes` 配置），缓存内容包含文本与多媒体。
 - 同一用户后续在该群艾特机器人触发时，会把窗口内缓存的文本与多媒体并入本次上下文；thread 消息会按 `thread_id`/`root_id` 隔离，不跨 thread 混入。
 - 群聊中的 `<at ...>...</at>` 会先清理，再发送给 Codex。
-- 说话人上下文仍会注入参与者的 id 映射和 `@提及` 文本，但会过滤机器人自身身份（`feishu_bot_open_id`/`feishu_bot_user_id`）对应的注入内容。
+- 说话人上下文仍会注入参与者的 id 映射和 `@提及` 文本，并附带“可直接使用 `@姓名`/`@id`”提示，但会过滤机器人自身身份（`feishu_bot_open_id`/`feishu_bot_user_id`）对应的注入内容。
 - 发送回复时会基于当前消息上下文中的身份信息，把 `@姓名`/`@id` 自动规范化为飞书 mention 标签（`<at user_id="...">...</at>`）。
 - 用户昵称补全会先调用 Contact `GetUser`；若在群聊/话题群中返回空名，会按 `chat_id` 回退调用 `GetChatMembers`。
 - 若要启用群成员昵称回退，请开通以下任一权限：`im:chat.members:read`、`im:chat.group_info:readonly`、`im:chat:readonly`、`im:chat`。

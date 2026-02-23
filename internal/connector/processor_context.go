@@ -230,7 +230,9 @@ func (p *Processor) buildCurrentUserInput(job Job) string {
 			builder.WriteString(mapping)
 			builder.WriteString("\n")
 		}
-		if builder.Len() > 0 {
+		if len(mappingLines) > 0 {
+			builder.WriteString("@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。\n\n")
+		} else if builder.Len() > 0 {
 			builder.WriteString("\n")
 		}
 		builder.WriteString(senderName)

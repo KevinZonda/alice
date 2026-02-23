@@ -93,6 +93,9 @@ func TestProcessor_BuildsIdentityAwareUserContext(t *testing.T) {
 	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
 		t.Fatalf("missing mentioned user id mapping in input: %s", fakeCodex.lastInput)
 	}
+	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
+		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
+	}
 	if !strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 这是xxx") {
 		t.Fatalf("missing expected speech context in input: %s", fakeCodex.lastInput)
 	}
@@ -129,6 +132,9 @@ func TestProcessor_BuildsIdentityAwareUserContext_WithChatMembersFallback(t *tes
 	}
 	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
 		t.Fatalf("missing mentioned user id mapping in input: %s", fakeCodex.lastInput)
+	}
+	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
+		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
 	}
 	if !strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 这是xxx") {
 		t.Fatalf("missing expected speech context in input: %s", fakeCodex.lastInput)
@@ -171,6 +177,9 @@ func TestProcessor_BuildsIdentityAwareUserContext_SkipsBotIdentity(t *testing.T)
 	}
 	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
 		t.Fatalf("missing non-bot mentioned user id mapping in input: %s", fakeCodex.lastInput)
+	}
+	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
+		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
 	}
 	if strings.Contains(fakeCodex.lastInput, "用户Alice的id是ou_alice") {
 		t.Fatalf("bot id mapping should be filtered from input: %s", fakeCodex.lastInput)
