@@ -62,32 +62,26 @@ func New(sender Sender, getenv func(string) string) (*server.MCPServer, error) {
 
 	mcpServer.AddTool(mcp.NewTool(
 		ToolSendImage,
-		mcp.WithDescription("向当前会话发送图片。优先使用会话上下文，若缺失可显式传 receive_id_type/receive_id 回退。"),
+		mcp.WithDescription("向当前会话发送图片。发送目标由会话上下文自动决定：私聊发私聊，群聊有 thread 时优先回复到该 thread。"),
 		mcp.WithString("image_key", mcp.Description("已存在的飞书 image_key")),
 		mcp.WithString("path", mcp.Description("本地绝对路径，仅允许资源目录白名单路径")),
 		mcp.WithString("caption", mcp.Description("可选文字说明，发送在图片之后")),
-		mcp.WithString("receive_id_type", mcp.Description("可选回退：当会话上下文缺失时，显式传当前会话接收ID类型，如 chat_id/open_id")),
-		mcp.WithString("receive_id", mcp.Description("可选回退：当会话上下文缺失时，显式传当前会话接收ID")),
-		mcp.WithString("source_message_id", mcp.Description("可选回退：当会话上下文缺失时，显式传当前线程源消息ID，用于在 thread 内回复")),
 	), svc.handleSendImage)
 
 	mcpServer.AddTool(mcp.NewTool(
 		ToolSendFile,
-		mcp.WithDescription("向当前会话发送文件。优先使用会话上下文，若缺失可显式传 receive_id_type/receive_id 回退。"),
+		mcp.WithDescription("向当前会话发送文件。发送目标由会话上下文自动决定：私聊发私聊，群聊有 thread 时优先回复到该 thread。"),
 		mcp.WithString("file_key", mcp.Description("已存在的飞书 file_key")),
 		mcp.WithString("path", mcp.Description("本地绝对路径，仅允许资源目录白名单路径")),
 		mcp.WithString("file_name", mcp.Description("可选文件名，path上传时生效")),
 		mcp.WithString("caption", mcp.Description("可选文字说明，发送在文件之后")),
-		mcp.WithString("receive_id_type", mcp.Description("可选回退：当会话上下文缺失时，显式传当前会话接收ID类型，如 chat_id/open_id")),
-		mcp.WithString("receive_id", mcp.Description("可选回退：当会话上下文缺失时，显式传当前会话接收ID")),
-		mcp.WithString("source_message_id", mcp.Description("可选回退：当会话上下文缺失时，显式传当前线程源消息ID，用于在 thread 内回复")),
 	), svc.handleSendFile)
 
 	return mcpServer, nil
 }
 
 func (s *service) handleSendImage(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	sessionContext, err := s.loadSessionContext(request)
+	sessionContext, err := s.loadSessionContext()
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -127,7 +121,7 @@ func (s *service) handleSendImage(ctx context.Context, request mcp.CallToolReque
 }
 
 func (s *service) handleSendFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	sessionContext, err := s.loadSessionContext(request)
+	sessionContext, err := s.loadSessionContext()
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -167,20 +161,11 @@ func (s *service) handleSendFile(ctx context.Context, request mcp.CallToolReques
 	}, "file sent"), nil
 }
 
-func (s *service) loadSessionContext(request mcp.CallToolRequest) (mcpbridge.SessionContext, error) {
+func (s *service) loadSessionContext() (mcpbridge.SessionContext, error) {
 	sessionContext := mcpbridge.SessionContextFromEnv(s.getenv)
-	if strings.TrimSpace(sessionContext.ReceiveIDType) == "" {
-		sessionContext.ReceiveIDType = strings.TrimSpace(request.GetString("receive_id_type", ""))
-	}
-	if strings.TrimSpace(sessionContext.ReceiveID) == "" {
-		sessionContext.ReceiveID = strings.TrimSpace(request.GetString("receive_id", ""))
-	}
-	if strings.TrimSpace(sessionContext.SourceMessageID) == "" {
-		sessionContext.SourceMessageID = strings.TrimSpace(request.GetString("source_message_id", ""))
-	}
 	if err := sessionContext.Validate(); err != nil {
 		return mcpbridge.SessionContext{}, fmt.Errorf(
-			"mcp session context invalid: %w (fallback: provide receive_id_type and receive_id in tool arguments)",
+			"mcp session context invalid: %w (send_image/send_file must run in connector session context)",
 			err,
 		)
 	}

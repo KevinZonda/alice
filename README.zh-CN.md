@@ -159,7 +159,7 @@ log_level: "info"
 - 若某聊天连续空闲达到 `idle_summary_hours`（默认 8 小时），后台会异步 resume 该线程并将“空闲摘要”追加到 `daily/YYYY-MM-DD.md`，同一段空闲期仅写一次。
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 在“引用回复”链路里，机器人会优先使用“话题回复”（`reply_in_thread=true`）发送收到/进度/结果；若飞书拒绝话题模式，则自动回退普通引用回复。
-- 对于 MCP `alice-feishu` 工具（`send_image`/`send_file`），当会话上下文含 `source_message_id` 时，媒体与说明文字会按该消息进行引用回复（优先 thread）；缺失时才按 `receive_id_type/receive_id` 直接发送。
+- 对于 MCP `alice-feishu` 工具（`send_image`/`send_file`），发送目标始终由当前会话上下文自动决定，且不能由工具参数覆盖：私聊发送到当前私聊；群聊/话题群存在 `source_message_id` 时按该消息引用回复（优先 thread）。
 - 收到用户消息后，机器人会第一时间引用回复 `收到！`。
 - Codex 执行期间，流式 `agent_message` 会优先以卡片回复；若卡片失败，会依次回退到富文本（`post`）和纯文本回复。
 - Codex 执行期间，流式 `file_change` 事件也走同样的“卡片优先”回复链路，例如：`internal/x.go已更改，+23-34`。

@@ -282,11 +282,14 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	if len(fakeCodex.receivedInputs) != 2 {
 		t.Fatalf("expected 2 codex inputs, got %d", len(fakeCodex.receivedInputs))
 	}
-	if !strings.Contains(fakeCodex.receivedInputs[1], "receive_id_type=\"chat_id\"") ||
-		!strings.Contains(fakeCodex.receivedInputs[1], "receive_id=\"oc_chat\"") ||
-		!strings.Contains(fakeCodex.receivedInputs[1], "source_message_id=\"om_src\"") ||
+	if !strings.Contains(fakeCodex.receivedInputs[1], "不要传 receive_id_type、receive_id、source_message_id") ||
+		!strings.Contains(fakeCodex.receivedInputs[1], "自动路由到当前会话") ||
 		!strings.Contains(fakeCodex.receivedInputs[1], "C") {
-		t.Fatalf("second input should include mcp tool context hint and follow-up text, got %q", fakeCodex.receivedInputs[1])
+		t.Fatalf("second input should include mcp auto-route hint and follow-up text, got %q", fakeCodex.receivedInputs[1])
+	}
+	if strings.Contains(fakeCodex.receivedInputs[1], "receive_id_type=\"chat_id\"") ||
+		strings.Contains(fakeCodex.receivedInputs[1], "source_message_id=\"om_src\"") {
+		t.Fatalf("second input should not require explicit target ids, got %q", fakeCodex.receivedInputs[1])
 	}
 	if sender.getMessageTextCalls != 0 {
 		t.Fatalf("resume mode should not fetch parent text, got %d", sender.getMessageTextCalls)

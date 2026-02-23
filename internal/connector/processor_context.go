@@ -87,18 +87,8 @@ func appendMCPToolContextHint(userText string, job Job) string {
 	if strings.TrimSpace(job.SourceMessageID) == "" {
 		return userText
 	}
-	receiveIDType := strings.TrimSpace(job.ReceiveIDType)
-	receiveID := strings.TrimSpace(job.ReceiveID)
-	if receiveIDType == "" || receiveID == "" {
-		return userText
-	}
 
-	hint := fmt.Sprintf(
-		"工具调用上下文：当你调用 alice-feishu 的 send_image/send_file 工具时，必须显式传入 receive_id_type=%q、receive_id=%q 和 source_message_id=%q，且不要改成其他接收目标。\n\n",
-		receiveIDType,
-		receiveID,
-		strings.TrimSpace(job.SourceMessageID),
-	)
+	hint := "工具调用上下文：当你调用 alice-feishu 的 send_image/send_file 工具时，不要传 receive_id_type、receive_id、source_message_id；系统会自动路由到当前会话（私聊发私聊，群聊有 thread 则发在当前 thread）。\n\n"
 	return hint + strings.TrimSpace(userText)
 }
 
