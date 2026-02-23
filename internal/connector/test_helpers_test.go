@@ -198,6 +198,7 @@ type senderStub struct {
 	lastReplyText  string
 	replyTexts     []string
 	replyTargets   []string
+	replyTextErr   error
 	replyRichCalls int
 	lastReplyRich  []string
 	replyRichLines [][]string
@@ -205,6 +206,7 @@ type senderStub struct {
 	replyRichMarkdownCalls int
 	lastReplyMarkdown      string
 	replyMarkdownTexts     []string
+	replyRichMarkdownErr   error
 
 	replyCardCalls  int
 	lastReplyCard   string
@@ -233,6 +235,9 @@ func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text s
 	s.lastReplyText = text
 	s.replyTexts = append(s.replyTexts, text)
 	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyTextErr != nil {
+		return "", s.replyTextErr
+	}
 	return "om_reply_text", nil
 }
 
@@ -250,6 +255,9 @@ func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, m
 	s.lastReplyMarkdown = markdown
 	s.replyMarkdownTexts = append(s.replyMarkdownTexts, markdown)
 	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyRichMarkdownErr != nil {
+		return "", s.replyRichMarkdownErr
+	}
 	return "om_reply_rich_markdown", nil
 }
 

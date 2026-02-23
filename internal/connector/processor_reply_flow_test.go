@@ -19,17 +19,20 @@ func TestProcessor_ReplyMessageFlow_OnFailureSendsAckThenFallback(t *testing.T) 
 		Text:            "hello",
 	})
 
-	if sender.replyTextCalls != 2 {
-		t.Fatalf("expected 2 reply text calls, got %d", sender.replyTextCalls)
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
 	}
-	if len(sender.replyTexts) != 2 {
+	if len(sender.replyTexts) != 1 {
 		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
 	}
 	if sender.replyTexts[0] != "收到！" {
 		t.Fatalf("first reply should be ack, got %q", sender.replyTexts[0])
 	}
-	if sender.replyTexts[1] != "Codex 暂时不可用，请稍后重试。" {
-		t.Fatalf("second reply should be failure message, got %q", sender.replyTexts[1])
+	if sender.replyRichMarkdownCalls != 1 {
+		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	}
+	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "Codex 暂时不可用，请稍后重试。" {
+		t.Fatalf("unexpected markdown reply history: %#v", sender.replyMarkdownTexts)
 	}
 }
 
@@ -92,8 +95,14 @@ func TestProcessor_FileChangeEventUsesRichTextReply(t *testing.T) {
 	if sender.replyRichLines[0][0] != "internal/connector/processor.go已更改，+23-34" {
 		t.Fatalf("unexpected rich text line: %#v", sender.replyRichLines[0])
 	}
-	if sender.replyTextCalls != 2 {
-		t.Fatalf("expected ack + final reply text, got %d", sender.replyTextCalls)
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
+	}
+	if sender.replyRichMarkdownCalls != 1 {
+		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	}
+	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "最终答复" {
+		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
 	}
 }
 
@@ -109,14 +118,40 @@ func TestProcessor_DeduplicatesFinalReplyWhenAlreadySentViaAgentMessage(t *testi
 		Text:            "hello",
 	})
 
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
+	}
+	if len(sender.replyTexts) != 1 || sender.replyTexts[0] != "收到！" {
+		t.Fatalf("unexpected ack reply text history: %#v", sender.replyTexts)
+	}
+	if sender.replyRichMarkdownCalls != 1 {
+		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	}
+	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "final answer" {
+		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
+	}
+}
+
+func TestProcessor_FallsBackToTextWhenFinalMarkdownReplyFails(t *testing.T) {
+	fakeCodex := codexStub{resp: "final answer"}
+	sender := &senderStub{replyRichMarkdownErr: errors.New("rich markdown unavailable")}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_src",
+		Text:            "hello",
+	})
+
+	if sender.replyRichMarkdownCalls != 1 {
+		t.Fatalf("expected one markdown attempt for final reply, got %d", sender.replyRichMarkdownCalls)
+	}
 	if sender.replyTextCalls != 2 {
-		t.Fatalf("expected ack + final reply, got %d", sender.replyTextCalls)
+		t.Fatalf("expected ack + fallback text reply, got %d", sender.replyTextCalls)
 	}
-	if len(sender.replyTexts) != 2 {
-		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
-	}
-	if sender.replyTexts[0] != "收到！" || sender.replyTexts[1] != "final answer" {
-		t.Fatalf("unexpected reply text history: %#v", sender.replyTexts)
+	if len(sender.replyTexts) != 2 || sender.replyTexts[1] != "final answer" {
+		t.Fatalf("unexpected fallback reply text history: %#v", sender.replyTexts)
 	}
 }
 
@@ -205,8 +240,14 @@ func TestProcessor_ResolvesAttachmentsAndPassesLocalPathToCodex(t *testing.T) {
 	if !strings.Contains(fakeCodex.lastInput, "本地路径：/tmp/alice/image.png") {
 		t.Fatalf("codex input should include downloaded local path, got: %s", fakeCodex.lastInput)
 	}
-	if sender.replyTextCalls != 2 {
-		t.Fatalf("expected ack + final reply, got %d", sender.replyTextCalls)
+	if sender.replyTextCalls != 1 {
+		t.Fatalf("expected only ack text reply, got %d", sender.replyTextCalls)
+	}
+	if sender.replyRichMarkdownCalls != 1 {
+		t.Fatalf("expected one markdown final reply, got %d", sender.replyRichMarkdownCalls)
+	}
+	if len(sender.replyMarkdownTexts) != 1 || sender.replyMarkdownTexts[0] != "final answer" {
+		t.Fatalf("unexpected markdown final reply history: %#v", sender.replyMarkdownTexts)
 	}
 }
 

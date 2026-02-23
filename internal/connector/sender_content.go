@@ -220,7 +220,6 @@ func normalizeMarkdownLine(line string) string {
 		line = "• " + strings.TrimSpace(line[2:])
 	}
 
-	line = markdownInlineCodePattern.ReplaceAllString(line, "$1")
 	line = markdownStrongPattern.ReplaceAllString(line, "$1")
 	line = markdownEmPattern.ReplaceAllString(line, "$1")
 	line = markdownStrongUnderscorePattern.ReplaceAllString(line, "$1")
@@ -254,8 +253,8 @@ func markdownLineToPostParagraph(line string) []map[string]any {
 		hrefEnd := match[5]
 
 		if start > cursor {
-			text := strings.TrimSpace(line[cursor:start])
-			if text != "" {
+			text := line[cursor:start]
+			if strings.TrimSpace(text) != "" {
 				paragraph = append(paragraph, map[string]any{
 					"tag":  "text",
 					"text": text,
@@ -279,8 +278,8 @@ func markdownLineToPostParagraph(line string) []map[string]any {
 	}
 
 	if cursor < len(line) {
-		text := strings.TrimSpace(line[cursor:])
-		if text != "" {
+		text := line[cursor:]
+		if strings.TrimSpace(text) != "" {
 			paragraph = append(paragraph, map[string]any{
 				"tag":  "text",
 				"text": text,
