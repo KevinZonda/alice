@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	"gitee.com/alicespace/alice/internal/llm"
 	"gitee.com/alicespace/alice/internal/logging"
 )
 
@@ -29,24 +30,25 @@ func splitMessageLines(message string) []string {
 	return lines
 }
 
-func (p *Processor) runCodex(
+func (p *Processor) runLLM(
 	ctx context.Context,
 	threadID string,
 	userText string,
 	onAgentMessage func(message string),
 ) (string, string, error) {
-	if runner, ok := p.codex.(ResumableStreamingCodexRunner); ok {
-		return runner.RunWithThreadAndProgress(ctx, threadID, userText, onAgentMessage)
+	if p.llm == nil {
+		return "", strings.TrimSpace(threadID), fmt.Errorf("llm backend is nil")
 	}
-	if runner, ok := p.codex.(ResumableCodexRunner); ok {
-		return runner.RunWithThread(ctx, threadID, userText)
+	result, err := p.llm.Run(ctx, llm.RunRequest{
+		ThreadID:   strings.TrimSpace(threadID),
+		UserText:   userText,
+		OnProgress: onAgentMessage,
+	})
+	nextThreadID := strings.TrimSpace(result.NextThreadID)
+	if nextThreadID == "" {
+		nextThreadID = strings.TrimSpace(threadID)
 	}
-	if runner, ok := p.codex.(StreamingCodexRunner); ok {
-		reply, err := runner.RunWithProgress(ctx, userText, onAgentMessage)
-		return reply, strings.TrimSpace(threadID), err
-	}
-	reply, err := p.codex.Run(ctx, userText)
-	return reply, strings.TrimSpace(threadID), err
+	return result.Reply, nextThreadID, err
 }
 
 func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID string) string {
@@ -140,7 +142,7 @@ func sessionKeyForJob(job Job) string {
 	return buildSessionKey(job.ReceiveIDType, job.ReceiveID)
 }
 
-func (p *Processor) prepareJobForCodex(ctx context.Context, job *Job) {
+func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
 	if job == nil || len(job.Attachments) == 0 {
 		return
 	}

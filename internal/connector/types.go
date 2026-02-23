@@ -13,27 +13,6 @@ var mentionUserIDPattern = regexp.MustCompile(`<at[^>]*\buser_id="([^"]+)"[^>]*>
 
 var ErrIgnoreMessage = errors.New("ignore message")
 
-type CodexRunner interface {
-	Run(ctx context.Context, userText string) (string, error)
-}
-
-type StreamingCodexRunner interface {
-	RunWithProgress(ctx context.Context, userText string, onThinking func(step string)) (string, error)
-}
-
-type ResumableCodexRunner interface {
-	RunWithThread(ctx context.Context, threadID, userText string) (reply string, nextThreadID string, err error)
-}
-
-type ResumableStreamingCodexRunner interface {
-	RunWithThreadAndProgress(
-		ctx context.Context,
-		threadID string,
-		userText string,
-		onThinking func(step string),
-	) (reply string, nextThreadID string, err error)
-}
-
 type MemoryManager interface {
 	BuildPrompt(userText string) (string, error)
 	SaveInteraction(userText, assistantText string, failed bool) (changed bool, err error)

@@ -95,6 +95,7 @@ feishu_base_url: "https://open.feishu.cn"
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
 
+llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 120
 workspace_dir: "."
@@ -121,6 +122,7 @@ log_level: "info"
 
 可选项：
 
+- `llm_provider`：LLM 后端类型选择。当前支持 `codex`（默认）。
 - `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
@@ -173,6 +175,7 @@ log_level: "info"
 
 - `cmd/connector/main.go`：启动与生命周期
 - `internal/config/config.go`：配置文件读取与校验（`viper`）
+- `internal/llm/`：LLM 后端抽象与工厂
 - `internal/memory/memory.go`：记忆模块（长期记忆 + 按日期短期记忆文件）
 - `internal/codex/codex.go`：Codex CLI 调用与 JSONL 解析
 - `internal/connector/connector.go`：长连接、队列、worker、飞书发消息

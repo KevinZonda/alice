@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitee.com/alicespace/alice/internal/config"
+	"gitee.com/alicespace/alice/internal/llm"
 )
 
 type codexStub struct {
@@ -17,8 +18,8 @@ type codexStub struct {
 	err  error
 }
 
-func (c codexStub) Run(_ context.Context, _ string) (string, error) {
-	return c.resp, c.err
+func (c codexStub) Run(_ context.Context, _ llm.RunRequest) (llm.RunResult, error) {
+	return llm.RunResult{Reply: c.resp}, c.err
 }
 
 type codexStreamingStub struct {
@@ -27,19 +28,13 @@ type codexStreamingStub struct {
 	agentMessages []string
 }
 
-func (c codexStreamingStub) Run(_ context.Context, _ string) (string, error) {
-	return c.resp, c.err
-}
-
-func (c codexStreamingStub) RunWithProgress(
-	_ context.Context,
-	_ string,
-	onThinking func(step string),
-) (string, error) {
-	for _, step := range c.agentMessages {
-		onThinking(step)
+func (c codexStreamingStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResult, error) {
+	if req.OnProgress != nil {
+		for _, step := range c.agentMessages {
+			req.OnProgress(step)
+		}
 	}
-	return c.resp, c.err
+	return llm.RunResult{Reply: c.resp}, c.err
 }
 
 type codexCaptureStub struct {
@@ -48,9 +43,9 @@ type codexCaptureStub struct {
 	lastInput string
 }
 
-func (c *codexCaptureStub) Run(_ context.Context, input string) (string, error) {
-	c.lastInput = input
-	return c.resp, c.err
+func (c *codexCaptureStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResult, error) {
+	c.lastInput = req.UserText
+	return llm.RunResult{Reply: c.resp}, c.err
 }
 
 type codexResumableCaptureStub struct {
@@ -61,20 +56,14 @@ type codexResumableCaptureStub struct {
 	receivedInputs    []string
 }
 
-func (c *codexResumableCaptureStub) Run(_ context.Context, input string) (string, error) {
-	c.receivedInputs = append(c.receivedInputs, input)
-	return c.responseForCall(len(c.receivedInputs) - 1), nil
-}
-
-func (c *codexResumableCaptureStub) RunWithThread(
-	_ context.Context,
-	threadID string,
-	input string,
-) (string, string, error) {
-	c.receivedThreadIDs = append(c.receivedThreadIDs, threadID)
-	c.receivedInputs = append(c.receivedInputs, input)
+func (c *codexResumableCaptureStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResult, error) {
+	c.receivedThreadIDs = append(c.receivedThreadIDs, req.ThreadID)
+	c.receivedInputs = append(c.receivedInputs, req.UserText)
 	idx := len(c.receivedInputs) - 1
-	return c.responseForCall(idx), c.threadForCall(idx), nil
+	return llm.RunResult{
+		Reply:        c.responseForCall(idx),
+		NextThreadID: c.threadForCall(idx),
+	}, nil
 }
 
 func (c *codexResumableCaptureStub) responseForCall(idx int) string {
@@ -103,24 +92,22 @@ func newBlockingResumableCodexStub() *blockingResumableCodexStub {
 	}
 }
 
-func (c *blockingResumableCodexStub) Run(_ context.Context, _ string) (string, error) {
-	return "- summary", nil
-}
-
-func (c *blockingResumableCodexStub) RunWithThread(
+func (c *blockingResumableCodexStub) Run(
 	ctx context.Context,
-	threadID string,
-	_ string,
-) (string, string, error) {
+	req llm.RunRequest,
+) (llm.RunResult, error) {
 	c.mu.Lock()
 	c.calls++
 	c.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
-		return "", threadID, ctx.Err()
+		return llm.RunResult{}, ctx.Err()
 	case <-c.release:
-		return "- summary", threadID, nil
+		return llm.RunResult{
+			Reply:        "- summary",
+			NextThreadID: req.ThreadID,
+		}, nil
 	}
 }
 
@@ -194,6 +181,10 @@ func (m *memoryStub) AppendDailySummary(sessionKey, summary string, at time.Time
 type senderStub struct {
 	sendCalls      int
 	lastSendText   string
+	sendCardCalls  int
+	lastSendCard   string
+	sendCards      []string
+	sendCardErr    error
 	replyTextCalls int
 	lastReplyText  string
 	replyTexts     []string
@@ -210,6 +201,7 @@ type senderStub struct {
 
 	replyCardCalls  int
 	lastReplyCard   string
+	replyCards      []string
 	replyCardErr    error
 	patchCardCalls  int
 	lastPatchedCard string
@@ -229,6 +221,13 @@ func (s *senderStub) SendText(_ context.Context, _, _ string, text string) error
 	s.sendCalls++
 	s.lastSendText = text
 	return nil
+}
+
+func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string) error {
+	s.sendCardCalls++
+	s.lastSendCard = cardContent
+	s.sendCards = append(s.sendCards, cardContent)
+	return s.sendCardErr
 }
 
 func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text string) (string, error) {
@@ -265,6 +264,7 @@ func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, m
 func (s *senderStub) ReplyCard(_ context.Context, _ string, cardContent string) (string, error) {
 	s.replyCardCalls++
 	s.lastReplyCard = cardContent
+	s.replyCards = append(s.replyCards, cardContent)
 	if s.replyCardErr != nil {
 		return "", s.replyCardErr
 	}

@@ -95,6 +95,7 @@ feishu_base_url: "https://open.feishu.cn"
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
 
+llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 120
 workspace_dir: "."
@@ -121,6 +122,7 @@ Required keys:
 
 Optional:
 
+- `llm_provider`: LLM backend provider selector. Current supported value: `codex` (default).
 - `env`: key-value environment variables injected into `codex` process (for example HTTP/HTTPS/SOCKS proxy settings).
 - `codex_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
@@ -167,6 +169,7 @@ Note: this project now uses reply-message flow (text replies + rich-text file-ch
 
 - `cmd/connector/main.go`: bootstrap and lifecycle
 - `internal/config/config.go`: config file loading and validation (`viper`)
+- `internal/llm/`: LLM backend abstraction and backend factory
 - `internal/memory/memory.go`: memory module (long-term + date-based short-term memory files)
 - `internal/codex/codex.go`: Codex CLI call + JSONL parsing
 - `internal/connector/connector.go`: long connection, queue, workers, Feishu send

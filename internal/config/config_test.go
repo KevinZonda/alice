@@ -24,6 +24,9 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.FeishuBaseURL != "https://open.feishu.cn" {
 		t.Fatalf("unexpected feishu_base_url: %s", cfg.FeishuBaseURL)
 	}
+	if cfg.LLMProvider != DefaultLLMProvider {
+		t.Fatalf("unexpected llm_provider: %s", cfg.LLMProvider)
+	}
 	if cfg.CodexCommand != "codex" {
 		t.Fatalf("unexpected codex_command: %s", cfg.CodexCommand)
 	}
@@ -161,5 +164,47 @@ feishu_bot_user_id: "  123456  "
 	}
 	if cfg.FeishuBotUserID != "123456" {
 		t.Fatalf("unexpected feishu_bot_user_id: %q", cfg.FeishuBotUserID)
+	}
+}
+
+func TestLoadFromFile_LLMProviderInvalid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+llm_provider: openai
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported llm_provider") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFromFile_LLMProviderTrimmedLowercase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+llm_provider: "  CoDeX  "
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if cfg.LLMProvider != DefaultLLMProvider {
+		t.Fatalf("unexpected llm_provider: %q", cfg.LLMProvider)
 	}
 }

@@ -246,9 +246,9 @@ func (p *Processor) runIdleSummaryTask(ctx context.Context, candidate idleSummar
 		return
 	}
 
-	reply, nextThreadID, err := p.runCodex(ctx, candidate.ThreadID, idleSummaryPrompt, nil)
+	reply, nextThreadID, err := p.runLLM(ctx, candidate.ThreadID, idleSummaryPrompt, nil)
 	if err != nil {
-		log.Printf("idle summary codex failed session=%s thread_id=%s: %v", candidate.SessionKey, candidate.ThreadID, err)
+		log.Printf("idle summary llm failed session=%s thread_id=%s: %v", candidate.SessionKey, candidate.ThreadID, err)
 		return
 	}
 	if strings.TrimSpace(nextThreadID) != "" {

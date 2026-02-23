@@ -12,9 +12,9 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
-	"gitee.com/alicespace/alice/internal/codex"
 	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/connector"
+	"gitee.com/alicespace/alice/internal/llm"
 	"gitee.com/alicespace/alice/internal/logging"
 	"gitee.com/alicespace/alice/internal/memory"
 )
@@ -38,12 +38,18 @@ func main() {
 		lark.WithOpenBaseUrl(cfg.FeishuBaseURL),
 	)
 
-	codexRunner := codex.Runner{
-		Command:      cfg.CodexCommand,
-		Timeout:      cfg.CodexTimeout,
-		Env:          cfg.CodexEnv,
-		PromptPrefix: cfg.CodexPromptPrefix,
-		WorkspaceDir: cfg.WorkspaceDir,
+	backend, err := llm.NewBackend(llm.FactoryConfig{
+		Provider: cfg.LLMProvider,
+		Codex: llm.CodexConfig{
+			Command:      cfg.CodexCommand,
+			Timeout:      cfg.CodexTimeout,
+			Env:          cfg.CodexEnv,
+			PromptPrefix: cfg.CodexPromptPrefix,
+			WorkspaceDir: cfg.WorkspaceDir,
+		},
+	})
+	if err != nil {
+		log.Fatalf("init llm backend failed: %v", err)
 	}
 
 	memoryDir := resolveMemoryDir(cfg.WorkspaceDir, cfg.MemoryDir)
@@ -54,7 +60,7 @@ func main() {
 	resourceDir := filepath.Join(memoryDir, "resources")
 
 	processor := connector.NewProcessorWithMemory(
-		codexRunner,
+		backend,
 		connector.NewLarkSender(botClient, resourceDir),
 		cfg.FailureMessage,
 		cfg.ThinkingMessage,

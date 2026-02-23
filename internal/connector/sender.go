@@ -49,6 +49,26 @@ func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, tex
 	return nil
 }
 
+func (s *LarkSender) SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error {
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(receiveIDType).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(receiveID).
+			MsgType("interactive").
+			Content(cardContent).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.Message.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
+	}
+	return nil
+}
+
 func (s *LarkSender) ReplyText(ctx context.Context, sourceMessageID, text string) (string, error) {
 	return s.replyMessagePreferThread(
 		ctx,

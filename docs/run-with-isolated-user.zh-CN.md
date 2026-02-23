@@ -94,6 +94,7 @@ sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.codex cod
 建议至少确认：
 
 ```yaml
+llm_provider: "codex"
 codex_command: "/usr/local/bin/codex"
 workspace_dir: "/home/codexbot/alice"
 memory_dir: "/home/codexbot/alice/.memory"

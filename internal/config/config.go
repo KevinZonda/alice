@@ -12,6 +12,7 @@ import (
 )
 
 const DefaultConfigPath = "config.yaml"
+const DefaultLLMProvider = "codex"
 
 type Config struct {
 	FeishuAppID     string `mapstructure:"feishu_app_id"`
@@ -19,6 +20,8 @@ type Config struct {
 	FeishuBaseURL   string `mapstructure:"feishu_base_url"`
 	FeishuBotOpenID string `mapstructure:"feishu_bot_open_id"`
 	FeishuBotUserID string `mapstructure:"feishu_bot_user_id"`
+
+	LLMProvider string `mapstructure:"llm_provider"`
 
 	CodexCommand      string            `mapstructure:"codex_command"`
 	CodexTimeout      time.Duration     `mapstructure:"-"`
@@ -43,6 +46,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
 	v.SetDefault("feishu_base_url", "https://open.feishu.cn")
+	v.SetDefault("llm_provider", DefaultLLMProvider)
 	v.SetDefault("codex_command", "codex")
 	v.SetDefault("codex_timeout_secs", 120)
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
@@ -72,6 +76,7 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.FeishuBaseURL = strings.TrimSpace(cfg.FeishuBaseURL)
 	cfg.FeishuBotOpenID = strings.TrimSpace(cfg.FeishuBotOpenID)
 	cfg.FeishuBotUserID = strings.TrimSpace(cfg.FeishuBotUserID)
+	cfg.LLMProvider = strings.ToLower(strings.TrimSpace(cfg.LLMProvider))
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
 	cfg.CodexEnv = normalizeEnvMap(envMap)
 	cfg.CodexPromptPrefix = strings.TrimSpace(cfg.CodexPromptPrefix)
@@ -90,6 +95,9 @@ func LoadFromFile(path string) (Config, error) {
 	if cfg.FeishuBaseURL == "" {
 		cfg.FeishuBaseURL = "https://open.feishu.cn"
 	}
+	if cfg.LLMProvider == "" {
+		cfg.LLMProvider = DefaultLLMProvider
+	}
 	if cfg.CodexCommand == "" {
 		cfg.CodexCommand = "codex"
 	}
@@ -107,6 +115,9 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.ThinkingMessage == "" {
 		cfg.ThinkingMessage = "正在思考中..."
+	}
+	if cfg.LLMProvider != DefaultLLMProvider {
+		return Config{}, fmt.Errorf("unsupported llm_provider %q", cfg.LLMProvider)
 	}
 
 	if cfg.CodexTimeoutSecs <= 0 {

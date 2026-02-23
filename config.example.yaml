@@ -9,7 +9,8 @@ feishu_base_url: "https://open.feishu.cn"
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
 
-# Codex runtime
+# LLM runtime (current supported provider: codex)
+llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 172800
 workspace_dir: "."

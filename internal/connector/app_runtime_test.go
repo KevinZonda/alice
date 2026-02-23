@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -322,10 +323,10 @@ func TestApp_InterruptedJobNotifiesAfterRestartWithoutCodex(t *testing.T) {
 	go restored.workerLoop(restoredCtx, 0)
 
 	waitForCondition(t, 2*time.Second, func() bool {
-		return restoredSender.sendCalls == 1
+		return restoredSender.sendCardCalls == 1
 	}, "expected restart notification to be sent after restart")
-	if restoredSender.lastSendText != restartNotificationMessage {
-		t.Fatalf("unexpected restart notification message: %q", restoredSender.lastSendText)
+	if !strings.Contains(restoredSender.lastSendCard, restartNotificationMessage) {
+		t.Fatalf("unexpected restart notification card message: %q", restoredSender.lastSendCard)
 	}
 	if got := restoredCodex.CallCount(); got != 0 {
 		t.Fatalf("restart notification should skip codex call, got %d", got)
