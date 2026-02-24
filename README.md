@@ -82,6 +82,15 @@ Contribution rules are documented in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 - [Architecture and refactor plan](./docs/architecture.md)
 
+## Bundled Skills
+
+This repository now bundles reusable skills under [`skills/`](./skills):
+
+- `alice-codebase-onboarding`
+- `feishu-task`
+
+On connector startup, Alice automatically links all bundled skills to `$CODEX_HOME/skills` (default: `~/.codex/skills`). Existing non-symlink skill directories with the same name are backed up once and replaced by symlinks.
+
 ## Config file
 
 The application loads config from YAML file (default: `config.yaml`).

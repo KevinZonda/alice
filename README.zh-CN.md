@@ -82,6 +82,15 @@ make precommit-install
 
 - [架构设计与重构规划](./docs/architecture.zh-CN.md)
 
+## 仓库自带 Skill
+
+本仓库已内置可复用 skill（目录 [`skills/`](./skills)）：
+
+- `alice-codebase-onboarding`
+- `feishu-task`
+
+连接器启动时会自动把仓库内全部自带 skill 链接到 `$CODEX_HOME/skills`（默认 `~/.codex/skills`）。若同名目录已存在且不是软链接，会先自动备份一次再替换为软链接。
+
 ## 配置文件
 
 程序从 YAML 配置文件读取参数（默认路径：`config.yaml`）。

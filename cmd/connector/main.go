@@ -27,6 +27,22 @@ func main() {
 	logging.SetLevel(cfg.LogLevel)
 	logging.Debugf("debug logging enabled log_level=%s config=%s", cfg.LogLevel, configPath)
 
+	skillReport, err := bootstrap.EnsureBundledSkillsLinked(cfg.WorkspaceDir)
+	if err != nil {
+		log.Printf("sync bundled skills failed: %v", err)
+	} else if skillReport.Discovered > 0 {
+		log.Printf(
+			"bundled skills synced codex_home=%s discovered=%d linked=%d updated=%d backed_up=%d unchanged=%d failed=%d",
+			skillReport.CodexHome,
+			skillReport.Discovered,
+			skillReport.Linked,
+			skillReport.Updated,
+			skillReport.BackedUp,
+			skillReport.Unchanged,
+			skillReport.Failed,
+		)
+	}
+
 	if cfg.CodexMCPAutoRegister {
 		mcpRegisterCtx, cancelRegister := context.WithTimeout(context.Background(), 20*time.Second)
 		err = bootstrap.RegisterCodexMCPServer(mcpRegisterCtx, cfg, configPath)

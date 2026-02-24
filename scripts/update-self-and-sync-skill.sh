@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo="/home/codexbot/alice"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+default_repo="$(cd "$script_dir/.." && pwd -P)"
+repo="${ALICE_REPO:-$default_repo}"
 service_name="alice-codex-connector.service"
 skip_pull=0
 skip_restart=0
-sync_state_file="/home/codexbot/.codex/skills/alice-codebase-onboarding/references/sync-state.md"
+
+if [[ -n "${CODEX_HOME:-}" ]]; then
+  default_codex_home="$CODEX_HOME"
+else
+  default_codex_home="${HOME}/.codex"
+fi
+sync_state_file="$default_codex_home/state/alice/sync-state.md"
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage:
   update-self-and-sync-skill.sh [--repo PATH] [--service NAME] [--sync-state-file PATH] [--skip-pull] [--skip-restart]
 
 Options:
-  --repo PATH             Target alice repository path (default: /home/codexbot/alice)
+  --repo PATH             Target alice repository path (default: infer from script location)
   --service NAME          User systemd service name (default: alice-codex-connector.service)
-  --sync-state-file PATH  Sync snapshot markdown path
+  --sync-state-file PATH  Sync snapshot markdown path (default: $CODEX_HOME/state/alice/sync-state.md)
   --skip-pull             Skip git pull (still build/restart/sync)
   --skip-restart          Skip systemd restart (still pull/build/sync)
-EOF
+USAGE
 }
 
 while [[ $# -gt 0 ]]; do
@@ -105,7 +113,7 @@ last_commit_subject="$(git -C "$repo" log -1 --pretty=%s | tr -d '\r')"
 updated_at="$(date -Iseconds)"
 
 mkdir -p "$(dirname "$sync_state_file")"
-cat >"$sync_state_file" <<EOF
+cat >"$sync_state_file" <<STATE
 # Skill Sync State
 
 - updated_at: $updated_at
@@ -131,7 +139,7 @@ $pull_result
 \`\`\`
 $restart_result
 \`\`\`
-EOF
+STATE
 
 echo "=== update-self-and-sync-skill done ==="
 echo "repo: $repo"

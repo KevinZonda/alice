@@ -1,5 +1,5 @@
 ---
-name: feishu-tasks
+name: feishu-task
 description: Manage official Feishu Task v2 objects via OpenAPI for task and tasklist CRUD, assignment, deadline updates, and member collaboration. Use only when the user explicitly says `飞书任务`, `Feishu Task`, `Task v2`, or otherwise clearly requests the official Feishu task system. Do not trigger for Alice automation tasks unless the user explicitly asks for Alice tasks.
 ---
 
@@ -78,16 +78,16 @@ Use the following mappings when user asks for CRUD:
 
 ```bash
 # show help
-/home/codexbot/alice/skills/feishu-tasks/scripts/feishu-task-v2.sh help
+$CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh help
 
 # list my tasks (requires FEISHU_USER_ACCESS_TOKEN)
-/home/codexbot/alice/skills/feishu-tasks/scripts/feishu-task-v2.sh list-my-tasks
+$CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh list-my-tasks
 
 # create task
-/home/codexbot/alice/skills/feishu-tasks/scripts/feishu-task-v2.sh create-task "准备周会材料" "周三前完成"
+$CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh create-task "准备周会材料" "周三前完成"
 
 # set deadline (timestamp in ms)
-/home/codexbot/alice/skills/feishu-tasks/scripts/feishu-task-v2.sh set-deadline <task_guid> 1767225600000 false
+$CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh set-deadline <task_guid> 1767225600000 false
 ```
 
 ## References
