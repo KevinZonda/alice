@@ -238,13 +238,10 @@ type senderStub struct {
 	replyMarkdownTexts     []string
 	replyRichMarkdownErr   error
 
-	replyCardCalls  int
-	lastReplyCard   string
-	replyCards      []string
-	replyCardErr    error
-	patchCardCalls  int
-	lastPatchedCard string
-	patchCardErr    error
+	replyCardCalls int
+	lastReplyCard  string
+	replyCards     []string
+	replyCardErr   error
 
 	getMessageTextCalls int
 	getMessageTextErr   error
@@ -377,14 +374,6 @@ func (s *senderStub) ReplyCard(_ context.Context, sourceMessageID string, cardCo
 		return "", s.replyCardErr
 	}
 	return "om_reply_card", nil
-}
-
-func (s *senderStub) PatchCard(_ context.Context, _ string, cardContent string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.patchCardCalls++
-	s.lastPatchedCard = cardContent
-	return s.patchCardErr
 }
 
 func (s *senderStub) GetMessageText(_ context.Context, messageID string) (string, error) {

@@ -19,21 +19,15 @@ import (
 )
 
 type App struct {
-	cfg         config.Config
-	queue       chan Job
-	processor   *Processor
-	workerWG    sync.WaitGroup
-	mu          sync.Mutex
-	latest      map[string]uint64
-	pending     map[string]Job
-	mediaWindow map[string][]mediaWindowEntry
-	sessionMu   map[string]*sync.Mutex
+	cfg       config.Config
+	queue     chan Job
+	processor *Processor
+	workerWG  sync.WaitGroup
 
-	runtimeStatePath           string
-	runtimeStateVersion        uint64
-	runtimeStateFlushedVersion uint64
-	now                        func() time.Time
-	automationRunner           AutomationRunner
+	state            *runtimeStore
+	now              func() time.Time
+	automationMu     sync.Mutex
+	automationRunner AutomationRunner
 }
 
 const (
@@ -45,14 +39,11 @@ const (
 
 func NewApp(cfg config.Config, processor *Processor) *App {
 	return &App{
-		cfg:         cfg,
-		queue:       make(chan Job, cfg.QueueCapacity),
-		processor:   processor,
-		latest:      make(map[string]uint64),
-		pending:     make(map[string]Job),
-		mediaWindow: make(map[string][]mediaWindowEntry),
-		sessionMu:   make(map[string]*sync.Mutex),
-		now:         time.Now,
+		cfg:       cfg,
+		queue:     make(chan Job, cfg.QueueCapacity),
+		processor: processor,
+		state:     newRuntimeStore(),
+		now:       time.Now,
 	}
 }
 
@@ -341,24 +332,24 @@ func (a *App) findExistingSessionKey(candidates []string) string {
 		return ""
 	}
 
-	a.mu.Lock()
-	latest := make(map[string]struct{}, len(a.latest))
-	for key := range a.latest {
+	a.state.mu.Lock()
+	latest := make(map[string]struct{}, len(a.state.latest))
+	for key := range a.state.latest {
 		trimmed := strings.TrimSpace(key)
 		if trimmed == "" {
 			continue
 		}
 		latest[trimmed] = struct{}{}
 	}
-	pending := make(map[string]struct{}, len(a.pending))
-	for _, pendingJob := range a.pending {
+	pending := make(map[string]struct{}, len(a.state.pending))
+	for _, pendingJob := range a.state.pending {
 		trimmed := strings.TrimSpace(pendingJob.SessionKey)
 		if trimmed == "" {
 			continue
 		}
 		pending[trimmed] = struct{}{}
 	}
-	a.mu.Unlock()
+	a.state.mu.Unlock()
 
 	for _, candidate := range normalized {
 		if _, ok := latest[candidate]; ok {
@@ -389,15 +380,15 @@ func (a *App) enqueueJob(job *Job) (queued bool, cancelActive context.CancelFunc
 	}
 	job.WorkflowPhase = normalizeJobWorkflowPhase(job.WorkflowPhase)
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
 
-	nextVersion := a.latest[job.SessionKey] + 1
+	nextVersion := a.state.latest[job.SessionKey] + 1
 	job.SessionVersion = nextVersion
 
 	select {
 	case a.queue <- *job:
-		a.latest[job.SessionKey] = nextVersion
+		a.state.latest[job.SessionKey] = nextVersion
 		a.rememberPendingJobLocked(*job)
 		return true, cancelActive, canceledEventID
 	default:
@@ -419,13 +410,13 @@ func (a *App) sessionMutex(sessionKey string) *sync.Mutex {
 		return nil
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if mu, ok := a.sessionMu[sessionKey]; ok && mu != nil {
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	if mu, ok := a.state.sessionMu[sessionKey]; ok && mu != nil {
 		return mu
 	}
 	mu := &sync.Mutex{}
-	a.sessionMu[sessionKey] = mu
+	a.state.sessionMu[sessionKey] = mu
 	return mu
 }
 

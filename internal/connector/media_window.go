@@ -80,14 +80,14 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 		ReceivedAt:      at,
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
 	a.pruneExpiredMediaWindowLocked(at)
-	entries := append(a.mediaWindow[windowKey], entry)
+	entries := append(a.state.mediaWindow[windowKey], entry)
 	if len(entries) > maxMediaWindowEntries {
 		entries = append([]mediaWindowEntry(nil), entries[len(entries)-maxMediaWindowEntries:]...)
 	}
-	a.mediaWindow[windowKey] = entries
+	a.state.mediaWindow[windowKey] = entries
 	a.markRuntimeStateChangedLocked()
 	logging.Debugf(
 		"group context cached event_id=%s window_key=%s message_type=%s text=%t attachments=%d",
@@ -121,11 +121,11 @@ func (a *App) mergeRecentGroupContextWindow(job *Job) {
 	cutoff := now.Add(-a.groupContextWindowTTL())
 	sourceMessageID := strings.TrimSpace(job.SourceMessageID)
 
-	a.mu.Lock()
+	a.state.mu.Lock()
 	a.pruneExpiredMediaWindowLocked(now)
-	entries := a.mediaWindow[windowKey]
+	entries := a.state.mediaWindow[windowKey]
 	if len(entries) == 0 {
-		a.mu.Unlock()
+		a.state.mu.Unlock()
 		return
 	}
 
@@ -151,14 +151,14 @@ func (a *App) mergeRecentGroupContextWindow(job *Job) {
 	}
 
 	if len(remaining) == 0 {
-		delete(a.mediaWindow, windowKey)
+		delete(a.state.mediaWindow, windowKey)
 	} else {
-		a.mediaWindow[windowKey] = remaining
+		a.state.mediaWindow[windowKey] = remaining
 	}
 	if len(selected) > 0 {
 		a.markRuntimeStateChangedLocked()
 	}
-	a.mu.Unlock()
+	a.state.mu.Unlock()
 
 	if len(selected) == 0 {
 		return
@@ -258,7 +258,7 @@ func (a *App) buildSyntheticMentionJob(event *larkim.P2MessageReceiveV1) (*Job, 
 }
 
 func (a *App) pruneExpiredMediaWindowLocked(now time.Time) {
-	if len(a.mediaWindow) == 0 {
+	if len(a.state.mediaWindow) == 0 {
 		return
 	}
 	if now.IsZero() {
@@ -267,7 +267,7 @@ func (a *App) pruneExpiredMediaWindowLocked(now time.Time) {
 	cutoff := now.Add(-a.groupContextWindowTTL())
 	changed := false
 
-	for key, entries := range a.mediaWindow {
+	for key, entries := range a.state.mediaWindow {
 		filtered := make([]mediaWindowEntry, 0, len(entries))
 		for _, entry := range entries {
 			if entry.ReceivedAt.IsZero() {
@@ -282,12 +282,12 @@ func (a *App) pruneExpiredMediaWindowLocked(now time.Time) {
 			filtered = append(filtered, entry)
 		}
 		if len(filtered) == 0 {
-			delete(a.mediaWindow, key)
+			delete(a.state.mediaWindow, key)
 			changed = true
 			continue
 		}
 		if len(filtered) != len(entries) {
-			a.mediaWindow[key] = filtered
+			a.state.mediaWindow[key] = filtered
 			changed = true
 		}
 	}

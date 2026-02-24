@@ -13,6 +13,12 @@ feishu_bot_user_id: ""
 llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 172800
+# Automatically register MCP server into Codex at startup.
+codex_mcp_auto_register: true
+# If true, startup fails when MCP registration fails.
+codex_mcp_register_strict: false
+# MCP server name used in `codex mcp` commands.
+codex_mcp_server_name: "alice-feishu"
 workspace_dir: "."
 # Optional: environment variables passed to `codex` process (proxy, etc.)
 env:

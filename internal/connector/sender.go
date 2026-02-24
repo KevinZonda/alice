@@ -177,24 +177,6 @@ func (e *feishuAPIError) Error() string {
 	return fmt.Sprintf("feishu api error code=%d msg=%s request_id=%s", e.Code, e.Msg, e.RequestID)
 }
 
-func (s *LarkSender) PatchCard(ctx context.Context, messageID, cardContent string) error {
-	req := larkim.NewPatchMessageReqBuilder().
-		MessageId(messageID).
-		Body(larkim.NewPatchMessageReqBodyBuilder().
-			Content(cardContent).
-			Build()).
-		Build()
-
-	resp, err := s.client.Im.V1.Message.Patch(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	return nil
-}
-
 func (s *LarkSender) GetMessageText(ctx context.Context, messageID string) (string, error) {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {

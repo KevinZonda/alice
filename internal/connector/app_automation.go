@@ -10,18 +10,18 @@ func (a *App) SetAutomationRunner(runner AutomationRunner) {
 	if a == nil {
 		return
 	}
-	a.mu.Lock()
+	a.automationMu.Lock()
 	a.automationRunner = runner
-	a.mu.Unlock()
+	a.automationMu.Unlock()
 }
 
 func (a *App) startBackgroundAutomation(ctx context.Context) {
 	if a == nil {
 		return
 	}
-	a.mu.Lock()
+	a.automationMu.Lock()
 	runner := a.automationRunner
-	a.mu.Unlock()
+	a.automationMu.Unlock()
 	if runner != nil {
 		go runner.Run(ctx)
 		return

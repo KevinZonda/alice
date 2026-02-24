@@ -337,9 +337,9 @@ func TestApp_OnMessageReceive_GroupMediaWithoutMentionCachedNotQueued(t *testing
 	}
 
 	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
-	app.mu.Lock()
-	entries := app.mediaWindow[windowKey]
-	app.mu.Unlock()
+	app.state.mu.Lock()
+	entries := app.state.mediaWindow[windowKey]
+	app.state.mu.Unlock()
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 cached media entry, got %d", len(entries))
 	}
@@ -420,9 +420,9 @@ func TestApp_OnMessageReceive_GroupMentionMergesRecentMediaWindow(t *testing.T) 
 	}
 
 	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
-	app.mu.Lock()
-	remaining := len(app.mediaWindow[windowKey])
-	app.mu.Unlock()
+	app.state.mu.Lock()
+	remaining := len(app.state.mediaWindow[windowKey])
+	app.state.mu.Unlock()
 	if remaining != 0 {
 		t.Fatalf("expected media window consumed after merge, remaining=%d", remaining)
 	}

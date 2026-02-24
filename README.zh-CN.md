@@ -78,6 +78,10 @@ make precommit-install
 
 贡献规范见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
+## 架构文档
+
+- [架构设计与重构规划](./docs/architecture.zh-CN.md)
+
 ## 配置文件
 
 程序从 YAML 配置文件读取参数（默认路径：`config.yaml`）。
@@ -100,6 +104,9 @@ feishu_bot_user_id: ""
 llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 120
+codex_mcp_auto_register: true
+codex_mcp_register_strict: false
+codex_mcp_server_name: "alice-feishu"
 workspace_dir: "."
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
@@ -129,6 +136,9 @@ log_level: "info"
 - `llm_provider`：LLM 后端类型选择。当前支持 `codex`（默认）。
 - `env`：注入到 `codex` 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
+- `codex_mcp_auto_register`：启动时是否自动执行 `codex mcp add` 注册内置 `alice-mcp-server`（默认 `true`）。
+- `codex_mcp_register_strict`：为 `true` 时，MCP 注册失败将导致启动失败；为 `false` 时仅记录告警并继续启动（默认 `false`）。
+- `codex_mcp_server_name`：注册到 `codex mcp` 的 MCP 服务名（默认 `alice-feishu`）。
 - `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `600`。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
 - `group_context_window_minutes`：群聊中未艾特机器人的消息缓存窗口（分钟，默认 `5`）。窗口内文本与多媒体会在后续艾特触发时并入上下文。
@@ -186,8 +196,11 @@ log_level: "info"
 ## 项目结构
 
 - `cmd/connector/main.go`：启动与生命周期
+- `cmd/alice-mcp-server/main.go`：注册到 Codex 的 MCP 服务入口
 - `internal/config/config.go`：配置文件读取与校验（`viper`）
+- `internal/automation/`：Alice 自动化任务的调度、存储与执行
 - `internal/llm/`：LLM 后端抽象与工厂
 - `internal/memory/memory.go`：记忆模块（长期记忆 + 按日期短期记忆文件）
 - `internal/codex/codex.go`：Codex CLI 调用与 JSONL 解析
-- `internal/connector/connector.go`：长连接、队列、worker、飞书发消息
+- `internal/connector/app.go`：长连接应用循环、任务队列与 worker 编排
+- `internal/connector/processor.go`：Prompt 组装、Codex 调用与回复回退链路

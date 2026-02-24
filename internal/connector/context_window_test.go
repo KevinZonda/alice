@@ -38,9 +38,9 @@ func TestApp_OnMessageReceive_GroupTextWithoutMentionCachedAndMergedOnMention(t 
 	}
 
 	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
-	app.mu.Lock()
-	cached := app.mediaWindow[windowKey]
-	app.mu.Unlock()
+	app.state.mu.Lock()
+	cached := app.state.mediaWindow[windowKey]
+	app.state.mu.Unlock()
 	if len(cached) != 1 {
 		t.Fatalf("expected 1 cached text entry, got %d", len(cached))
 	}
@@ -78,9 +78,9 @@ func TestApp_OnMessageReceive_GroupTextWithoutMentionCachedAndMergedOnMention(t 
 		t.Fatalf("expected speaker metadata in merged context, got: %q", job.Text)
 	}
 
-	app.mu.Lock()
-	remaining := len(app.mediaWindow[windowKey])
-	app.mu.Unlock()
+	app.state.mu.Lock()
+	remaining := len(app.state.mediaWindow[windowKey])
+	app.state.mu.Unlock()
 	if remaining != 0 {
 		t.Fatalf("expected window consumed after merge, remaining=%d", remaining)
 	}
@@ -118,9 +118,9 @@ func TestApp_OnMessageReceive_GroupContextWindowSpeakerResolvedByChatMemberAPI(t
 	}
 
 	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
-	app.mu.Lock()
-	cached := app.mediaWindow[windowKey]
-	app.mu.Unlock()
+	app.state.mu.Lock()
+	cached := app.state.mediaWindow[windowKey]
+	app.state.mu.Unlock()
 	if len(cached) != 1 {
 		t.Fatalf("expected 1 cached text entry, got %d", len(cached))
 	}

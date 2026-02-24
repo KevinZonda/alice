@@ -78,6 +78,10 @@ make precommit-install
 
 Contribution rules are documented in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+## Architecture
+
+- [Architecture and refactor plan](./docs/architecture.md)
+
 ## Config file
 
 The application loads config from YAML file (default: `config.yaml`).
@@ -100,6 +104,9 @@ feishu_bot_user_id: ""
 llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 120
+codex_mcp_auto_register: true
+codex_mcp_register_strict: false
+codex_mcp_server_name: "alice-feishu"
 workspace_dir: "."
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
@@ -129,6 +136,9 @@ Optional:
 - `llm_provider`: LLM backend provider selector. Current supported value: `codex` (default).
 - `env`: key-value environment variables injected into `codex` process (for example HTTP/HTTPS/SOCKS proxy settings).
 - `codex_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
+- `codex_mcp_auto_register`: whether to auto-run `codex mcp add` at startup for the bundled `alice-mcp-server` command (default `true`).
+- `codex_mcp_register_strict`: when `true`, startup fails if MCP registration fails; when `false`, registration failure only logs warning and startup continues (default `false`).
+- `codex_mcp_server_name`: MCP server name used in `codex mcp` registration (default `alice-feishu`).
 - `automation_task_timeout_secs`: timeout window for a single automation user task execution (`send_text`/`run_llm`), default `600`.
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
 - `group_context_window_minutes`: sliding window duration (minutes) for caching non-`@bot` group messages (text + multimedia), merged on later `@bot` trigger (default `5`).
@@ -180,8 +190,11 @@ Note: this project now uses a card-first reply flow and no longer uses interacti
 ## Project layout
 
 - `cmd/connector/main.go`: bootstrap and lifecycle
+- `cmd/alice-mcp-server/main.go`: MCP server entry registered into Codex
 - `internal/config/config.go`: config file loading and validation (`viper`)
+- `internal/automation/`: scheduler, persistence, and action execution for Alice automation tasks
 - `internal/llm/`: LLM backend abstraction and backend factory
 - `internal/memory/memory.go`: memory module (long-term + date-based short-term memory files)
 - `internal/codex/codex.go`: Codex CLI call + JSONL parsing
-- `internal/connector/connector.go`: long connection, queue, workers, Feishu send
+- `internal/connector/app.go`: long-connection app loop, job queue, worker orchestration
+- `internal/connector/processor.go`: prompt building, Codex invocation, reply fallback pipeline

@@ -25,7 +25,6 @@ type Sender interface {
 	ReplyRichText(ctx context.Context, sourceMessageID string, lines []string) (string, error)
 	ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error)
 	ReplyCard(ctx context.Context, sourceMessageID, cardContent string) (string, error)
-	PatchCard(ctx context.Context, messageID, cardContent string) error
 }
 
 type ReplyContextProvider interface {

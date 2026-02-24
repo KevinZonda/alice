@@ -21,9 +21,9 @@ type runtimeStateSnapshot struct {
 func (a *App) LoadRuntimeState(path string) error {
 	path = strings.TrimSpace(path)
 
-	a.mu.Lock()
-	a.runtimeStatePath = path
-	a.mu.Unlock()
+	a.state.mu.Lock()
+	a.state.runtimeStatePath = path
+	a.state.mu.Unlock()
 
 	if path == "" {
 		return nil
@@ -101,13 +101,13 @@ func (a *App) LoadRuntimeState(path string) error {
 	}
 	sortPendingJobs(restoredJobs)
 
-	a.mu.Lock()
-	a.latest = loadedLatest
-	a.pending = pendingByKey
-	a.mediaWindow = loadedMediaWindow
-	a.runtimeStateVersion = 0
-	a.runtimeStateFlushedVersion = 0
-	a.mu.Unlock()
+	a.state.mu.Lock()
+	a.state.latest = loadedLatest
+	a.state.pending = pendingByKey
+	a.state.mediaWindow = loadedMediaWindow
+	a.state.runtimeStateVersion = 0
+	a.state.runtimeStateFlushedVersion = 0
+	a.state.mu.Unlock()
 
 	restoredCount := 0
 	droppedCount := 0
@@ -142,35 +142,35 @@ func (a *App) FlushRuntimeStateIfDirty() error {
 }
 
 func (a *App) flushRuntimeStateFile(force bool) error {
-	a.mu.Lock()
+	a.state.mu.Lock()
 	a.pruneExpiredMediaWindowLocked(a.now())
-	path := strings.TrimSpace(a.runtimeStatePath)
-	currentVersion := a.runtimeStateVersion
-	flushedVersion := a.runtimeStateFlushedVersion
+	path := strings.TrimSpace(a.state.runtimeStatePath)
+	currentVersion := a.state.runtimeStateVersion
+	flushedVersion := a.state.runtimeStateFlushedVersion
 	if !force && currentVersion == flushedVersion {
-		a.mu.Unlock()
+		a.state.mu.Unlock()
 		return nil
 	}
 	if path == "" {
-		a.mu.Unlock()
+		a.state.mu.Unlock()
 		return nil
 	}
 
 	snapshot := runtimeStateSnapshot{
-		Latest:      make(map[string]uint64, len(a.latest)),
-		Pending:     make([]Job, 0, len(a.pending)),
-		MediaWindow: make(map[string][]mediaWindowEntry, len(a.mediaWindow)),
+		Latest:      make(map[string]uint64, len(a.state.latest)),
+		Pending:     make([]Job, 0, len(a.state.pending)),
+		MediaWindow: make(map[string][]mediaWindowEntry, len(a.state.mediaWindow)),
 	}
-	for sessionKey, version := range a.latest {
+	for sessionKey, version := range a.state.latest {
 		if strings.TrimSpace(sessionKey) == "" || version == 0 {
 			continue
 		}
 		snapshot.Latest[sessionKey] = version
 	}
-	for _, job := range a.pending {
+	for _, job := range a.state.pending {
 		snapshot.Pending = append(snapshot.Pending, job)
 	}
-	for windowKey, entries := range a.mediaWindow {
+	for windowKey, entries := range a.state.mediaWindow {
 		if strings.TrimSpace(windowKey) == "" || len(entries) == 0 {
 			continue
 		}
@@ -187,7 +187,7 @@ func (a *App) flushRuntimeStateFile(force bool) error {
 		}
 		snapshot.MediaWindow[windowKey] = clonedEntries
 	}
-	a.mu.Unlock()
+	a.state.mu.Unlock()
 
 	sortPendingJobs(snapshot.Pending)
 
@@ -219,11 +219,11 @@ func (a *App) flushRuntimeStateFile(force bool) error {
 		return fmt.Errorf("replace runtime state failed: %w", err)
 	}
 
-	a.mu.Lock()
-	if currentVersion > a.runtimeStateFlushedVersion {
-		a.runtimeStateFlushedVersion = currentVersion
+	a.state.mu.Lock()
+	if currentVersion > a.state.runtimeStateFlushedVersion {
+		a.state.runtimeStateFlushedVersion = currentVersion
 	}
-	a.mu.Unlock()
+	a.state.mu.Unlock()
 	return nil
 }
 
@@ -233,12 +233,12 @@ func (a *App) completePendingJob(job Job) {
 		return
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if _, ok := a.pending[key]; !ok {
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	if _, ok := a.state.pending[key]; !ok {
 		return
 	}
-	delete(a.pending, key)
+	delete(a.state.pending, key)
 	a.markRuntimeStateChangedLocked()
 }
 
@@ -251,7 +251,7 @@ func (a *App) rememberPendingJobLocked(job Job) {
 	if key == "" {
 		return
 	}
-	a.pending[key] = normalized
+	a.state.pending[key] = normalized
 	a.markRuntimeStateChangedLocked()
 }
 
@@ -262,10 +262,10 @@ func (a *App) updatePendingJobWorkflowPhase(job Job, phase string) {
 	}
 	normalizedPhase := normalizeJobWorkflowPhase(phase)
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
 
-	pendingJob, ok := a.pending[key]
+	pendingJob, ok := a.state.pending[key]
 	if !ok {
 		pendingJob = job
 	}
@@ -275,11 +275,11 @@ func (a *App) updatePendingJobWorkflowPhase(job Job, phase string) {
 	if !normalized {
 		return
 	}
-	if existing, ok := a.pending[key]; ok && normalizeJobWorkflowPhase(existing.WorkflowPhase) == normalizedJob.WorkflowPhase {
+	if existing, ok := a.state.pending[key]; ok && normalizeJobWorkflowPhase(existing.WorkflowPhase) == normalizedJob.WorkflowPhase {
 		return
 	}
 
-	a.pending[key] = normalizedJob
+	a.state.pending[key] = normalizedJob
 	a.markRuntimeStateChangedLocked()
 }
 
@@ -289,14 +289,14 @@ func (a *App) removeOlderPendingJobsLocked(sessionKey string, keepVersion uint64
 		return
 	}
 	changed := false
-	for key, job := range a.pending {
+	for key, job := range a.state.pending {
 		if strings.TrimSpace(job.SessionKey) != sessionKey {
 			continue
 		}
 		if job.SessionVersion >= keepVersion {
 			continue
 		}
-		delete(a.pending, key)
+		delete(a.state.pending, key)
 		changed = true
 	}
 	if changed {
@@ -310,14 +310,14 @@ func (a *App) removePendingBySessionVersionLocked(sessionKey string, sessionVers
 		return
 	}
 	changed := false
-	for key, job := range a.pending {
+	for key, job := range a.state.pending {
 		if strings.TrimSpace(job.SessionKey) != sessionKey {
 			continue
 		}
 		if job.SessionVersion != sessionVersion {
 			continue
 		}
-		delete(a.pending, key)
+		delete(a.state.pending, key)
 		changed = true
 	}
 	if changed {
@@ -326,7 +326,7 @@ func (a *App) removePendingBySessionVersionLocked(sessionKey string, sessionVers
 }
 
 func (a *App) markRuntimeStateChangedLocked() {
-	a.runtimeStateVersion++
+	a.state.runtimeStateVersion++
 }
 
 func pendingJobKey(job Job) string {

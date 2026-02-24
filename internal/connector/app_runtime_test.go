@@ -14,7 +14,7 @@ func TestApp_EnqueueJobAssignsVersion(t *testing.T) {
 	cfg := configForTest()
 	app := NewApp(cfg, nil)
 
-	app.latest["chat_id:oc_chat"] = 1
+	app.state.latest["chat_id:oc_chat"] = 1
 
 	job := &Job{
 		ReceiveID:     "oc_chat",
@@ -32,8 +32,8 @@ func TestApp_EnqueueJobAssignsVersion(t *testing.T) {
 	if job.SessionVersion != 2 {
 		t.Fatalf("unexpected session version: %d", job.SessionVersion)
 	}
-	if app.latest[job.SessionKey] != 2 {
-		t.Fatalf("latest version should be 2, got %d", app.latest[job.SessionKey])
+	if app.state.latest[job.SessionKey] != 2 {
+		t.Fatalf("latest version should be 2, got %d", app.state.latest[job.SessionKey])
 	}
 	if canceledEventID != "" {
 		t.Fatalf("expected empty canceled event id, got %q", canceledEventID)
@@ -97,9 +97,9 @@ func TestApp_WorkerLoopSerializesSameSession(t *testing.T) {
 		return blockingCodex.CallCount() == 2
 	}, "expected second same-session call to start after first finishes")
 	waitForCondition(t, 2*time.Second, func() bool {
-		app.mu.Lock()
-		defer app.mu.Unlock()
-		return len(app.pending) == 0
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
+		return len(app.state.pending) == 0
 	}, "expected serialized jobs to complete and clear pending state")
 }
 
@@ -150,9 +150,9 @@ func TestApp_WorkerLoopAllowsParallelDifferentSessions(t *testing.T) {
 
 	blockingCodex.Release()
 	waitForCondition(t, 2*time.Second, func() bool {
-		app.mu.Lock()
-		defer app.mu.Unlock()
-		return len(app.pending) == 0
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
+		return len(app.state.pending) == 0
 	}, "expected parallel jobs to complete and clear pending state")
 }
 
@@ -185,7 +185,7 @@ func TestApp_RuntimeStatePersistAndRestorePendingJob(t *testing.T) {
 		t.Fatalf("load persisted runtime state failed: %v", err)
 	}
 
-	if got := restored.latest["chat_id:oc_chat"]; got != 1 {
+	if got := restored.state.latest["chat_id:oc_chat"]; got != 1 {
 		t.Fatalf("expected latest version 1 after restore, got %d", got)
 	}
 	if got := len(restored.queue); got != 1 {
@@ -293,9 +293,9 @@ func TestApp_InterruptedJobNotifiesAfterRestartWithoutCodex(t *testing.T) {
 
 	cancel()
 	waitForCondition(t, 2*time.Second, func() bool {
-		app.mu.Lock()
-		defer app.mu.Unlock()
-		pendingJob, ok := app.pending[pendingJobKey(*job)]
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
+		pendingJob, ok := app.state.pending[pendingJobKey(*job)]
 		if !ok {
 			return false
 		}
@@ -332,9 +332,9 @@ func TestApp_InterruptedJobNotifiesAfterRestartWithoutCodex(t *testing.T) {
 		t.Fatalf("restart notification should skip codex call, got %d", got)
 	}
 	waitForCondition(t, 2*time.Second, func() bool {
-		restored.mu.Lock()
-		defer restored.mu.Unlock()
-		return len(restored.pending) == 0
+		restored.state.mu.Lock()
+		defer restored.state.mu.Unlock()
+		return len(restored.state.pending) == 0
 	}, "restart notification job should be completed and cleared")
 }
 
@@ -383,11 +383,11 @@ func TestApp_RestartMarksInProgressForNotificationAndKeepsQueuedJobs(t *testing.
 
 	cancel()
 	waitForCondition(t, 2*time.Second, func() bool {
-		app.mu.Lock()
-		defer app.mu.Unlock()
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
 
-		firstPending, firstExists := app.pending[pendingJobKey(*inProgress)]
-		secondPending, secondExists := app.pending[pendingJobKey(*queued)]
+		firstPending, firstExists := app.state.pending[pendingJobKey(*inProgress)]
+		secondPending, secondExists := app.state.pending[pendingJobKey(*queued)]
 		if !firstExists || !secondExists {
 			return false
 		}
@@ -455,13 +455,13 @@ func TestApp_RuntimeStatePersistAndRestoreMediaWindow(t *testing.T) {
 		t.Fatalf("unexpected media event error: %v", err)
 	}
 	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
-	app.mu.Lock()
-	originalCount := len(app.mediaWindow[windowKey])
+	app.state.mu.Lock()
+	originalCount := len(app.state.mediaWindow[windowKey])
 	originalSpeaker := ""
 	if originalCount > 0 {
-		originalSpeaker = app.mediaWindow[windowKey][0].Speaker
+		originalSpeaker = app.state.mediaWindow[windowKey][0].Speaker
 	}
-	app.mu.Unlock()
+	app.state.mu.Unlock()
 	if originalCount != 1 {
 		t.Fatalf("expected 1 cached entry before flush, got %d", originalCount)
 	}
@@ -478,13 +478,13 @@ func TestApp_RuntimeStatePersistAndRestoreMediaWindow(t *testing.T) {
 	if err := restored.LoadRuntimeState(statePath); err != nil {
 		t.Fatalf("load persisted runtime state failed: %v", err)
 	}
-	restored.mu.Lock()
-	restoredCount := len(restored.mediaWindow[windowKey])
+	restored.state.mu.Lock()
+	restoredCount := len(restored.state.mediaWindow[windowKey])
 	restoredSpeaker := ""
 	if restoredCount > 0 {
-		restoredSpeaker = restored.mediaWindow[windowKey][0].Speaker
+		restoredSpeaker = restored.state.mediaWindow[windowKey][0].Speaker
 	}
-	restored.mu.Unlock()
+	restored.state.mu.Unlock()
 	if restoredCount != 1 {
 		t.Fatalf("expected 1 restored media entry, got %d", restoredCount)
 	}
@@ -531,9 +531,9 @@ func TestApp_SelfUpdateInterruptedJobMarkedForRestartNotification(t *testing.T) 
 
 	cancel()
 	waitForCondition(t, 2*time.Second, func() bool {
-		app.mu.Lock()
-		defer app.mu.Unlock()
-		pendingJob, ok := app.pending[pendingJobKey(*job)]
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
+		pendingJob, ok := app.state.pending[pendingJobKey(*job)]
 		if !ok {
 			return false
 		}
