@@ -150,6 +150,54 @@ func TestProcessor_FileChangeEventUsesPerSessionSourceWhenParentShared(t *testin
 	}
 }
 
+func TestProcessor_FileChangeEventFallsBackToThreadWhenSourceMissing(t *testing.T) {
+	fakeCodex := codexStreamingStub{
+		resp:          "最终答复",
+		agentMessages: []string{"[file_change] internal/connector/processor.go已更改，+23-34"},
+	}
+	sender := &senderStub{}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+
+	processor.processReplyMessage(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		ThreadID:      "om_thread",
+		Text:          "hello",
+	})
+
+	if sender.sendCardCalls != 0 {
+		t.Fatalf("expected filechange to stay in thread reply, got sendCardCalls=%d", sender.sendCardCalls)
+	}
+	if len(sender.replyTargets) < 2 {
+		t.Fatalf("unexpected reply targets: %#v", sender.replyTargets)
+	}
+	if sender.replyTargets[1] != "om_thread" {
+		t.Fatalf("filechange should fallback to thread id, got %q", sender.replyTargets[1])
+	}
+}
+
+func TestProcessor_FileChangeEventFallsBackToSendCardWithoutReplyTargets(t *testing.T) {
+	fakeCodex := codexStreamingStub{
+		resp:          "最终答复",
+		agentMessages: []string{"[file_change] internal/connector/processor.go已更改，+23-34"},
+	}
+	sender := &senderStub{replyCardErr: errors.New("reply unavailable")}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+
+	processor.processReplyMessage(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		Text:          "hello",
+	})
+
+	if sender.sendCardCalls != 1 {
+		t.Fatalf("expected filechange to fallback to send card, got %d", sender.sendCardCalls)
+	}
+	if len(sender.sendCards) != 1 || !strings.Contains(sender.sendCards[0], "internal/connector/processor.go已更改，+23-34") {
+		t.Fatalf("unexpected send card history: %#v", sender.sendCards)
+	}
+}
+
 func TestProcessor_DeduplicatesFinalReplyWhenAlreadySentViaAgentMessage(t *testing.T) {
 	fakeCodex := codexStub{resp: "final answer"}
 	sender := &senderStub{}

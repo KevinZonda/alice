@@ -165,18 +165,18 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			return
 		}
 		if isFileChange {
-			replyTarget := strings.TrimSpace(job.SourceMessageID)
-			if replyTarget == "" {
-				replyTarget = strings.TrimSpace(job.ReplyParentMessageID)
+			delivered := false
+			for _, replyTarget := range fileChangeReplyTargets(job) {
+				if _, sendErr := p.replyCardWithFallback(ctx, job, replyTarget, normalized); sendErr == nil {
+					delivered = true
+					break
+				}
 			}
-			if replyTarget == "" {
+			if !delivered {
 				if sendErr := p.sendCardWithFallback(ctx, job, job.ReceiveIDType, job.ReceiveID, normalized); sendErr != nil {
 					log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
 					return
 				}
-			} else if _, sendErr := p.replyCardWithFallback(ctx, job, replyTarget, normalized); sendErr != nil {
-				log.Printf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
-				return
 			}
 		} else {
 			if _, sendErr := p.replyCardWithFallback(ctx, job, job.SourceMessageID, normalized); sendErr != nil {
@@ -239,6 +239,29 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		}
 	}
 	return JobProcessCompleted
+}
+
+func fileChangeReplyTargets(job Job) []string {
+	candidates := []string{
+		job.SourceMessageID,
+		job.ReplyParentMessageID,
+		job.ThreadID,
+		job.RootID,
+	}
+	targets := make([]string, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		normalized := strings.TrimSpace(candidate)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		targets = append(targets, normalized)
+	}
+	return targets
 }
 
 func (p *Processor) replyMarkdownPostWithFallback(

@@ -104,7 +104,26 @@ func (r Runner) RunWithThreadAndProgress(
 		timeout,
 	)
 	watchedRepos := discoverWatchRepos(cmd.Dir)
+	repoLease := syntheticDiffGuard.Acquire(watchedRepos)
+	defer syntheticDiffGuard.Release(repoLease)
 	repoSnapshots := captureRepoSnapshots(tctx, watchedRepos)
+
+	tryEmitSyntheticFileChanges := func() {
+		if onThinking == nil {
+			return
+		}
+		if !syntheticDiffGuard.CanEmit(repoLease) {
+			repoSnapshots = captureRepoSnapshots(tctx, watchedRepos)
+			logging.Debugf("codex synthetic file_change suppressed reason=concurrent_runs")
+			return
+		}
+		diffMessages, nextSnapshots := collectRepoDiffMessages(tctx, watchedRepos, repoSnapshots)
+		repoSnapshots = nextSnapshots
+		for _, message := range diffMessages {
+			logging.Debugf("codex synthetic file_change=%q", strings.TrimSpace(message))
+			onThinking(fileChangeCallbackPrefix + strings.TrimSpace(message))
+		}
+	}
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -170,12 +189,7 @@ func (r Runner) RunWithThreadAndProgress(
 		}
 
 		if onThinking != nil && !sawNativeFileChange && isSuccessfulCommandExecutionCompleted(line) {
-			diffMessages, nextSnapshots := collectRepoDiffMessages(tctx, watchedRepos, repoSnapshots)
-			repoSnapshots = nextSnapshots
-			for _, message := range diffMessages {
-				logging.Debugf("codex synthetic file_change=%q", strings.TrimSpace(message))
-				onThinking(fileChangeCallbackPrefix + strings.TrimSpace(message))
-			}
+			tryEmitSyntheticFileChanges()
 		}
 	}
 
@@ -222,12 +236,7 @@ func (r Runner) RunWithThreadAndProgress(
 	}
 
 	if onThinking != nil && !sawNativeFileChange {
-		diffMessages, nextSnapshots := collectRepoDiffMessages(tctx, watchedRepos, repoSnapshots)
-		repoSnapshots = nextSnapshots
-		for _, message := range diffMessages {
-			logging.Debugf("codex synthetic file_change=%q", strings.TrimSpace(message))
-			onThinking(fileChangeCallbackPrefix + strings.TrimSpace(message))
-		}
+		tryEmitSyntheticFileChanges()
 	}
 	_ = repoSnapshots
 
