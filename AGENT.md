@@ -84,6 +84,12 @@ git -C /home/codexbot/alice push
 For self-update, use unified updater only (do not ad-hoc pull/restart):
 
 ```bash
+/home/codexbot/alice/scripts/update-self-and-sync-skill.sh
+```
+
+Compatibility wrapper path (skill directory):
+
+```bash
 /home/codexbot/.codex/skills/alice-codebase-onboarding/scripts/update-self-and-sync-skill.sh
 ```
 
