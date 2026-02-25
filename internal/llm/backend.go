@@ -31,3 +31,8 @@ type MCPRegistration struct {
 type MCPRegistrar interface {
 	EnsureMCPServerRegistered(ctx context.Context, req MCPRegistration) error
 }
+
+type Provider interface {
+	Backend() Backend
+	MCPRegistrar() MCPRegistrar
+}

@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"path/filepath"
 	"time"
@@ -35,12 +37,19 @@ func buildFactoryConfig(cfg config.Config) llm.FactoryConfig {
 	}
 }
 
-func RegisterMCPServer(ctx context.Context, cfg config.Config, configPath string) error {
-	configAbsPath := ResolveConfigPath(configPath)
-	registrar, err := llm.NewMCPRegistrar(buildFactoryConfig(cfg))
-	if err != nil {
-		return err
+func NewLLMProvider(cfg config.Config) (llm.Provider, error) {
+	return llm.NewProvider(buildFactoryConfig(cfg))
+}
+
+func RegisterMCPServer(ctx context.Context, provider llm.Provider, cfg config.Config, configPath string) error {
+	if provider == nil {
+		return errors.New("llm provider is nil")
 	}
+	registrar := provider.MCPRegistrar()
+	if registrar == nil {
+		return fmt.Errorf("llm_provider %q does not support mcp registration", cfg.LLMProvider)
+	}
+	configAbsPath := ResolveConfigPath(configPath)
 	return registrar.EnsureMCPServerRegistered(ctx, llm.MCPRegistration{
 		ServerName:    cfg.CodexMCPServerName,
 		ServerCommand: ResolveMCPServerCommand(configAbsPath),
@@ -48,16 +57,19 @@ func RegisterMCPServer(ctx context.Context, cfg config.Config, configPath string
 	})
 }
 
-func BuildConnectorRuntime(cfg config.Config) (*ConnectorRuntime, error) {
+func BuildConnectorRuntime(cfg config.Config, provider llm.Provider) (*ConnectorRuntime, error) {
+	if provider == nil {
+		return nil, errors.New("llm provider is nil")
+	}
 	botClient := lark.NewClient(
 		cfg.FeishuAppID,
 		cfg.FeishuAppSecret,
 		lark.WithOpenBaseUrl(cfg.FeishuBaseURL),
 	)
 
-	backend, err := llm.NewBackend(buildFactoryConfig(cfg))
-	if err != nil {
-		return nil, err
+	backend := provider.Backend()
+	if backend == nil {
+		return nil, errors.New("llm backend is nil")
 	}
 
 	memoryDir := ResolveMemoryDir(cfg.WorkspaceDir, cfg.MemoryDir)

@@ -27,6 +27,11 @@ func main() {
 	logging.SetLevel(cfg.LogLevel)
 	logging.Debugf("debug logging enabled log_level=%s config=%s", cfg.LogLevel, configPath)
 
+	llmProvider, err := bootstrap.NewLLMProvider(cfg)
+	if err != nil {
+		log.Fatalf("init llm provider failed: %v", err)
+	}
+
 	skillReport, err := bootstrap.EnsureBundledSkillsLinked(cfg.WorkspaceDir)
 	if err != nil {
 		log.Printf("sync bundled skills failed: %v", err)
@@ -45,7 +50,7 @@ func main() {
 
 	if cfg.CodexMCPAutoRegister {
 		mcpRegisterCtx, cancelRegister := context.WithTimeout(context.Background(), 20*time.Second)
-		err = bootstrap.RegisterMCPServer(mcpRegisterCtx, cfg, configPath)
+		err = bootstrap.RegisterMCPServer(mcpRegisterCtx, llmProvider, cfg, configPath)
 		cancelRegister()
 		if err != nil {
 			if cfg.CodexMCPRegisterStrict {
@@ -57,7 +62,7 @@ func main() {
 		}
 	}
 
-	runtime, err := bootstrap.BuildConnectorRuntime(cfg)
+	runtime, err := bootstrap.BuildConnectorRuntime(cfg, llmProvider)
 	if err != nil {
 		log.Fatalf("init connector runtime failed: %v", err)
 	}

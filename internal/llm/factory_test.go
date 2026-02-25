@@ -6,6 +6,37 @@ import (
 	"time"
 )
 
+func TestNewProvider_DefaultsToCodex(t *testing.T) {
+	provider, err := NewProvider(FactoryConfig{
+		Codex: CodexConfig{
+			Command: "codex",
+			Timeout: 30 * time.Second,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new provider failed: %v", err)
+	}
+	if provider == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if provider.Backend() == nil {
+		t.Fatal("expected non-nil backend")
+	}
+	if provider.MCPRegistrar() == nil {
+		t.Fatal("expected non-nil mcp registrar")
+	}
+}
+
+func TestNewProvider_RejectsUnknownProvider(t *testing.T) {
+	_, err := NewProvider(FactoryConfig{Provider: "unknown"})
+	if err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+	if !strings.Contains(err.Error(), "unsupported llm_provider") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNewBackend_DefaultsToCodex(t *testing.T) {
 	backend, err := NewBackend(FactoryConfig{
 		Codex: CodexConfig{
