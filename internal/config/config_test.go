@@ -24,6 +24,12 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.FeishuBaseURL != "https://open.feishu.cn" {
 		t.Fatalf("unexpected feishu_base_url: %s", cfg.FeishuBaseURL)
 	}
+	if cfg.TriggerMode != TriggerModeAt {
+		t.Fatalf("unexpected trigger_mode: %s", cfg.TriggerMode)
+	}
+	if cfg.TriggerPrefix != "" {
+		t.Fatalf("unexpected trigger_prefix: %q", cfg.TriggerPrefix)
+	}
 	if cfg.LLMProvider != DefaultLLMProvider {
 		t.Fatalf("unexpected llm_provider: %s", cfg.LLMProvider)
 	}
@@ -236,6 +242,73 @@ feishu_bot_user_id: "  123456  "
 	}
 	if cfg.FeishuBotUserID != "123456" {
 		t.Fatalf("unexpected feishu_bot_user_id: %q", cfg.FeishuBotUserID)
+	}
+}
+
+func TestLoadFromFile_TriggerModeTrimmedLowercase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+trigger_mode: "  PrEfIx  "
+trigger_prefix: "  !alice  "
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if cfg.TriggerMode != TriggerModePrefix {
+		t.Fatalf("unexpected trigger_mode: %q", cfg.TriggerMode)
+	}
+	if cfg.TriggerPrefix != "!alice" {
+		t.Fatalf("unexpected trigger_prefix: %q", cfg.TriggerPrefix)
+	}
+}
+
+func TestLoadFromFile_TriggerModeInvalid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+trigger_mode: "all"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported trigger_mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFromFile_TriggerModePrefixRequiresPrefix(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+trigger_mode: "prefix"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "trigger_prefix is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

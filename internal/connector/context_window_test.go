@@ -86,6 +86,79 @@ func TestApp_OnMessageReceive_GroupTextWithoutMentionCachedAndMergedOnMention(t 
 	}
 }
 
+func TestApp_OnMessageReceive_GroupTextWithoutPrefixCachedAndMergedOnPrefixTrigger(t *testing.T) {
+	cfg := configForTest()
+	cfg.TriggerMode = "prefix"
+	cfg.TriggerPrefix = "!alice"
+	app := NewApp(cfg, nil)
+	base := time.Date(2026, 2, 23, 9, 30, 0, 0, time.UTC)
+	now := base
+	app.now = func() time.Time { return now }
+
+	textEvent := newGroupTextReceiveEvent(
+		t,
+		"evt_text_prefix_cache",
+		"om_text_prefix_cache",
+		"ou_user_1",
+		"oc_chat",
+		"先记一下：这个需求要补充背景信息",
+		nil,
+		"",
+		"",
+	)
+	if err := app.onMessageReceive(context.Background(), textEvent); err != nil {
+		t.Fatalf("unexpected text event error: %v", err)
+	}
+	if got := len(app.queue); got != 0 {
+		t.Fatalf("expected queue len 0, got %d", got)
+	}
+
+	windowKey := buildMediaWindowKey("oc_chat", "open_id:ou_user_1")
+	app.state.mu.Lock()
+	cached := app.state.mediaWindow[windowKey]
+	app.state.mu.Unlock()
+	if len(cached) != 1 {
+		t.Fatalf("expected 1 cached text entry, got %d", len(cached))
+	}
+
+	now = base.Add(30 * time.Second)
+	prefixEvent := newGroupTextReceiveEvent(
+		t,
+		"evt_text_prefix_trigger",
+		"om_text_prefix_trigger",
+		"ou_user_1",
+		"oc_chat",
+		"!alice 帮我继续处理",
+		nil,
+		"",
+		"",
+	)
+	if err := app.onMessageReceive(context.Background(), prefixEvent); err != nil {
+		t.Fatalf("unexpected prefix trigger event error: %v", err)
+	}
+	if got := len(app.queue); got != 1 {
+		t.Fatalf("expected queue len 1, got %d", got)
+	}
+
+	job := <-app.queue
+	if strings.Contains(job.Text, "!alice") {
+		t.Fatalf("expected prefix removed from text, got: %q", job.Text)
+	}
+	if !strings.Contains(job.Text, "帮我继续处理") {
+		t.Fatalf("expected trigger content kept after prefix removed, got: %q", job.Text)
+	}
+	if !strings.Contains(job.Text, "先记一下：这个需求要补充背景信息") {
+		t.Fatalf("expected cached text merged into prompt, got: %q", job.Text)
+	}
+
+	app.state.mu.Lock()
+	remaining := len(app.state.mediaWindow[windowKey])
+	app.state.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("expected window consumed after merge, remaining=%d", remaining)
+	}
+}
+
 func TestApp_OnMessageReceive_GroupContextWindowSpeakerResolvedByChatMemberAPI(t *testing.T) {
 	cfg := configForTest()
 	cfg.FeishuBotOpenID = "ou_bot"

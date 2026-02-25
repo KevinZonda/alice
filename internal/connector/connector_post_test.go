@@ -85,7 +85,7 @@ func TestShouldProcessIncomingMessage_GroupPostMentionUsesContentFallback(t *tes
 		},
 	}
 
-	if !shouldProcessIncomingMessage(event, "ou_bot", "") {
+	if !shouldProcessIncomingMessage(event, "at", "", "ou_bot", "") {
 		t.Fatal("post message with bot mention in content should be processed")
 	}
 }

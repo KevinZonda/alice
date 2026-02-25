@@ -8,6 +8,15 @@ feishu_base_url: "https://open.feishu.cn"
 # If both are empty, all group/topic-group messages are ignored.
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
+# Group trigger mode:
+# - at: only process group/topic-group messages that @bot (default)
+# - active: process all group/topic-group messages, except messages starting with trigger_prefix
+# - prefix: only process group/topic-group messages starting with trigger_prefix
+trigger_mode: "at"
+# Prefix used by trigger_mode:
+# - active: ignore messages starting with this prefix
+# - prefix: only process messages starting with this prefix, and strip prefix before LLM input
+trigger_prefix: ""
 
 # LLM runtime (supported providers: codex, claude)
 llm_provider: "codex"

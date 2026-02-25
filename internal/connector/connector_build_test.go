@@ -418,13 +418,15 @@ func TestShouldProcessIncomingMessage_GroupRequiresMention(t *testing.T) {
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
 			Message: &larkim.EventMessage{
-				ChatType: strPtr("group"),
-				Content:  strPtr(`{"text":"大家好"}`),
+				ChatType:    strPtr("group"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"大家好"}`),
+				ChatId:      strPtr("oc_chat"),
 			},
 		},
 	}
 
-	if shouldProcessIncomingMessage(event, "", "") {
+	if shouldProcessIncomingMessage(event, "at", "", "", "") {
 		t.Fatal("group message without mention should be ignored")
 	}
 }
@@ -446,7 +448,7 @@ func TestShouldProcessIncomingMessage_GroupMentionWithBotOpenID(t *testing.T) {
 		},
 	}
 
-	if !shouldProcessIncomingMessage(event, "ou_bot", "") {
+	if !shouldProcessIncomingMessage(event, "at", "", "ou_bot", "") {
 		t.Fatal("group message that mentions bot open_id should be processed")
 	}
 }
@@ -468,7 +470,7 @@ func TestShouldProcessIncomingMessage_GroupMentionWithoutBotIDConfigIgnored(t *t
 		},
 	}
 
-	if shouldProcessIncomingMessage(event, "", "") {
+	if shouldProcessIncomingMessage(event, "at", "", "", "") {
 		t.Fatal("group message should be ignored when bot IDs are not configured")
 	}
 }
@@ -483,7 +485,71 @@ func TestShouldProcessIncomingMessage_PrivateChatNoMention(t *testing.T) {
 		},
 	}
 
-	if !shouldProcessIncomingMessage(event, "", "") {
+	if !shouldProcessIncomingMessage(event, "at", "", "", "") {
 		t.Fatal("p2p message should be processed without mention")
+	}
+}
+
+func TestShouldProcessIncomingMessage_GroupActiveModeWithoutPrefixAccepted(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				ChatType:    strPtr("group"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"大家好"}`),
+				ChatId:      strPtr("oc_chat"),
+			},
+		},
+	}
+
+	if !shouldProcessIncomingMessage(event, "active", "/silent", "", "") {
+		t.Fatal("group message should be processed in active mode when prefix does not match")
+	}
+}
+
+func TestShouldProcessIncomingMessage_GroupActiveModePrefixIgnored(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				ChatType:    strPtr("group"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"/silent 大家先聊"}`),
+				ChatId:      strPtr("oc_chat"),
+			},
+		},
+	}
+
+	if shouldProcessIncomingMessage(event, "active", "/silent", "", "") {
+		t.Fatal("group message should be ignored in active mode when text starts with ignore prefix")
+	}
+}
+
+func TestShouldProcessIncomingMessage_GroupPrefixModeRequiresPrefix(t *testing.T) {
+	withPrefix := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				ChatType:    strPtr("group"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"!alice 帮我总结一下"}`),
+				ChatId:      strPtr("oc_chat"),
+			},
+		},
+	}
+	withoutPrefix := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				ChatType:    strPtr("group"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"帮我总结一下"}`),
+				ChatId:      strPtr("oc_chat"),
+			},
+		},
+	}
+
+	if !shouldProcessIncomingMessage(withPrefix, "prefix", "!alice", "", "") {
+		t.Fatal("group message should be processed in prefix mode when prefix matches")
+	}
+	if shouldProcessIncomingMessage(withoutPrefix, "prefix", "!alice", "ou_bot", "") {
+		t.Fatal("group message without prefix should be ignored in prefix mode even if bot IDs exist")
 	}
 }

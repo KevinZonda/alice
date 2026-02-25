@@ -109,6 +109,8 @@ feishu_app_secret: "xxxxxx"
 feishu_base_url: "https://open.feishu.cn"
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
+trigger_mode: "at"
+trigger_prefix: ""
 
 llm_provider: "codex"
 codex_command: "codex"
@@ -154,16 +156,19 @@ Optional:
 - `codex_mcp_server_name`: MCP server name used in LLM MCP registration (default `alice-feishu`).
 - `automation_task_timeout_secs`: timeout window for a single automation user task execution (`send_text`/`run_llm`), default `600`.
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
-- `group_context_window_minutes`: sliding window duration (minutes) for caching non-`@bot` group messages (text + multimedia), merged on later `@bot` trigger (default `5`).
-- `feishu_bot_open_id` / `feishu_bot_user_id`: bot IDs used for strict group mention filtering. In group chats, only messages that mention these IDs are processed.
+- `group_context_window_minutes`: sliding window duration (minutes) for caching non-triggered group messages (text + multimedia), merged on the next trigger in `at`/`prefix` mode (default `5`).
+- `trigger_mode`: group trigger strategy. Supported values: `at` (default), `active`, `prefix`.
+- `trigger_prefix`: prefix used by group trigger strategy. In `active`, messages starting with this prefix are ignored; in `prefix`, only messages starting with this prefix are processed and the prefix is stripped before sending to Codex.
+- `feishu_bot_open_id` / `feishu_bot_user_id`: bot IDs used by `trigger_mode=at` for strict mention filtering.
 
 ## Runtime behavior
 
 - Supported incoming message types: `text`, `image`, `sticker`, `audio`, `file`.
-- In group/topic-group chats, only messages that mention the bot are processed.
-  - If both `feishu_bot_open_id` and `feishu_bot_user_id` are empty, group/topic-group messages are ignored.
-- For group/topic-group messages without mention, the connector caches a per-user sliding window (`group_context_window_minutes`) with both text and multimedia entries.
-- When the same user later sends an `@bot` trigger in that group, cached text and multimedia inside the window are merged into that request context; thread messages are isolated by `thread_id`/`root_id` scope.
+- Group/topic-group trigger behavior is controlled by `trigger_mode`:
+  - `at`: only messages mentioning bot IDs are processed. If both `feishu_bot_open_id` and `feishu_bot_user_id` are empty, group/topic-group messages are ignored.
+  - `active`: all group/topic-group messages are processed, except messages starting with `trigger_prefix`.
+  - `prefix`: only group/topic-group messages starting with `trigger_prefix` are processed.
+- Group context window (`group_context_window_minutes`) is applied in `trigger_mode=at` and `trigger_mode=prefix`: non-trigger messages are cached, then merged on the next trigger in the same sender/chat thread scope.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Prompt speaker context still injects id mappings and mention text for participants, with an explicit hint that `@name`/`@id` can be used directly, but it filters out the bot's own identity (`feishu_bot_open_id`/`feishu_bot_user_id`) from those injected lines.
 - Outgoing replies auto-normalize `@name`/`@id` to Feishu mention tags (`<at user_id="...">...</at>`) using identities in the current message context.

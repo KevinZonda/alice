@@ -9,6 +9,7 @@ import (
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/logging"
 )
 
@@ -249,7 +250,13 @@ func decodeIncomingContent(content *string, out any) error {
 	return nil
 }
 
-func shouldProcessIncomingMessage(event *larkim.P2MessageReceiveV1, botOpenID, botUserID string) bool {
+func shouldProcessIncomingMessage(
+	event *larkim.P2MessageReceiveV1,
+	triggerMode string,
+	triggerPrefix string,
+	botOpenID string,
+	botUserID string,
+) bool {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return true
 	}
@@ -257,7 +264,60 @@ func shouldProcessIncomingMessage(event *larkim.P2MessageReceiveV1, botOpenID, b
 	if !isGroupChatType(deref(message.ChatType)) {
 		return true
 	}
-	return isGroupMentionAccepted(message, botOpenID, botUserID)
+
+	switch normalizedTriggerMode(triggerMode) {
+	case config.TriggerModeActive:
+		return !isGroupTriggerPrefixMatched(event, triggerPrefix)
+	case config.TriggerModePrefix:
+		return isGroupTriggerPrefixMatched(event, triggerPrefix)
+	default:
+		return isGroupMentionAccepted(message, botOpenID, botUserID)
+	}
+}
+
+func normalizedTriggerMode(mode string) string {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	switch normalized {
+	case config.TriggerModeActive, config.TriggerModePrefix:
+		return normalized
+	default:
+		return config.TriggerModeAt
+	}
+}
+
+func isGroupTriggerPrefixMatched(event *larkim.P2MessageReceiveV1, triggerPrefix string) bool {
+	prefix := strings.TrimSpace(triggerPrefix)
+	if prefix == "" {
+		return false
+	}
+	job, err := BuildJob(event)
+	if err != nil || job == nil {
+		return false
+	}
+	text := strings.TrimSpace(job.Text)
+	return strings.HasPrefix(text, prefix)
+}
+
+func normalizeIncomingGroupJobTextForTriggerMode(job *Job, triggerMode, triggerPrefix string) {
+	if job == nil || !isGroupChatType(job.ChatType) {
+		return
+	}
+	if normalizedTriggerMode(triggerMode) != config.TriggerModePrefix {
+		return
+	}
+	job.Text = trimGroupTriggerPrefix(job.Text, triggerPrefix)
+}
+
+func trimGroupTriggerPrefix(text, triggerPrefix string) string {
+	trimmedText := strings.TrimSpace(text)
+	prefix := strings.TrimSpace(triggerPrefix)
+	if prefix == "" {
+		return trimmedText
+	}
+	if !strings.HasPrefix(trimmedText, prefix) {
+		return trimmedText
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmedText, prefix))
 }
 
 func isGroupChatType(chatType string) bool {

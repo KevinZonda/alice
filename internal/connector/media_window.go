@@ -8,6 +8,7 @@ import (
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	"gitee.com/alicespace/alice/internal/config"
 	"gitee.com/alicespace/alice/internal/logging"
 )
 
@@ -32,6 +33,10 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return
 	}
+	triggerMode := normalizedTriggerMode(a.cfg.TriggerMode)
+	if !shouldApplyGroupContextWindow(triggerMode) {
+		return
+	}
 	message := event.Event.Message
 	if !isGroupChatType(deref(message.ChatType)) {
 		return
@@ -39,7 +44,9 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 	if accepted {
 		return
 	}
-	if strings.TrimSpace(a.cfg.FeishuBotOpenID) == "" && strings.TrimSpace(a.cfg.FeishuBotUserID) == "" {
+	if triggerMode == config.TriggerModeAt &&
+		strings.TrimSpace(a.cfg.FeishuBotOpenID) == "" &&
+		strings.TrimSpace(a.cfg.FeishuBotUserID) == "" {
 		return
 	}
 	if !isSupportedIncomingMessageType(deref(message.MessageType)) {
@@ -101,6 +108,9 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 
 func (a *App) mergeRecentGroupContextWindow(job *Job) {
 	if job == nil {
+		return
+	}
+	if !shouldApplyGroupContextWindow(normalizedTriggerMode(a.cfg.TriggerMode)) {
 		return
 	}
 	if !isGroupChatType(job.ChatType) {
@@ -211,6 +221,15 @@ func (a *App) mergeRecentGroupContextWindow(job *Job) {
 		len(selected),
 		mergedAttachments,
 	)
+}
+
+func shouldApplyGroupContextWindow(triggerMode string) bool {
+	switch normalizedTriggerMode(triggerMode) {
+	case config.TriggerModeAt, config.TriggerModePrefix:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *App) buildSyntheticMentionJob(event *larkim.P2MessageReceiveV1) (*Job, bool) {

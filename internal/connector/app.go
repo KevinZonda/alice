@@ -222,12 +222,19 @@ func (a *App) workerLoop(ctx context.Context, idx int) {
 
 func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 	logIncomingEventDebug(event)
-	accepted := shouldProcessIncomingMessage(event, a.cfg.FeishuBotOpenID, a.cfg.FeishuBotUserID)
+	accepted := shouldProcessIncomingMessage(
+		event,
+		a.cfg.TriggerMode,
+		a.cfg.TriggerPrefix,
+		a.cfg.FeishuBotOpenID,
+		a.cfg.FeishuBotUserID,
+	)
 	a.cacheGroupContextWindow(ctx, event, accepted)
 	if !accepted {
 		logging.Debugf(
-			"incoming message ignored source=feishu_im event_id=%s reason=group_without_bot_mention chat_type=%s",
+			"incoming message ignored source=feishu_im event_id=%s reason=group_trigger_unmatched trigger_mode=%s chat_type=%s",
 			eventID(event),
+			normalizedTriggerMode(a.cfg.TriggerMode),
 			strings.TrimSpace(deref(event.Event.Message.ChatType)),
 		)
 		return nil
@@ -251,6 +258,7 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 		logging.Debugf("incoming message rejected source=feishu_im event_id=%s err=%v", eventID(event), err)
 		return nil
 	}
+	normalizeIncomingGroupJobTextForTriggerMode(job, a.cfg.TriggerMode, a.cfg.TriggerPrefix)
 	if event != nil && event.Event != nil {
 		a.resolveJobSessionKey(job, event.Event.Message)
 	}

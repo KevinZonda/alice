@@ -99,6 +99,106 @@ func TestApp_OnMessageReceive_GroupMentionWithoutBotIDConfigNotQueued(t *testing
 	}
 }
 
+func TestApp_OnMessageReceive_GroupActiveModeWithoutMentionQueued(t *testing.T) {
+	cfg := configForTest()
+	cfg.TriggerMode = "active"
+	cfg.TriggerPrefix = "/silent"
+	app := NewApp(cfg, nil)
+
+	event := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_active_ok"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_active_ok"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"今天开会安排一下"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(app.queue); got != 1 {
+		t.Fatalf("expected queue len 1, got %d", got)
+	}
+}
+
+func TestApp_OnMessageReceive_GroupActiveModePrefixIgnored(t *testing.T) {
+	cfg := configForTest()
+	cfg.TriggerMode = "active"
+	cfg.TriggerPrefix = "/silent"
+	app := NewApp(cfg, nil)
+
+	event := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_active_ignored"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_active_ignored"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"/silent 这条不用回复"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(app.queue); got != 0 {
+		t.Fatalf("expected queue len 0, got %d", got)
+	}
+}
+
+func TestApp_OnMessageReceive_GroupPrefixModeRequiresPrefix(t *testing.T) {
+	cfg := configForTest()
+	cfg.TriggerMode = "prefix"
+	cfg.TriggerPrefix = "!alice"
+	app := NewApp(cfg, nil)
+
+	withoutPrefix := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_prefix_miss"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_prefix_miss"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"帮我总结今天的进展"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+	withPrefix := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_prefix_hit"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_prefix_hit"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"!alice 帮我总结今天的进展"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), withoutPrefix); err != nil {
+		t.Fatalf("unexpected without-prefix error: %v", err)
+	}
+	if err := app.onMessageReceive(context.Background(), withPrefix); err != nil {
+		t.Fatalf("unexpected with-prefix error: %v", err)
+	}
+	if got := len(app.queue); got != 1 {
+		t.Fatalf("expected queue len 1, got %d", got)
+	}
+	job := <-app.queue
+	if job.Text != "帮我总结今天的进展" {
+		t.Fatalf("expected prefix removed from queued text, got %q", job.Text)
+	}
+}
+
 func TestApp_OnMessageReceive_SameFeishuThreadSharesSessionKey(t *testing.T) {
 	cfg := configForTest()
 	app := NewApp(cfg, nil)
