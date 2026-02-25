@@ -1,4 +1,12 @@
-.PHONY: fmt fmt-check vet test secret-check check precommit-install
+.DEFAULT_GOAL := build
+
+.PHONY: build run fmt fmt-check vet test secret-check check precommit-install
+
+build:
+	go build -o bin/alice-connector ./cmd/connector
+
+run:
+	go run ./cmd/connector -c config.yaml
 
 fmt:
 	gofmt -w $(shell find . -name '*.go' -type f)
