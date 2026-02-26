@@ -1,0 +1,10 @@
+.git
+.githooks
+.cache
+.codex
+.memory
+bin
+
+config.yaml
+
+**/*.log
