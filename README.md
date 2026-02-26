@@ -158,16 +158,16 @@ Optional:
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
 - `group_context_window_minutes`: sliding window duration (minutes) for caching non-triggered group messages (text + multimedia), merged on the next trigger in `at`/`prefix` mode (default `5`).
 - `trigger_mode`: group trigger strategy. Supported values: `at` (default), `active`, `prefix`.
-- `trigger_prefix`: prefix used by group trigger strategy. In `active`, messages starting with this prefix are ignored; in `prefix`, only messages starting with this prefix are processed and the prefix is stripped before sending to Codex.
-- `feishu_bot_open_id` / `feishu_bot_user_id`: bot IDs used by `trigger_mode=at` for strict mention filtering.
+- `trigger_prefix`: prefix used by group trigger strategy. In `active`, messages starting with this prefix are ignored unless they mention the bot; in `prefix`, messages are processed when either the prefix matches or the bot is mentioned. When the prefix matches in `prefix` mode, it is stripped before sending to Codex.
+- `feishu_bot_open_id` / `feishu_bot_user_id`: bot IDs used for mention matching in group/topic-group chats.
 
 ## Runtime behavior
 
 - Supported incoming message types: `text`, `image`, `sticker`, `audio`, `file`.
 - Group/topic-group trigger behavior is controlled by `trigger_mode`:
   - `at`: only messages mentioning bot IDs are processed. If both `feishu_bot_open_id` and `feishu_bot_user_id` are empty, group/topic-group messages are ignored.
-  - `active`: all group/topic-group messages are processed, except messages starting with `trigger_prefix`.
-  - `prefix`: only group/topic-group messages starting with `trigger_prefix` are processed.
+  - `active`: all group/topic-group messages are processed, except messages starting with `trigger_prefix`; bot mentions still force processing.
+  - `prefix`: messages are processed when they start with `trigger_prefix` or mention bot IDs.
 - Group context window (`group_context_window_minutes`) is applied in `trigger_mode=at` and `trigger_mode=prefix`: non-trigger messages are cached, then merged on the next trigger in the same sender/chat thread scope.
 - Mention tags like `<at ...>...</at>` are removed from text before sending to Codex.
 - Prompt speaker context still injects id mappings and mention text for participants, with an explicit hint that `@name`/`@id` can be used directly, but it filters out the bot's own identity (`feishu_bot_open_id`/`feishu_bot_user_id`) from those injected lines.

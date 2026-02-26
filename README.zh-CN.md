@@ -154,8 +154,10 @@ log_level: "info"
 - `codex_mcp_server_name`：注册到 LLM MCP 的服务名（默认 `alice-feishu`）。
 - `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `600`。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
-- `group_context_window_minutes`：群聊中未艾特机器人的消息缓存窗口（分钟，默认 `5`）。窗口内文本与多媒体会在后续艾特触发时并入上下文。
-- `feishu_bot_open_id` / `feishu_bot_user_id`：用于群聊严格艾特过滤的机器人 ID。群聊中只有艾特命中这些 ID 的消息才会触发处理。
+- `group_context_window_minutes`：群聊未触发消息的缓存窗口（分钟，默认 `5`）。窗口内文本与多媒体会在后续触发时并入上下文（`at`/`prefix` 模式）。
+- `trigger_mode`：群聊触发策略，支持 `at`（默认）、`active`、`prefix`。
+- `trigger_prefix`：群聊触发前缀。`active` 下命中此前缀会忽略，但艾特机器人仍会触发；`prefix` 下“命中前缀”或“艾特机器人”任一满足即触发。`prefix` 模式下命中前缀时会在发送给 Codex 前剥离前缀。
+- `feishu_bot_open_id` / `feishu_bot_user_id`：群聊/话题群中用于匹配机器人艾特的 ID。
 
 ## 隔离运行（独立用户）
 
@@ -166,10 +168,12 @@ log_level: "info"
 ## 运行行为
 
 - 支持接收消息类型：`text`、`image`、`sticker`、`audio`、`file`。
-- 群聊/话题群中，仅处理艾特机器人的消息。
-  - 若 `feishu_bot_open_id` 与 `feishu_bot_user_id` 都为空，则群聊/话题群消息全部忽略。
-- 群聊/话题群中未艾特机器人的消息会按“同群同人”进入滑动窗口缓存（时长由 `group_context_window_minutes` 配置），缓存内容包含文本与多媒体。
-- 同一用户后续在该群艾特机器人触发时，会把窗口内缓存的文本与多媒体并入本次上下文；thread 消息会按 `thread_id`/`root_id` 隔离，不跨 thread 混入。
+- 群聊/话题群触发由 `trigger_mode` 控制：
+  - `at`：仅处理艾特机器人的消息。若 `feishu_bot_open_id` 与 `feishu_bot_user_id` 都为空，则群聊/话题群消息全部忽略。
+  - `active`：默认处理所有消息，但命中 `trigger_prefix` 的消息会忽略；若同时艾特机器人，仍会处理。
+  - `prefix`：命中 `trigger_prefix` 或艾特机器人的消息会处理。
+- 在 `trigger_mode=at` 和 `trigger_mode=prefix` 下，群聊/话题群中未触发消息会按“同群同人”进入滑动窗口缓存（时长由 `group_context_window_minutes` 配置），缓存内容包含文本与多媒体。
+- 同一用户后续在该群再次触发时，会把窗口内缓存的文本与多媒体并入本次上下文；thread 消息会按 `thread_id`/`root_id` 隔离，不跨 thread 混入。
 - 群聊中的 `<at ...>...</at>` 会先清理，再发送给 Codex。
 - 说话人上下文仍会注入参与者的 id 映射和 `@提及` 文本，并附带“可直接使用 `@姓名`/`@id`”提示，但会过滤机器人自身身份（`feishu_bot_open_id`/`feishu_bot_user_id`）对应的注入内容。
 - 发送回复时会基于当前消息上下文中的身份信息，把 `@姓名`/`@id` 自动规范化为飞书 mention 标签（`<at user_id="...">...</at>`）。

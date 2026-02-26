@@ -264,14 +264,15 @@ func shouldProcessIncomingMessage(
 	if !isGroupChatType(deref(message.ChatType)) {
 		return true
 	}
+	mentionAccepted := isGroupMentionAccepted(message, botOpenID, botUserID)
 
 	switch normalizedTriggerMode(triggerMode) {
 	case config.TriggerModeActive:
-		return !isGroupTriggerPrefixMatched(event, triggerPrefix)
+		return mentionAccepted || !isGroupTriggerPrefixMatched(event, triggerPrefix)
 	case config.TriggerModePrefix:
-		return isGroupTriggerPrefixMatched(event, triggerPrefix)
+		return mentionAccepted || isGroupTriggerPrefixMatched(event, triggerPrefix)
 	default:
-		return isGroupMentionAccepted(message, botOpenID, botUserID)
+		return mentionAccepted
 	}
 }
 
