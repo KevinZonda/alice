@@ -179,10 +179,37 @@ func (a *App) workerLoop(ctx context.Context, idx int) {
 				a.completePendingJob(job)
 				continue
 			}
+			if a.isSupersededJob(sessionKey, job.SessionVersion) {
+				log.Printf(
+					"drop superseded job event_id=%s session=%s version=%d",
+					job.EventID,
+					job.SessionKey,
+					job.SessionVersion,
+				)
+				a.completePendingJob(job)
+				continue
+			}
 
 			sessionMu := a.sessionMutex(sessionKey)
 			sessionMu.Lock()
-			result := a.processor.ProcessJobState(ctx, job)
+			if a.isSupersededJob(sessionKey, job.SessionVersion) {
+				sessionMu.Unlock()
+				log.Printf(
+					"drop superseded job after lock event_id=%s session=%s version=%d",
+					job.EventID,
+					job.SessionKey,
+					job.SessionVersion,
+				)
+				a.completePendingJob(job)
+				continue
+			}
+			runCtx, cancelRun := context.WithCancelCause(ctx)
+			a.setActiveRun(sessionKey, job.SessionVersion, job.EventID, func() {
+				cancelRun(errSessionInterrupted)
+			})
+			result := a.processor.ProcessJobState(runCtx, job)
+			cancelRun(nil)
+			a.clearActiveRun(sessionKey, job.SessionVersion)
 			sessionMu.Unlock()
 			switch result {
 			case JobProcessCompleted:
@@ -266,10 +293,20 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 	job.BotOpenID = strings.TrimSpace(a.cfg.FeishuBotOpenID)
 	job.BotUserID = strings.TrimSpace(a.cfg.FeishuBotUserID)
 
-	queued, _, _ := a.enqueueJob(job)
+	queued, cancelActive, canceledEventID := a.enqueueJob(job)
 	if !queued {
 		log.Printf("queue full, drop event_id=%s", job.EventID)
 		return nil
+	}
+	if cancelActive != nil {
+		cancelActive()
+		log.Printf(
+			"interrupt active job session=%s canceled_event_id=%s new_event_id=%s new_version=%d",
+			job.SessionKey,
+			canceledEventID,
+			job.EventID,
+			job.SessionVersion,
+		)
 	}
 	log.Printf(
 		"job queued event_id=%s receive_id_type=%s session=%s version=%d",
@@ -393,9 +430,19 @@ func (a *App) enqueueJob(job *Job) (queued bool, cancelActive context.CancelFunc
 
 	nextVersion := a.state.latest[job.SessionKey] + 1
 	job.SessionVersion = nextVersion
+	active, interruptActive := a.state.active[job.SessionKey]
+	interruptActive = interruptActive && active.cancel != nil && active.version < nextVersion
 
 	select {
 	case a.queue <- *job:
+		if interruptActive {
+			cancelActive = active.cancel
+			canceledEventID = active.eventID
+			if nextVersion > a.state.superseded[job.SessionKey] {
+				a.state.superseded[job.SessionKey] = nextVersion
+			}
+			a.removeOlderPendingJobsLocked(job.SessionKey, nextVersion)
+		}
 		a.state.latest[job.SessionKey] = nextVersion
 		a.rememberPendingJobLocked(*job)
 		return true, cancelActive, canceledEventID
@@ -410,6 +457,48 @@ func normalizeJobSessionKey(job Job) string {
 		return sessionKey
 	}
 	return buildSessionKey(job.ReceiveIDType, job.ReceiveID)
+}
+
+func (a *App) setActiveRun(sessionKey string, version uint64, eventID string, cancel context.CancelFunc) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || version == 0 || cancel == nil {
+		return
+	}
+
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	a.state.active[sessionKey] = activeSessionRun{
+		eventID: strings.TrimSpace(eventID),
+		version: version,
+		cancel:  cancel,
+	}
+}
+
+func (a *App) clearActiveRun(sessionKey string, version uint64) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || version == 0 {
+		return
+	}
+
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	active, ok := a.state.active[sessionKey]
+	if !ok || active.version != version {
+		return
+	}
+	delete(a.state.active, sessionKey)
+}
+
+func (a *App) isSupersededJob(sessionKey string, version uint64) bool {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || version == 0 {
+		return false
+	}
+
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	cutoff := a.state.superseded[sessionKey]
+	return cutoff != 0 && version < cutoff
 }
 
 func (a *App) sessionMutex(sessionKey string) *sync.Mutex {

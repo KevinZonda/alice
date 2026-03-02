@@ -12,6 +12,14 @@ var mentionPattern = regexp.MustCompile(`<at[^>]*>.*?</at>`)
 var mentionUserIDPattern = regexp.MustCompile(`<at[^>]*\buser_id="([^"]+)"[^>]*>`)
 
 var ErrIgnoreMessage = errors.New("ignore message")
+var errSessionInterrupted = errors.New("session interrupted by newer message")
+
+func wasInterruptedByNewMessage(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	return errors.Is(context.Cause(ctx), errSessionInterrupted)
+}
 
 type MemoryManager interface {
 	BuildPrompt(userText string) (string, error)

@@ -135,6 +135,79 @@ func (c *blockingResumableCodexStub) CallCount() int {
 	return c.calls
 }
 
+type interruptibleResumableCodexStub struct {
+	mu sync.Mutex
+
+	started       chan struct{}
+	firstCallDone chan struct{}
+
+	callCount    int
+	threadByCall []string
+	inputByCall  []string
+}
+
+func newInterruptibleResumableCodexStub() *interruptibleResumableCodexStub {
+	return &interruptibleResumableCodexStub{
+		started:       make(chan struct{}, 8),
+		firstCallDone: make(chan struct{}),
+	}
+}
+
+func (c *interruptibleResumableCodexStub) Run(
+	ctx context.Context,
+	req llm.RunRequest,
+) (llm.RunResult, error) {
+	c.mu.Lock()
+	callIndex := c.callCount
+	c.callCount++
+	c.threadByCall = append(c.threadByCall, strings.TrimSpace(req.ThreadID))
+	c.inputByCall = append(c.inputByCall, req.UserText)
+	c.mu.Unlock()
+
+	select {
+	case c.started <- struct{}{}:
+	default:
+	}
+
+	if callIndex == 0 {
+		select {
+		case <-ctx.Done():
+			close(c.firstCallDone)
+			return llm.RunResult{NextThreadID: "thread_after_interrupt"}, ctx.Err()
+		case <-c.firstCallDone:
+			return llm.RunResult{Reply: "unexpected release"}, nil
+		}
+	}
+
+	return llm.RunResult{
+		Reply:        "latest answer",
+		NextThreadID: strings.TrimSpace(req.ThreadID),
+	}, nil
+}
+
+func (c *interruptibleResumableCodexStub) WaitForCall(t *testing.T, count int) {
+	t.Helper()
+	for i := 0; i < count; i++ {
+		select {
+		case <-c.started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for codex call %d", i+1)
+		}
+	}
+}
+
+func (c *interruptibleResumableCodexStub) CallCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.callCount
+}
+
+func (c *interruptibleResumableCodexStub) ThreadIDs() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.threadByCall...)
+}
+
 func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool, message string) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

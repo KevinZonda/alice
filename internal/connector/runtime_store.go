@@ -1,6 +1,15 @@
 package connector
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
+
+type activeSessionRun struct {
+	eventID string
+	version uint64
+	cancel  context.CancelFunc
+}
 
 // runtimeStore groups mutable connector runtime state in one place so App can
 // focus on orchestration instead of map-level bookkeeping.
@@ -10,6 +19,8 @@ type runtimeStore struct {
 	pending     map[string]Job
 	mediaWindow map[string][]mediaWindowEntry
 	sessionMu   map[string]*sync.Mutex
+	active      map[string]activeSessionRun
+	superseded  map[string]uint64
 
 	runtimeStatePath           string
 	runtimeStateVersion        uint64
@@ -22,5 +33,7 @@ func newRuntimeStore() *runtimeStore {
 		pending:     make(map[string]Job),
 		mediaWindow: make(map[string][]mediaWindowEntry),
 		sessionMu:   make(map[string]*sync.Mutex),
+		active:      make(map[string]activeSessionRun),
+		superseded:  make(map[string]uint64),
 	}
 }

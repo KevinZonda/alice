@@ -43,13 +43,68 @@ func TestApp_EnqueueJobAssignsVersion(t *testing.T) {
 	}
 }
 
-func TestApp_WorkerLoopSerializesSameSession(t *testing.T) {
+func TestApp_EnqueueJobInterruptsActiveSession(t *testing.T) {
 	cfg := configForTest()
-	cfg.WorkerConcurrency = 2
-	blockingCodex := newBlockingResumableCodexStub()
+	app := NewApp(cfg, nil)
+
+	canceled := false
+	app.state.latest["chat_id:oc_chat|thread:omt_thread_1"] = 1
+	app.state.pending["session:chat_id:oc_chat|thread:omt_thread_1#1"] = Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SessionKey:      "chat_id:oc_chat|thread:omt_thread_1",
+		SessionVersion:  1,
+		EventID:         "evt_active",
+		SourceMessageID: "om_active",
+		Text:            "first",
+	}
+	app.state.active["chat_id:oc_chat|thread:omt_thread_1"] = activeSessionRun{
+		eventID: "evt_active",
+		version: 1,
+		cancel: func() {
+			canceled = true
+		},
+	}
+
+	job := &Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SessionKey:      "chat_id:oc_chat|thread:omt_thread_1",
+		EventID:         "evt_new",
+		SourceMessageID: "om_new",
+		Text:            "latest",
+	}
+	queued, cancelActive, canceledEventID := app.enqueueJob(job)
+	if !queued {
+		t.Fatal("expected job to be queued")
+	}
+	if cancelActive == nil {
+		t.Fatal("expected active session cancel func")
+	}
+	if canceledEventID != "evt_active" {
+		t.Fatalf("unexpected canceled event id: %q", canceledEventID)
+	}
+	if job.SessionVersion != 2 {
+		t.Fatalf("unexpected new session version: %d", job.SessionVersion)
+	}
+	cancelActive()
+	if !canceled {
+		t.Fatal("expected active cancel func to be invoked")
+	}
+	if got := app.state.superseded[job.SessionKey]; got != 2 {
+		t.Fatalf("expected superseded version 2, got %d", got)
+	}
+	if _, ok := app.state.pending["session:chat_id:oc_chat|thread:omt_thread_1#1"]; ok {
+		t.Fatal("expected older pending job to be removed")
+	}
+}
+
+func TestApp_WorkerLoopInterruptsSameSessionAndResumesLatest(t *testing.T) {
+	cfg := configForTest()
+	interruptibleCodex := newInterruptibleResumableCodexStub()
 	sender := &senderStub{}
 	processor := NewProcessor(
-		blockingCodex,
+		interruptibleCodex,
 		sender,
 		"Codex 暂时不可用，请稍后重试。",
 		"正在思考中...",
@@ -59,7 +114,6 @@ func TestApp_WorkerLoopSerializesSameSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.workerLoop(ctx, 0)
-	go app.workerLoop(ctx, 1)
 
 	first := &Job{
 		ReceiveID:       "oc_chat",
@@ -77,30 +131,55 @@ func TestApp_WorkerLoopSerializesSameSession(t *testing.T) {
 		SourceMessageID: "om_serial_2",
 		Text:            "second",
 	}
-	if queued, _, _ := app.enqueueJob(first); !queued {
+	if queued, cancelActive, _ := app.enqueueJob(first); !queued {
 		t.Fatal("expected first job to be queued")
+	} else if cancelActive != nil {
+		t.Fatal("expected first job not to interrupt an active run")
 	}
-	if queued, _, _ := app.enqueueJob(second); !queued {
+	interruptibleCodex.WaitForCall(t, 1)
+
+	queued, cancelActive, canceledEventID := app.enqueueJob(second)
+	if !queued {
 		t.Fatal("expected second job to be queued")
 	}
-
-	waitForCondition(t, 2*time.Second, func() bool {
-		return blockingCodex.CallCount() == 1
-	}, "expected first same-session call to start")
-	time.Sleep(150 * time.Millisecond)
-	if got := blockingCodex.CallCount(); got != 1 {
-		t.Fatalf("expected same session to stay serialized while first call is running, got %d calls", got)
+	if cancelActive == nil {
+		t.Fatal("expected second job to interrupt the active run")
 	}
-
-	blockingCodex.Release()
+	if canceledEventID != first.EventID {
+		t.Fatalf("unexpected canceled event id: %q", canceledEventID)
+	}
+	cancelActive()
 	waitForCondition(t, 2*time.Second, func() bool {
-		return blockingCodex.CallCount() == 2
-	}, "expected second same-session call to start after first finishes")
+		return interruptibleCodex.CallCount() == 2
+	}, "expected latest same-session call to resume after interruption")
 	waitForCondition(t, 2*time.Second, func() bool {
 		app.state.mu.Lock()
 		defer app.state.mu.Unlock()
 		return len(app.state.pending) == 0
-	}, "expected serialized jobs to complete and clear pending state")
+	}, "expected interrupted and latest jobs to clear pending state")
+
+	threadIDs := interruptibleCodex.ThreadIDs()
+	if len(threadIDs) != 2 {
+		t.Fatalf("expected 2 codex calls, got %#v", threadIDs)
+	}
+	if threadIDs[0] != "" {
+		t.Fatalf("expected first call to start a new thread, got %q", threadIDs[0])
+	}
+	if threadIDs[1] != "thread_after_interrupt" {
+		t.Fatalf("expected second call to resume interrupted thread, got %q", threadIDs[1])
+	}
+	if sender.replyCardCalls != 4 {
+		t.Fatalf("expected interrupted flow to send 4 reply cards, got %d", sender.replyCardCalls)
+	}
+	if len(sender.replyCards) != 4 {
+		t.Fatalf("unexpected reply card history: %#v", sender.replyCards)
+	}
+	if !strings.Contains(sender.replyCards[1], "已中断") {
+		t.Fatalf("expected interrupted card for first reply, got %q", sender.replyCards[1])
+	}
+	if !strings.Contains(sender.replyCards[3], "latest answer") {
+		t.Fatalf("expected final card for latest reply, got %q", sender.replyCards[3])
+	}
 }
 
 func TestApp_WorkerLoopAllowsParallelDifferentSessions(t *testing.T) {

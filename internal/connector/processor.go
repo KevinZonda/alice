@@ -118,6 +118,11 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 	)
 	p.setThreadID(sessionKey, nextThreadID)
 	if errors.Is(err, context.Canceled) {
+		if wasInterruptedByNewMessage(ctx) {
+			log.Printf("llm interrupted by newer message event_id=%s", job.EventID)
+			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
+			return JobProcessRetryAfterRestart
+		}
 		if ctx.Err() != nil && isRestartIntentJob(job) {
 			logging.Debugf(
 				"job state decided event_id=%s state=%s reason=shutdown_restart_intent",
@@ -199,6 +204,18 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	)
 	p.setThreadID(sessionKey, nextThreadID)
 	if errors.Is(runErr, context.Canceled) {
+		if wasInterruptedByNewMessage(ctx) {
+			notifyCtx := context.WithoutCancel(ctx)
+			if ackMessageID != "" {
+				if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+					log.Printf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+				}
+			} else if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+				log.Printf("fallback interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+			}
+			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
+			return JobProcessRetryAfterRestart
+		}
 		// Parent context cancellation usually means app shutdown.
 		if ctx.Err() != nil {
 			if isRestartIntentJob(job) {
@@ -216,11 +233,12 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			)
 			return JobProcessRetryAfterRestart
 		}
+		notifyCtx := context.WithoutCancel(ctx)
 		if ackMessageID != "" {
-			if _, replyErr := p.replyCardWithFallback(ctx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+			if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 				log.Printf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 			}
-		} else if _, replyErr := p.replyCardWithFallback(ctx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+		} else if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 			log.Printf("fallback interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 		}
 		logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
