@@ -336,6 +336,119 @@ func TestCodeArmyStatusGet_CurrentSession(t *testing.T) {
 	if result == nil || result.IsError {
 		t.Fatalf("expected non-error status result, got %#v", result)
 	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %#v", result.StructuredContent)
+	}
+	if structured["session_key"] != sessionKey {
+		t.Fatalf("expected session_key %q, got %#v", sessionKey, structured["session_key"])
+	}
+	if structured["count"] != 1 {
+		t.Fatalf("expected count=1, got %#v", structured["count"])
+	}
+	states, ok := structured["states"].([]codearmy.StateSnapshot)
+	if !ok {
+		t.Fatalf("expected states payload, got %#v", structured["states"])
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 state in current session, got %#v", states)
+	}
+	if states[0].Phase != "reviewer" || states[0].Iteration != 2 {
+		t.Fatalf("unexpected state payload: %+v", states[0])
+	}
+}
+
+func TestCodeArmyStatusGet_OtherSessionCannotReadState(t *testing.T) {
+	stateDir := t.TempDir()
+	ownerSessionKey := "chat_id:oc_group|thread:omt_alpha"
+	otherSessionKey := "chat_id:oc_group|thread:omt_beta"
+	ownerSessionDir := filepath.Join(stateDir, "chat_id_oc_group_thread_omt_alpha")
+	if err := os.MkdirAll(ownerSessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir owner session dir failed: %v", err)
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version":       1,
+		"workflow":      "code_army",
+		"key":           "default",
+		"session_key":   ownerSessionKey,
+		"task_id":       "task_001",
+		"phase":         "worker",
+		"iteration":     1,
+		"objective":     "推进 code army",
+		"last_decision": "",
+		"updated_at":    time.Date(2026, 3, 3, 4, 5, 6, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("marshal state failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ownerSessionDir, "default.json"), raw, 0o644); err != nil {
+		t.Fatalf("write state file failed: %v", err)
+	}
+
+	svc := &service{
+		sender:         &senderStub{},
+		codeArmyStatus: codearmy.NewInspector(stateDir),
+		getenv: func(key string) string {
+			switch key {
+			case mcpbridge.EnvReceiveIDType:
+				return "chat_id"
+			case mcpbridge.EnvReceiveID:
+				return "oc_group"
+			case mcpbridge.EnvActorUserID:
+				return "ou_actor"
+			case mcpbridge.EnvChatType:
+				return "group"
+			case mcpbridge.EnvSessionKey:
+				return otherSessionKey
+			default:
+				return ""
+			}
+		},
+	}
+
+	listResult, err := svc.handleCodeArmyStatusGet(context.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("unexpected status list handler error: %v", err)
+	}
+	if listResult == nil || listResult.IsError {
+		t.Fatalf("expected non-error empty list result, got %#v", listResult)
+	}
+	structured, ok := listResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %#v", listResult.StructuredContent)
+	}
+	if structured["session_key"] != otherSessionKey {
+		t.Fatalf("expected session_key %q, got %#v", otherSessionKey, structured["session_key"])
+	}
+	if structured["count"] != 0 {
+		t.Fatalf("expected count=0 for other session, got %#v", structured["count"])
+	}
+	states, ok := structured["states"].([]codearmy.StateSnapshot)
+	if !ok {
+		t.Fatalf("expected states payload, got %#v", structured["states"])
+	}
+	if len(states) != 0 {
+		t.Fatalf("expected no states for other session, got %#v", states)
+	}
+
+	getResult, err := svc.handleCodeArmyStatusGet(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"state_key": "default",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected status get handler error: %v", err)
+	}
+	if getResult == nil || !getResult.IsError {
+		t.Fatalf("expected state not found error for other session, got %#v", getResult)
+	}
+	if len(getResult.Content) == 0 {
+		t.Fatalf("expected error content for other session lookup, got %#v", getResult)
+	}
+	firstText, ok := getResult.Content[0].(mcp.TextContent)
+	if !ok || firstText.Text != "code_army state not found in current conversation" {
+		t.Fatalf("unexpected other-session error payload: %#v", getResult.Content)
+	}
 }
 
 func TestAutomationTaskCreate_MaxRuns(t *testing.T) {

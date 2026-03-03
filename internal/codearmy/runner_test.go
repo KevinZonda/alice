@@ -34,6 +34,7 @@ func (b *backendStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResult,
 
 func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), "code_army")
+	sessionKey := "chat_id:oc_group|thread:omt_alpha"
 	backend := &backendStub{
 		results: []llm.RunResult{
 			{Reply: "manager plan", NextThreadID: "thread-manager"},
@@ -54,8 +55,42 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 		Profile:  "worker-cheap",
 		Env: map[string]string{
 			"ALICE_MCP_RECEIVE_ID":  "oc_group",
-			"ALICE_MCP_SESSION_KEY": "chat_id:oc_group|thread:omt_alpha",
+			"ALICE_MCP_SESSION_KEY": sessionKey,
 		},
+	}
+	statePath := runner.stateFilePath(sessionKey, "default")
+	loadState := func() workflowState {
+		t.Helper()
+		raw, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatalf("read state file failed: %v", err)
+		}
+		var state workflowState
+		if err := json.Unmarshal(raw, &state); err != nil {
+			t.Fatalf("parse state file failed: %v", err)
+		}
+		return state
+	}
+	assertHistory := func(state workflowState, want []struct {
+		phase          string
+		summaryContain string
+		decision       string
+	}) {
+		t.Helper()
+		if len(state.History) != len(want) {
+			t.Fatalf("expected %d history records, got %+v", len(want), state.History)
+		}
+		for i, item := range want {
+			if state.History[i].Phase != item.phase {
+				t.Fatalf("expected history[%d] phase %q, got %+v", i, item.phase, state.History[i])
+			}
+			if !strings.Contains(state.History[i].Summary, item.summaryContain) {
+				t.Fatalf("expected history[%d] summary to contain %q, got %+v", i, item.summaryContain, state.History[i])
+			}
+			if state.History[i].Decision != item.decision {
+				t.Fatalf("expected history[%d] decision %q, got %+v", i, item.decision, state.History[i])
+			}
+		}
 	}
 
 	msg1, err := runner.Run(context.Background(), req)
@@ -65,6 +100,26 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	if !strings.Contains(msg1.Message, "manager") {
 		t.Fatalf("unexpected manager message: %q", msg1.Message)
 	}
+	state := loadState()
+	if state.SessionKey != sessionKey {
+		t.Fatalf("expected session key %q after manager run, got %+v", sessionKey, state)
+	}
+	if state.Phase != phaseWorker {
+		t.Fatalf("expected next phase worker after manager run, got %+v", state)
+	}
+	if state.Iteration != 1 {
+		t.Fatalf("expected iteration 1 after manager run, got %d", state.Iteration)
+	}
+	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "" || state.ReviewerThreadID != "" {
+		t.Fatalf("unexpected thread ids after manager run: %+v", state)
+	}
+	assertHistory(state, []struct {
+		phase          string
+		summaryContain string
+		decision       string
+	}{
+		{phase: phaseManager, summaryContain: "manager plan"},
+	})
 
 	msg2, err := runner.Run(context.Background(), req)
 	if err != nil {
@@ -73,6 +128,27 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	if !strings.Contains(msg2.Message, "worker") {
 		t.Fatalf("unexpected worker message: %q", msg2.Message)
 	}
+	state = loadState()
+	if state.SessionKey != sessionKey {
+		t.Fatalf("expected session key %q after worker run, got %+v", sessionKey, state)
+	}
+	if state.Phase != phaseReviewer {
+		t.Fatalf("expected next phase reviewer after worker run, got %+v", state)
+	}
+	if state.Iteration != 1 {
+		t.Fatalf("expected iteration 1 after worker run, got %d", state.Iteration)
+	}
+	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "thread-worker" || state.ReviewerThreadID != "" {
+		t.Fatalf("unexpected thread ids after worker run: %+v", state)
+	}
+	assertHistory(state, []struct {
+		phase          string
+		summaryContain string
+		decision       string
+	}{
+		{phase: phaseManager, summaryContain: "manager plan"},
+		{phase: phaseWorker, summaryContain: "worker output"},
+	})
 
 	msg3, err := runner.Run(context.Background(), req)
 	if err != nil {
@@ -81,6 +157,31 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	if !strings.Contains(strings.ToUpper(msg3.Message), "PASS") {
 		t.Fatalf("unexpected reviewer message: %q", msg3.Message)
 	}
+	state = loadState()
+	if state.SessionKey != sessionKey {
+		t.Fatalf("expected session key %q after reviewer run, got %+v", sessionKey, state)
+	}
+	if state.Phase != phaseGate {
+		t.Fatalf("expected next phase gate after reviewer run, got %+v", state)
+	}
+	if state.Iteration != 1 {
+		t.Fatalf("expected iteration 1 after reviewer run, got %d", state.Iteration)
+	}
+	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "thread-worker" || state.ReviewerThreadID != "thread-reviewer" {
+		t.Fatalf("unexpected thread ids after reviewer run: %+v", state)
+	}
+	if state.LastDecision != decisionPass {
+		t.Fatalf("expected reviewer decision pass, got %+v", state)
+	}
+	assertHistory(state, []struct {
+		phase          string
+		summaryContain string
+		decision       string
+	}{
+		{phase: phaseManager, summaryContain: "manager plan"},
+		{phase: phaseWorker, summaryContain: "worker output"},
+		{phase: phaseReviewer, summaryContain: "review details", decision: decisionPass},
+	})
 
 	msg4, err := runner.Run(context.Background(), req)
 	if err != nil {
@@ -89,6 +190,29 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	if !strings.Contains(msg4.Message, "通过") {
 		t.Fatalf("unexpected gate message: %q", msg4.Message)
 	}
+	state = loadState()
+	if state.SessionKey != sessionKey {
+		t.Fatalf("expected session key %q after gate run, got %+v", sessionKey, state)
+	}
+	if state.Phase != phaseManager {
+		t.Fatalf("expected gate pass to switch phase to manager, got %+v", state)
+	}
+	if state.Iteration != 2 {
+		t.Fatalf("expected iteration increment to 2, got %+v", state)
+	}
+	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "thread-worker" || state.ReviewerThreadID != "thread-reviewer" {
+		t.Fatalf("unexpected thread ids after gate run: %+v", state)
+	}
+	assertHistory(state, []struct {
+		phase          string
+		summaryContain string
+		decision       string
+	}{
+		{phase: phaseManager, summaryContain: "manager plan"},
+		{phase: phaseWorker, summaryContain: "worker output"},
+		{phase: phaseReviewer, summaryContain: "review details", decision: decisionPass},
+		{phase: phaseGate, summaryContain: "gate passed", decision: decisionPass},
+	})
 
 	backend.mu.Lock()
 	if len(backend.calls) != 3 {
@@ -106,26 +230,4 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 		}
 	}
 	backend.mu.Unlock()
-
-	statePath := runner.stateFilePath("chat_id:oc_group|thread:omt_alpha", "default")
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		t.Fatalf("read state file failed: %v", err)
-	}
-	var state workflowState
-	if err := json.Unmarshal(raw, &state); err != nil {
-		t.Fatalf("parse state file failed: %v", err)
-	}
-	if state.Phase != phaseManager {
-		t.Fatalf("expected gate pass to switch phase to manager, got %q", state.Phase)
-	}
-	if state.Iteration != 2 {
-		t.Fatalf("expected iteration increment to 2, got %d", state.Iteration)
-	}
-	if state.ManagerThreadID == "" || state.WorkerThreadID == "" || state.ReviewerThreadID == "" {
-		t.Fatalf("expected role thread ids persisted, got %+v", state)
-	}
-	if state.SessionKey != "chat_id:oc_group|thread:omt_alpha" {
-		t.Fatalf("expected session key persisted, got %+v", state)
-	}
 }
