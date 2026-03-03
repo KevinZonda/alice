@@ -168,3 +168,105 @@ func TestStore_ClaimDueTasks_MaxRunsPausesTask(t *testing.T) {
 		t.Fatalf("expected no tasks after max_runs reached, got %+v", secondClaim)
 	}
 }
+
+func TestStore_ClaimDueTasks_SkipsRunningTaskUntilResultRecorded(t *testing.T) {
+	base := time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC)
+	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store.now = func() time.Time { return base }
+
+	created, err := store.CreateTask(Task{
+		Title: "串行执行",
+		Scope: Scope{Kind: ScopeKindUser, ID: "ou_actor"},
+		Route: Route{ReceiveIDType: "user_id", ReceiveID: "ou_actor"},
+		Creator: Actor{
+			UserID: "ou_actor",
+		},
+		Schedule: Schedule{Type: ScheduleTypeInterval, EverySeconds: 60},
+		Action:   Action{Type: ActionTypeSendText, Text: "hello"},
+	})
+	if err != nil {
+		t.Fatalf("create task failed: %v", err)
+	}
+
+	firstClaimAt := base.Add(2 * time.Minute)
+	firstClaim, err := store.ClaimDueTasks(firstClaimAt, 10)
+	if err != nil {
+		t.Fatalf("first claim failed: %v", err)
+	}
+	if len(firstClaim) != 1 || firstClaim[0].ID != created.ID {
+		t.Fatalf("unexpected first claim: %+v", firstClaim)
+	}
+
+	running, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get running task failed: %v", err)
+	}
+	if !running.Running {
+		t.Fatalf("expected task to be marked running, task=%+v", running)
+	}
+
+	secondClaimAt := base.Add(3 * time.Minute)
+	secondClaim, err := store.ClaimDueTasks(secondClaimAt, 10)
+	if err != nil {
+		t.Fatalf("second claim failed: %v", err)
+	}
+	if len(secondClaim) != 0 {
+		t.Fatalf("expected running task to be skipped, got %+v", secondClaim)
+	}
+
+	if err := store.RecordTaskResult(created.ID, secondClaimAt, nil); err != nil {
+		t.Fatalf("record result failed: %v", err)
+	}
+
+	cleared, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get cleared task failed: %v", err)
+	}
+	if cleared.Running {
+		t.Fatalf("expected running flag to be cleared, task=%+v", cleared)
+	}
+
+	thirdClaim, err := store.ClaimDueTasks(secondClaimAt, 10)
+	if err != nil {
+		t.Fatalf("third claim failed: %v", err)
+	}
+	if len(thirdClaim) != 1 || thirdClaim[0].ID != created.ID {
+		t.Fatalf("expected task to become claimable after result, got %+v", thirdClaim)
+	}
+}
+
+func TestStore_ResetRunningTasks(t *testing.T) {
+	base := time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC)
+	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store.now = func() time.Time { return base }
+
+	created, err := store.CreateTask(Task{
+		Title: "恢复中的任务",
+		Scope: Scope{Kind: ScopeKindUser, ID: "ou_actor"},
+		Route: Route{ReceiveIDType: "user_id", ReceiveID: "ou_actor"},
+		Creator: Actor{
+			UserID: "ou_actor",
+		},
+		Schedule: Schedule{Type: ScheduleTypeInterval, EverySeconds: 60},
+		Action:   Action{Type: ActionTypeSendText, Text: "hello"},
+	})
+	if err != nil {
+		t.Fatalf("create task failed: %v", err)
+	}
+
+	if _, err := store.ClaimDueTasks(base.Add(2*time.Minute), 10); err != nil {
+		t.Fatalf("claim due tasks failed: %v", err)
+	}
+
+	if err := store.ResetRunningTasks(); err != nil {
+		t.Fatalf("reset running tasks failed: %v", err)
+	}
+
+	task, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get task failed: %v", err)
+	}
+	if task.Running {
+		t.Fatalf("expected running flag to be reset, task=%+v", task)
+	}
+}

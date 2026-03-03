@@ -119,11 +119,8 @@ func (r *Runner) Run(ctx context.Context, req automation.WorkflowRunRequest) (au
 		return automation.WorkflowRunResult{}, errors.New("workflow objective is empty")
 	}
 
-	progressMessages, err := r.advance(ctx, &state, req)
+	progressMessages, err := r.advance(ctx, statePath, &state, req)
 	if err != nil {
-		return automation.WorkflowRunResult{}, err
-	}
-	if err := r.saveState(statePath, state); err != nil {
 		return automation.WorkflowRunResult{}, err
 	}
 	message := buildRunReplyMarkdown(state, stateKey, progressMessages)
@@ -135,6 +132,7 @@ func (r *Runner) Run(ctx context.Context, req automation.WorkflowRunRequest) (au
 
 func (r *Runner) advance(
 	ctx context.Context,
+	statePath string,
 	state *workflowState,
 	req automation.WorkflowRunRequest,
 ) ([]string, error) {
@@ -147,6 +145,9 @@ func (r *Runner) advance(
 	for i := 0; i < steps; i++ {
 		message, stop, err := r.advanceOne(ctx, state, req)
 		if err != nil {
+			return nil, err
+		}
+		if err := r.saveState(statePath, *state); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(message) != "" {

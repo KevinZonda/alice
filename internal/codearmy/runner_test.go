@@ -18,12 +18,20 @@ type backendStub struct {
 	mu      sync.Mutex
 	calls   []llm.RunRequest
 	results []llm.RunResult
+	errs    []error
 }
 
 func (b *backendStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResult, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.calls = append(b.calls, req)
+	if len(b.errs) > 0 {
+		err := b.errs[0]
+		b.errs = b.errs[1:]
+		if err != nil {
+			return llm.RunResult{}, err
+		}
+	}
 	if len(b.results) == 0 {
 		return llm.RunResult{Reply: "fallback", NextThreadID: ""}, nil
 	}
@@ -144,5 +152,63 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 		if call.Profile != "worker-cheap" {
 			t.Fatalf("unexpected profile: %q", call.Profile)
 		}
+	}
+}
+
+func TestRunner_Run_PersistsCompletedPhaseBeforeLaterError(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "code_army")
+	sessionKey := "chat_id:oc_group|thread:omt_beta"
+	backend := &backendStub{
+		results: []llm.RunResult{
+			{Reply: "manager plan", NextThreadID: "thread-manager"},
+		},
+		errs: []error{
+			nil,
+			context.DeadlineExceeded,
+		},
+	}
+	runner := NewRunner(stateDir, backend)
+	runner.now = func() time.Time {
+		return time.Date(2026, 3, 3, 10, 0, 0, 0, time.UTC)
+	}
+
+	req := automation.WorkflowRunRequest{
+		Workflow: automation.WorkflowCodeArmy,
+		TaskID:   "task_timeout",
+		Prompt:   "推进第 4 轮",
+		Env: map[string]string{
+			"ALICE_MCP_SESSION_KEY": sessionKey,
+		},
+	}
+
+	_, err := runner.Run(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected workflow run to fail after second phase")
+	}
+
+	statePath := runner.stateFilePath(sessionKey, "default")
+	raw, readErr := os.ReadFile(statePath)
+	if readErr != nil {
+		t.Fatalf("expected partial state to be persisted, read failed: %v", readErr)
+	}
+
+	var state workflowState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("parse state file failed: %v", err)
+	}
+	if state.Phase != phaseWorker {
+		t.Fatalf("expected persisted phase worker after manager step, got %+v", state)
+	}
+	if state.Iteration != 1 {
+		t.Fatalf("expected iteration to remain 1 after partial progress, got %+v", state)
+	}
+	if state.ManagerPlan != "manager plan" {
+		t.Fatalf("expected manager output to be persisted, got %+v", state)
+	}
+	if state.ManagerThreadID != "thread-manager" {
+		t.Fatalf("expected manager thread id to be persisted, got %+v", state)
+	}
+	if len(state.History) != 1 || state.History[0].Phase != phaseManager {
+		t.Fatalf("expected only manager history record after partial progress, got %+v", state.History)
 	}
 }

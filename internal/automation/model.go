@@ -101,6 +101,7 @@ type Task struct {
 	UpdatedAt           time.Time  `json:"updated_at"`
 	NextRunAt           time.Time  `json:"next_run_at"`
 	LastRunAt           time.Time  `json:"last_run_at,omitempty"`
+	Running             bool       `json:"running,omitempty"`
 	LastResult          string     `json:"last_result,omitempty"`
 	ConsecutiveFailures int        `json:"consecutive_failures,omitempty"`
 	Revision            int64      `json:"revision"`

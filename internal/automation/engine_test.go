@@ -74,18 +74,24 @@ func (s *llmRunnerStub) Run(_ context.Context, req llm.RunRequest) (llm.RunResul
 }
 
 type workflowRunnerStub struct {
-	mu      sync.Mutex
-	calls   int
-	lastReq WorkflowRunRequest
-	result  WorkflowRunResult
-	err     error
+	mu          sync.Mutex
+	calls       int
+	lastReq     WorkflowRunRequest
+	result      WorkflowRunResult
+	err         error
+	deadlineSet bool
+	deadline    time.Time
 }
 
-func (s *workflowRunnerStub) Run(_ context.Context, req WorkflowRunRequest) (WorkflowRunResult, error) {
+func (s *workflowRunnerStub) Run(ctx context.Context, req WorkflowRunRequest) (WorkflowRunResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	s.lastReq = req
+	if deadline, ok := ctx.Deadline(); ok {
+		s.deadlineSet = true
+		s.deadline = deadline
+	}
 	return s.result, s.err
 }
 
@@ -344,6 +350,37 @@ func TestEngine_RunUserTask_RunWorkflow(t *testing.T) {
 	}
 	if stored.LastResult == "" {
 		t.Fatalf("expected last result to be recorded, task=%+v", stored)
+	}
+}
+
+func TestEngine_RunUserTask_RunWorkflow_SkipsAutomationTimeout(t *testing.T) {
+	sender := &senderStub{}
+	runner := &workflowRunnerStub{
+		result: WorkflowRunResult{Message: "workflow finished"},
+	}
+	engine := NewEngine(nil, sender)
+	engine.SetWorkflowRunner(runner)
+	engine.SetUserTaskTimeout(2 * time.Minute)
+
+	engine.runUserTask(context.Background(), Task{
+		Scope:   Scope{Kind: ScopeKindUser, ID: "ou_actor"},
+		Route:   Route{ReceiveIDType: "user_id", ReceiveID: "ou_actor"},
+		Creator: Actor{UserID: "ou_actor"},
+		Action: Action{
+			Type:     ActionTypeRunWorkflow,
+			Prompt:   "推进代码军队流程",
+			Workflow: WorkflowCodeArmy,
+			StateKey: "project_alpha",
+		},
+	})
+
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.calls != 1 {
+		t.Fatalf("expected workflow runner to be called once, got %d", runner.calls)
+	}
+	if runner.deadlineSet {
+		t.Fatalf("expected workflow runner context to skip automation deadline, got %s", runner.deadline)
 	}
 }
 

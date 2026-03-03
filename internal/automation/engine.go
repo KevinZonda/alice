@@ -203,7 +203,7 @@ func (e *Engine) runUserTasks(ctx context.Context, now time.Time) {
 }
 
 func (e *Engine) runUserTask(ctx context.Context, task Task) {
-	runCtx, cancel := context.WithTimeout(ctx, e.userTaskTimeoutDuration())
+	runCtx, cancel := e.userTaskContext(ctx, task)
 	defer cancel()
 
 	err := e.executeUserTask(runCtx, task)
@@ -215,6 +215,14 @@ func (e *Engine) runUserTask(ctx context.Context, task Task) {
 			log.Printf("record automation result failed id=%s err=%v", task.ID, recordErr)
 		}
 	}
+}
+
+func (e *Engine) userTaskContext(ctx context.Context, task Task) (context.Context, context.CancelFunc) {
+	task = NormalizeTask(task)
+	if task.Action.Type == ActionTypeRunWorkflow {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, e.userTaskTimeoutDuration())
 }
 
 func (e *Engine) userTaskTimeoutDuration() time.Duration {

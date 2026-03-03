@@ -128,6 +128,28 @@ func (s *Store) GetTask(taskID string) (Task, error) {
 	return task, nil
 }
 
+func (s *Store) ResetRunningTasks() error {
+	if s == nil {
+		return errors.New("store is nil")
+	}
+	now := s.nowUTC()
+	return s.withLockedSnapshot(func(snapshot *Snapshot) (bool, error) {
+		changed := false
+		for idx := range snapshot.Tasks {
+			task := NormalizeTask(snapshot.Tasks[idx])
+			if !task.Running {
+				continue
+			}
+			task.Running = false
+			task.UpdatedAt = now
+			task.Revision++
+			snapshot.Tasks[idx] = task
+			changed = true
+		}
+		return changed, nil
+	})
+}
+
 func (s *Store) CreateTask(task Task) (Task, error) {
 	if s == nil {
 		return Task{}, errors.New("store is nil")
@@ -227,6 +249,9 @@ func (s *Store) ClaimDueTasks(at time.Time, limit int) ([]Task, error) {
 			if task.Status != TaskStatusActive {
 				continue
 			}
+			if task.Running {
+				continue
+			}
 			if task.MaxRuns > 0 && task.RunCount >= task.MaxRuns {
 				task.Status = TaskStatusPaused
 				task.NextRunAt = time.Time{}
@@ -253,6 +278,7 @@ func (s *Store) ClaimDueTasks(at time.Time, limit int) ([]Task, error) {
 				continue
 			}
 			task.LastRunAt = at
+			task.Running = true
 			task.RunCount++
 			if task.MaxRuns > 0 && task.RunCount >= task.MaxRuns {
 				task.Status = TaskStatusPaused
@@ -283,6 +309,7 @@ func (s *Store) RecordTaskResult(taskID string, at time.Time, runErr error) erro
 			at = s.nowUTC()
 		}
 		at = at.UTC()
+		task.Running = false
 		if runErr != nil {
 			task.ConsecutiveFailures++
 			task.LastResult = "error: " + strings.TrimSpace(runErr.Error())
