@@ -385,7 +385,10 @@ func (s *service) handleCodeArmyStatusGet(_ context.Context, request mcp.CallToo
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	sessionKey := strings.TrimSpace(sessionContext.SessionKey)
+	sessionKey := normalizeWorkflowSessionKey(sessionContext.SessionKey)
+	if sessionKey == "" {
+		sessionKey = buildAutomationSessionKey(sessionContext.ReceiveIDType, sessionContext.ReceiveID)
+	}
 	if sessionKey == "" {
 		return mcp.NewToolResultError("missing current conversation session key in mcp context"), nil
 	}

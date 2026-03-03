@@ -134,12 +134,38 @@ func (r *Runner) advance(ctx context.Context, state *workflowState, req automati
 		return "", errors.New("workflow state is nil")
 	}
 
+	steps := phaseStepsPerRun(state.Phase)
+	messages := make([]string, 0, steps)
+	for i := 0; i < steps; i++ {
+		message, stop, err := r.advanceOne(ctx, state, req)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(message) != "" {
+			messages = append(messages, message)
+		}
+		if stop {
+			break
+		}
+	}
+	return strings.Join(messages, "\n"), nil
+}
+
+func (r *Runner) advanceOne(
+	ctx context.Context,
+	state *workflowState,
+	req automation.WorkflowRunRequest,
+) (string, bool, error) {
+	if state == nil {
+		return "", false, errors.New("workflow state is nil")
+	}
+
 	now := r.nowUTC()
 	switch state.Phase {
 	case phaseManager:
 		reply, nextThreadID, err := r.runLLM(ctx, state.ManagerThreadID, buildManagerPrompt(*state), req)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		state.ManagerPlan = strings.TrimSpace(reply)
 		state.ManagerThreadID = strings.TrimSpace(nextThreadID)
@@ -150,22 +176,22 @@ func (r *Runner) advance(ctx context.Context, state *workflowState, req automati
 			"code-army manager 已完成第%d轮规划，下一步进入 worker。\n规划摘要：%s",
 			state.Iteration,
 			clipText(state.ManagerPlan, 160),
-		), nil
+		), false, nil
 	case phaseWorker:
 		reply, nextThreadID, err := r.runLLM(ctx, state.WorkerThreadID, buildWorkerPrompt(*state), req)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		state.WorkerOutput = strings.TrimSpace(reply)
 		state.WorkerThreadID = strings.TrimSpace(nextThreadID)
 		state.Phase = phaseReviewer
 		state.UpdatedAt = now
 		state.appendHistory(now, phaseWorker, clipText(state.WorkerOutput, 120), "")
-		return "code-army worker 已产出实现方案，下一步进入 reviewer 审核。", nil
+		return "code-army worker 已产出实现方案，下一步进入 reviewer 审核。", false, nil
 	case phaseReviewer:
 		reply, nextThreadID, err := r.runLLM(ctx, state.ReviewerThreadID, buildReviewerPrompt(*state), req)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		state.ReviewerReport = strings.TrimSpace(reply)
 		state.ReviewerThreadID = strings.TrimSpace(nextThreadID)
@@ -176,7 +202,7 @@ func (r *Runner) advance(ctx context.Context, state *workflowState, req automati
 		return fmt.Sprintf(
 			"code-army reviewer 已给出结论：%s。下一步进入 gate。",
 			strings.ToUpper(state.LastDecision),
-		), nil
+		), false, nil
 	case phaseGate:
 		state.UpdatedAt = now
 		if state.LastDecision == decisionPass {
@@ -186,16 +212,31 @@ func (r *Runner) advance(ctx context.Context, state *workflowState, req automati
 			return fmt.Sprintf(
 				"code-army gate 通过，进入第%d轮迭代。",
 				state.Iteration,
-			), nil
+			), true, nil
 		}
 		state.Phase = phaseWorker
 		state.appendHistory(now, phaseGate, "gate rejected, back to worker", decisionFail)
-		return "code-army gate 未通过，已回退到 worker 进行整改。", nil
+		return "code-army gate 未通过，已回退到 worker 进行整改。", true, nil
 	default:
 		state.Phase = phaseManager
 		state.UpdatedAt = now
 		state.appendHistory(now, phaseManager, "phase reset to manager", "")
-		return "code-army 状态异常已自动修复，已重置到 manager。", nil
+		return "code-army 状态异常已自动修复，已重置到 manager。", true, nil
+	}
+}
+
+func phaseStepsPerRun(phase string) int {
+	switch normalizePhase(phase) {
+	case phaseManager:
+		return 4
+	case phaseWorker:
+		return 3
+	case phaseReviewer:
+		return 2
+	case phaseGate:
+		return 1
+	default:
+		return 1
 	}
 }
 

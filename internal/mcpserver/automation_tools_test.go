@@ -235,6 +235,57 @@ func TestAutomationTaskCreate_RunWorkflow(t *testing.T) {
 	}
 }
 
+func TestAutomationTaskCreate_RunWorkflowNormalizesMessageSessionKey(t *testing.T) {
+	store := automation.NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	svc := &service{
+		sender:          &senderStub{},
+		automationStore: store,
+		getenv: func(key string) string {
+			switch key {
+			case mcpbridge.EnvReceiveIDType:
+				return "chat_id"
+			case mcpbridge.EnvReceiveID:
+				return "oc_group"
+			case mcpbridge.EnvActorUserID:
+				return "ou_actor"
+			case mcpbridge.EnvChatType:
+				return "group"
+			case mcpbridge.EnvSessionKey:
+				return "chat_id:oc_group|message:om_msg_1"
+			default:
+				return ""
+			}
+		},
+	}
+
+	result, err := svc.handleAutomationTaskCreate(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"every_seconds": 60,
+			"action_type":   "run_workflow",
+			"workflow":      "code_army",
+			"state_key":     "project_alpha",
+			"prompt":        "推进代码军队流程",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected create handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected run_workflow create success, got %#v", result)
+	}
+
+	list, err := store.ListTasks(automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_group"}, "", 10)
+	if err != nil {
+		t.Fatalf("list tasks failed: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected 1 created task, got %d", len(list))
+	}
+	if list[0].Action.SessionKey != "chat_id:oc_group" {
+		t.Fatalf("expected message session to normalize to chat session, got %+v", list[0].Action)
+	}
+}
+
 func TestAutomationTaskCreate_RunWorkflowByWorkflowFieldDefaultActionType(t *testing.T) {
 	store := automation.NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
 	svc := &service{
@@ -355,6 +406,80 @@ func TestCodeArmyStatusGet_CurrentSession(t *testing.T) {
 	}
 	if states[0].Phase != "reviewer" || states[0].Iteration != 2 {
 		t.Fatalf("unexpected state payload: %+v", states[0])
+	}
+}
+
+func TestCodeArmyStatusGet_MessageSessionUsesConversationKey(t *testing.T) {
+	stateDir := t.TempDir()
+	sessionKey := "chat_id:oc_group"
+	sessionDir := filepath.Join(stateDir, "chat_id_oc_group")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir failed: %v", err)
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version":       1,
+		"workflow":      "code_army",
+		"key":           "default",
+		"session_key":   sessionKey,
+		"task_id":       "task_001",
+		"phase":         "worker",
+		"iteration":     1,
+		"objective":     "推进 code army",
+		"last_decision": "",
+		"updated_at":    time.Date(2026, 3, 3, 4, 5, 6, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("marshal state failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "default.json"), raw, 0o644); err != nil {
+		t.Fatalf("write state file failed: %v", err)
+	}
+
+	svc := &service{
+		sender:         &senderStub{},
+		codeArmyStatus: codearmy.NewInspector(stateDir),
+		getenv: func(key string) string {
+			switch key {
+			case mcpbridge.EnvReceiveIDType:
+				return "chat_id"
+			case mcpbridge.EnvReceiveID:
+				return "oc_group"
+			case mcpbridge.EnvActorUserID:
+				return "ou_actor"
+			case mcpbridge.EnvChatType:
+				return "group"
+			case mcpbridge.EnvSessionKey:
+				return "chat_id:oc_group|message:om_msg_2"
+			default:
+				return ""
+			}
+		},
+	}
+
+	result, err := svc.handleCodeArmyStatusGet(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"state_key": "default",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected status handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected non-error status result, got %#v", result)
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %#v", result.StructuredContent)
+	}
+	if structured["session_key"] != sessionKey {
+		t.Fatalf("expected normalized session_key %q, got %#v", sessionKey, structured["session_key"])
+	}
+	state, ok := structured["state"].(codearmy.StateSnapshot)
+	if !ok {
+		t.Fatalf("expected state payload, got %#v", structured["state"])
+	}
+	if state.Phase != "worker" || state.Iteration != 1 {
+		t.Fatalf("unexpected state payload: %+v", state)
 	}
 }
 
@@ -740,6 +865,71 @@ func TestAutomationTaskUpdate_CanSwitchToRunWorkflow(t *testing.T) {
 	}
 	if updated.Action.SessionKey != "chat_id:oc_group|thread:omt_alpha" {
 		t.Fatalf("expected updated session_key, got %+v", updated.Action)
+	}
+}
+
+func TestAutomationTaskUpdate_RunWorkflowNormalizesStoredMessageSessionKey(t *testing.T) {
+	store := automation.NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	created, err := store.CreateTask(automation.Task{
+		Title:      "workflow task",
+		Scope:      automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_group"},
+		Route:      automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_group"},
+		Creator:    automation.Actor{UserID: "ou_creator"},
+		ManageMode: automation.ManageModeCreatorOnly,
+		Schedule:   automation.Schedule{Type: automation.ScheduleTypeInterval, EverySeconds: 60},
+		Action: automation.Action{
+			Type:       automation.ActionTypeRunWorkflow,
+			Prompt:     "推进代码军队流程",
+			Workflow:   automation.WorkflowCodeArmy,
+			StateKey:   "project_alpha",
+			SessionKey: "chat_id:oc_group|message:om_msg_1",
+		},
+		Status: automation.TaskStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create task failed: %v", err)
+	}
+
+	svc := &service{
+		sender:          &senderStub{},
+		automationStore: store,
+		getenv: func(key string) string {
+			switch key {
+			case mcpbridge.EnvReceiveIDType:
+				return "chat_id"
+			case mcpbridge.EnvReceiveID:
+				return "oc_group"
+			case mcpbridge.EnvActorUserID:
+				return "ou_creator"
+			case mcpbridge.EnvChatType:
+				return "group"
+			case mcpbridge.EnvSessionKey:
+				return "chat_id:oc_group|message:om_msg_2"
+			default:
+				return ""
+			}
+		},
+	}
+
+	result, err := svc.handleAutomationTaskUpdate(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{
+			"task_id": created.ID,
+			"prompt":  "继续推进代码军队流程",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected update handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected update success result, got %#v", result)
+	}
+
+	updated, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get task failed: %v", err)
+	}
+	if updated.Action.SessionKey != "chat_id:oc_group" {
+		t.Fatalf("expected stored message session to normalize, got %+v", updated.Action)
 	}
 }
 

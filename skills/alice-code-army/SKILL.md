@@ -17,6 +17,7 @@ Run `code_army` via Alice automation tools instead of re-reading the repository.
 - `code_army` does not have an immediate-run API. The first execution happens at `next_run_at`, so tell the user the exact scheduled time.
 - Reuse an explicit `state_key` when the user may run multiple workflows in the same conversation.
 - Reusing the same `state_key` continues the existing state. The stored objective is retained, so later prompts should stay aligned with the original goal instead of trying to redefine it.
+- A single workflow execution should complete the current phase cycle: `manager -> worker -> reviewer -> gate`, then stop at the next stable phase for the following run.
 - Only set `model` or `profile` when the user asks for them or the surrounding workflow already depends on them.
 
 ## Start A One-Off Run

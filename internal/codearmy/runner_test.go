@@ -95,104 +95,16 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 
 	msg1, err := runner.Run(context.Background(), req)
 	if err != nil {
-		t.Fatalf("run manager failed: %v", err)
+		t.Fatalf("run workflow failed: %v", err)
 	}
-	if !strings.Contains(msg1.Message, "manager") {
-		t.Fatalf("unexpected manager message: %q", msg1.Message)
+	for _, needle := range []string{"manager", "worker", "reviewer", "gate"} {
+		if !strings.Contains(strings.ToLower(msg1.Message), needle) {
+			t.Fatalf("expected workflow summary to include %q, got %q", needle, msg1.Message)
+		}
 	}
 	state := loadState()
 	if state.SessionKey != sessionKey {
-		t.Fatalf("expected session key %q after manager run, got %+v", sessionKey, state)
-	}
-	if state.Phase != phaseWorker {
-		t.Fatalf("expected next phase worker after manager run, got %+v", state)
-	}
-	if state.Iteration != 1 {
-		t.Fatalf("expected iteration 1 after manager run, got %d", state.Iteration)
-	}
-	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "" || state.ReviewerThreadID != "" {
-		t.Fatalf("unexpected thread ids after manager run: %+v", state)
-	}
-	assertHistory(state, []struct {
-		phase          string
-		summaryContain string
-		decision       string
-	}{
-		{phase: phaseManager, summaryContain: "manager plan"},
-	})
-
-	msg2, err := runner.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("run worker failed: %v", err)
-	}
-	if !strings.Contains(msg2.Message, "worker") {
-		t.Fatalf("unexpected worker message: %q", msg2.Message)
-	}
-	state = loadState()
-	if state.SessionKey != sessionKey {
-		t.Fatalf("expected session key %q after worker run, got %+v", sessionKey, state)
-	}
-	if state.Phase != phaseReviewer {
-		t.Fatalf("expected next phase reviewer after worker run, got %+v", state)
-	}
-	if state.Iteration != 1 {
-		t.Fatalf("expected iteration 1 after worker run, got %d", state.Iteration)
-	}
-	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "thread-worker" || state.ReviewerThreadID != "" {
-		t.Fatalf("unexpected thread ids after worker run: %+v", state)
-	}
-	assertHistory(state, []struct {
-		phase          string
-		summaryContain string
-		decision       string
-	}{
-		{phase: phaseManager, summaryContain: "manager plan"},
-		{phase: phaseWorker, summaryContain: "worker output"},
-	})
-
-	msg3, err := runner.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("run reviewer failed: %v", err)
-	}
-	if !strings.Contains(strings.ToUpper(msg3.Message), "PASS") {
-		t.Fatalf("unexpected reviewer message: %q", msg3.Message)
-	}
-	state = loadState()
-	if state.SessionKey != sessionKey {
-		t.Fatalf("expected session key %q after reviewer run, got %+v", sessionKey, state)
-	}
-	if state.Phase != phaseGate {
-		t.Fatalf("expected next phase gate after reviewer run, got %+v", state)
-	}
-	if state.Iteration != 1 {
-		t.Fatalf("expected iteration 1 after reviewer run, got %d", state.Iteration)
-	}
-	if state.ManagerThreadID != "thread-manager" || state.WorkerThreadID != "thread-worker" || state.ReviewerThreadID != "thread-reviewer" {
-		t.Fatalf("unexpected thread ids after reviewer run: %+v", state)
-	}
-	if state.LastDecision != decisionPass {
-		t.Fatalf("expected reviewer decision pass, got %+v", state)
-	}
-	assertHistory(state, []struct {
-		phase          string
-		summaryContain string
-		decision       string
-	}{
-		{phase: phaseManager, summaryContain: "manager plan"},
-		{phase: phaseWorker, summaryContain: "worker output"},
-		{phase: phaseReviewer, summaryContain: "review details", decision: decisionPass},
-	})
-
-	msg4, err := runner.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("run gate failed: %v", err)
-	}
-	if !strings.Contains(msg4.Message, "通过") {
-		t.Fatalf("unexpected gate message: %q", msg4.Message)
-	}
-	state = loadState()
-	if state.SessionKey != sessionKey {
-		t.Fatalf("expected session key %q after gate run, got %+v", sessionKey, state)
+		t.Fatalf("expected session key %q after workflow run, got %+v", sessionKey, state)
 	}
 	if state.Phase != phaseManager {
 		t.Fatalf("expected gate pass to switch phase to manager, got %+v", state)
@@ -215,19 +127,16 @@ func TestRunner_Run_TransitionsAndPersistsState(t *testing.T) {
 	})
 
 	backend.mu.Lock()
+	defer backend.mu.Unlock()
 	if len(backend.calls) != 3 {
-		backend.mu.Unlock()
 		t.Fatalf("expected 3 llm calls before gate, got %d", len(backend.calls))
 	}
 	for _, call := range backend.calls {
 		if call.Model != "gpt-4.1-mini" {
-			backend.mu.Unlock()
 			t.Fatalf("unexpected model: %q", call.Model)
 		}
 		if call.Profile != "worker-cheap" {
-			backend.mu.Unlock()
 			t.Fatalf("unexpected profile: %q", call.Profile)
 		}
 	}
-	backend.mu.Unlock()
 }

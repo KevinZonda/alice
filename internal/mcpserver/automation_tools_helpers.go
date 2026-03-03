@@ -192,7 +192,7 @@ func workflowSessionKey(scopeCtx automationScopeContext, actionType automation.A
 	if actionType != automation.ActionTypeRunWorkflow {
 		return ""
 	}
-	if sessionKey := strings.TrimSpace(scopeCtx.session.SessionKey); sessionKey != "" {
+	if sessionKey := normalizeWorkflowSessionKey(scopeCtx.session.SessionKey); sessionKey != "" {
 		return sessionKey
 	}
 	return buildAutomationSessionKey(scopeCtx.route.ReceiveIDType, scopeCtx.route.ReceiveID)
@@ -203,10 +203,21 @@ func updatedWorkflowSessionKey(scopeCtx automationScopeContext, task automation.
 	if task.Action.Type != automation.ActionTypeRunWorkflow {
 		return ""
 	}
-	if strings.TrimSpace(task.Action.SessionKey) != "" {
-		return strings.TrimSpace(task.Action.SessionKey)
+	if sessionKey := normalizeWorkflowSessionKey(task.Action.SessionKey); sessionKey != "" {
+		return sessionKey
 	}
 	return workflowSessionKey(scopeCtx, task.Action.Type)
+}
+
+func normalizeWorkflowSessionKey(raw string) string {
+	sessionKey := strings.TrimSpace(raw)
+	if sessionKey == "" {
+		return ""
+	}
+	if idx := strings.Index(sessionKey, "|message:"); idx >= 0 {
+		sessionKey = strings.TrimSpace(sessionKey[:idx])
+	}
+	return sessionKey
 }
 
 func buildAutomationSessionKey(receiveIDType, receiveID string) string {
