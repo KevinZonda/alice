@@ -29,6 +29,7 @@ type MemoryManager interface {
 
 type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
+	AddReaction(ctx context.Context, messageID, emojiType string) error
 	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
 	ReplyRichText(ctx context.Context, sourceMessageID string, lines []string) (string, error)
 	ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error)

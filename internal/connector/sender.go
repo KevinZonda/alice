@@ -58,6 +58,37 @@ func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, tex
 	return nil
 }
 
+func (s *LarkSender) AddReaction(ctx context.Context, messageID, emojiType string) error {
+	messageID = strings.TrimSpace(messageID)
+	emojiType = strings.ToUpper(strings.TrimSpace(emojiType))
+	if messageID == "" {
+		return errors.New("message id is empty")
+	}
+	if emojiType == "" {
+		return errors.New("emoji type is empty")
+	}
+
+	req := larkim.NewCreateMessageReactionReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewCreateMessageReactionReqBodyBuilder().
+			ReactionType(larkim.NewEmojiBuilder().EmojiType(emojiType).Build()).
+			Build()).
+		Build()
+
+	resp, err := s.client.Im.V1.MessageReaction.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		return &feishuAPIError{
+			Code:      resp.Code,
+			Msg:       resp.Msg,
+			RequestID: resp.RequestId(),
+		}
+	}
+	return nil
+}
+
 func (s *LarkSender) SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error {
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(receiveIDType).

@@ -17,15 +17,20 @@ const LLMProviderClaude = "claude"
 const TriggerModeAt = "at"
 const TriggerModeActive = "active"
 const TriggerModePrefix = "prefix"
+const ImmediateFeedbackModeReply = "reply"
+const ImmediateFeedbackModeReaction = "reaction"
+const DefaultImmediateFeedbackReaction = "SMILE"
 
 type Config struct {
-	FeishuAppID     string `mapstructure:"feishu_app_id"`
-	FeishuAppSecret string `mapstructure:"feishu_app_secret"`
-	FeishuBaseURL   string `mapstructure:"feishu_base_url"`
-	FeishuBotOpenID string `mapstructure:"feishu_bot_open_id"`
-	FeishuBotUserID string `mapstructure:"feishu_bot_user_id"`
-	TriggerMode     string `mapstructure:"trigger_mode"`
-	TriggerPrefix   string `mapstructure:"trigger_prefix"`
+	FeishuAppID               string `mapstructure:"feishu_app_id"`
+	FeishuAppSecret           string `mapstructure:"feishu_app_secret"`
+	FeishuBaseURL             string `mapstructure:"feishu_base_url"`
+	FeishuBotOpenID           string `mapstructure:"feishu_bot_open_id"`
+	FeishuBotUserID           string `mapstructure:"feishu_bot_user_id"`
+	TriggerMode               string `mapstructure:"trigger_mode"`
+	TriggerPrefix             string `mapstructure:"trigger_prefix"`
+	ImmediateFeedbackMode     string `mapstructure:"immediate_feedback_mode"`
+	ImmediateFeedbackReaction string `mapstructure:"immediate_feedback_reaction"`
 
 	LLMProvider string `mapstructure:"llm_provider"`
 
@@ -66,6 +71,8 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("feishu_base_url", "https://open.feishu.cn")
 	v.SetDefault("trigger_mode", TriggerModeAt)
 	v.SetDefault("trigger_prefix", "")
+	v.SetDefault("immediate_feedback_mode", ImmediateFeedbackModeReply)
+	v.SetDefault("immediate_feedback_reaction", DefaultImmediateFeedbackReaction)
 	v.SetDefault("llm_provider", DefaultLLMProvider)
 	v.SetDefault("codex_command", "codex")
 	v.SetDefault("codex_timeout_secs", 120)
@@ -105,6 +112,8 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.FeishuBotUserID = strings.TrimSpace(cfg.FeishuBotUserID)
 	cfg.TriggerMode = strings.ToLower(strings.TrimSpace(cfg.TriggerMode))
 	cfg.TriggerPrefix = strings.TrimSpace(cfg.TriggerPrefix)
+	cfg.ImmediateFeedbackMode = strings.ToLower(strings.TrimSpace(cfg.ImmediateFeedbackMode))
+	cfg.ImmediateFeedbackReaction = strings.ToUpper(strings.TrimSpace(cfg.ImmediateFeedbackReaction))
 	cfg.LLMProvider = strings.ToLower(strings.TrimSpace(cfg.LLMProvider))
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
 	cfg.CodexEnv = normalizeEnvMap(envMap)
@@ -132,6 +141,12 @@ func LoadFromFile(path string) (Config, error) {
 	}
 	if cfg.TriggerMode == "" {
 		cfg.TriggerMode = TriggerModeAt
+	}
+	if cfg.ImmediateFeedbackMode == "" {
+		cfg.ImmediateFeedbackMode = ImmediateFeedbackModeReply
+	}
+	if cfg.ImmediateFeedbackReaction == "" {
+		cfg.ImmediateFeedbackReaction = DefaultImmediateFeedbackReaction
 	}
 	if cfg.CodexCommand == "" {
 		cfg.CodexCommand = "codex"
@@ -166,6 +181,11 @@ func LoadFromFile(path string) (Config, error) {
 	case TriggerModeAt, TriggerModeActive, TriggerModePrefix:
 	default:
 		return Config{}, fmt.Errorf("unsupported trigger_mode %q", cfg.TriggerMode)
+	}
+	switch cfg.ImmediateFeedbackMode {
+	case ImmediateFeedbackModeReply, ImmediateFeedbackModeReaction:
+	default:
+		return Config{}, fmt.Errorf("unsupported immediate_feedback_mode %q", cfg.ImmediateFeedbackMode)
 	}
 	if cfg.TriggerMode == TriggerModePrefix && cfg.TriggerPrefix == "" {
 		return Config{}, errors.New("trigger_prefix is required when trigger_mode is prefix")

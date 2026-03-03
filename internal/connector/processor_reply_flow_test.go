@@ -36,6 +36,60 @@ func TestProcessor_ReplyMessageFlow_OnFailureSendsAckThenFallback(t *testing.T) 
 	}
 }
 
+func TestProcessor_ReplyMessageFlow_ReactionImmediateFeedbackSkipsAckReply(t *testing.T) {
+	fakeCodex := codexStub{resp: "final answer"}
+	sender := &senderStub{}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+	processor.SetImmediateFeedback("reaction", "smile")
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_src",
+		Text:            "hello",
+	})
+
+	if sender.reactionCalls != 1 {
+		t.Fatalf("expected one reaction feedback, got %d", sender.reactionCalls)
+	}
+	if len(sender.reactionTargets) != 1 || sender.reactionTargets[0] != "om_src" {
+		t.Fatalf("unexpected reaction targets: %#v", sender.reactionTargets)
+	}
+	if len(sender.reactionTypes) != 1 || sender.reactionTypes[0] != "SMILE" {
+		t.Fatalf("unexpected reaction types: %#v", sender.reactionTypes)
+	}
+	if sender.replyCardCalls != 1 {
+		t.Fatalf("expected final reply only after reaction ack, got %d", sender.replyCardCalls)
+	}
+	if len(sender.replyCards) != 1 || !strings.Contains(sender.replyCards[0], "final answer") {
+		t.Fatalf("unexpected reply history: %#v", sender.replyCards)
+	}
+}
+
+func TestProcessor_ReplyMessageFlow_ReactionFallbacksToAckReply(t *testing.T) {
+	fakeCodex := codexStub{resp: "final answer"}
+	sender := &senderStub{reactionErr: errors.New("reaction unavailable")}
+	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+	processor.SetImmediateFeedback("reaction", "smile")
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:       "oc_chat",
+		ReceiveIDType:   "chat_id",
+		SourceMessageID: "om_src",
+		Text:            "hello",
+	})
+
+	if sender.reactionCalls != 1 {
+		t.Fatalf("expected one reaction attempt, got %d", sender.reactionCalls)
+	}
+	if sender.replyCardCalls != 2 {
+		t.Fatalf("expected ack reply fallback plus final reply, got %d", sender.replyCardCalls)
+	}
+	if len(sender.replyCards) != 2 || !strings.Contains(sender.replyCards[0], "收到！") {
+		t.Fatalf("unexpected reply history: %#v", sender.replyCards)
+	}
+}
+
 func TestProcessor_SendsAgentMessagesAsRichTextMarkdown(t *testing.T) {
 	fakeCodex := codexStreamingStub{
 		resp:          "最终答复",
@@ -466,6 +520,7 @@ func TestProcessor_ReplyMentionUsesTextReply(t *testing.T) {
 	fakeCodex := codexStub{resp: "@李志昊 请看下这个结果"}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
+	processor.SetImmediateFeedback("reaction", "smile")
 
 	processor.ProcessJob(context.Background(), Job{
 		ReceiveID:       "oc_chat",
@@ -476,8 +531,11 @@ func TestProcessor_ReplyMentionUsesTextReply(t *testing.T) {
 		Text:            "hello",
 	})
 
-	if sender.replyCardCalls != 1 {
-		t.Fatalf("expected only ack card reply, got %d", sender.replyCardCalls)
+	if sender.replyCardCalls != 0 {
+		t.Fatalf("expected no ack card reply in reaction mode, got %d", sender.replyCardCalls)
+	}
+	if sender.reactionCalls != 1 {
+		t.Fatalf("expected one reaction ack, got %d", sender.reactionCalls)
 	}
 	if sender.replyTextCalls != 1 {
 		t.Fatalf("expected one final text reply for mention, got %d", sender.replyTextCalls)

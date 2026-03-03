@@ -44,6 +44,12 @@ codex_prompt_prefix: ""
 claude_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
+# Immediate feedback after receiving a reply-style message:
+# - reply: send an explicit `收到！` reply
+# - reaction: add a message reaction first, then fallback to `收到！` if reaction fails
+immediate_feedback_mode: "reply"
+# Feishu reaction type when immediate_feedback_mode is reaction.
+immediate_feedback_reaction: "SMILE"
 
 # Queue and worker
 queue_capacity: 256

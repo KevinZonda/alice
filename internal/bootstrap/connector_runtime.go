@@ -97,6 +97,7 @@ func BuildConnectorRuntime(cfg config.Config, provider llm.Provider) (*Connector
 		cfg.ThinkingMessage,
 		memoryManager,
 	)
+	processor.SetImmediateFeedback(cfg.ImmediateFeedbackMode, cfg.ImmediateFeedbackReaction)
 	sessionStatePath := filepath.Join(memoryDir, "session_state.json")
 	if err := processor.LoadSessionState(sessionStatePath); err != nil {
 		log.Printf("load session state failed file=%s err=%v", sessionStatePath, err)

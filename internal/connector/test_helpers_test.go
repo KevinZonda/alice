@@ -296,28 +296,32 @@ func (m *memoryStub) LastSummaryScope() string {
 type senderStub struct {
 	mu sync.Mutex
 
-	sendCalls      int
-	lastSendText   string
-	sendImages     []string
-	sendImageCalls int
-	sendFiles      []string
-	sendFileCalls  int
-	uploadImageErr error
-	uploadFileErr  error
-	imageKeyByPath map[string]string
-	fileKeyByPath  map[string]string
-	sendCardCalls  int
-	lastSendCard   string
-	sendCards      []string
-	sendCardErr    error
-	replyTextCalls int
-	lastReplyText  string
-	replyTexts     []string
-	replyTargets   []string
-	replyTextErr   error
-	replyRichCalls int
-	lastReplyRich  []string
-	replyRichLines [][]string
+	sendCalls       int
+	lastSendText    string
+	sendImages      []string
+	sendImageCalls  int
+	sendFiles       []string
+	sendFileCalls   int
+	uploadImageErr  error
+	uploadFileErr   error
+	imageKeyByPath  map[string]string
+	fileKeyByPath   map[string]string
+	sendCardCalls   int
+	lastSendCard    string
+	sendCards       []string
+	sendCardErr     error
+	reactionCalls   int
+	reactionErr     error
+	reactionTypes   []string
+	reactionTargets []string
+	replyTextCalls  int
+	lastReplyText   string
+	replyTexts      []string
+	replyTargets    []string
+	replyTextErr    error
+	replyRichCalls  int
+	lastReplyRich   []string
+	replyRichLines  [][]string
 
 	replyRichMarkdownCalls int
 	lastReplyMarkdown      string
@@ -423,6 +427,15 @@ func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string
 	s.lastSendCard = cardContent
 	s.sendCards = append(s.sendCards, cardContent)
 	return s.sendCardErr
+}
+
+func (s *senderStub) AddReaction(_ context.Context, messageID, emojiType string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reactionCalls++
+	s.reactionTargets = append(s.reactionTargets, strings.TrimSpace(messageID))
+	s.reactionTypes = append(s.reactionTypes, strings.ToUpper(strings.TrimSpace(emojiType)))
+	return s.reactionErr
 }
 
 func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text string) (string, error) {

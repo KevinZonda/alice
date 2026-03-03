@@ -30,6 +30,12 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.TriggerPrefix != "" {
 		t.Fatalf("unexpected trigger_prefix: %q", cfg.TriggerPrefix)
 	}
+	if cfg.ImmediateFeedbackMode != ImmediateFeedbackModeReply {
+		t.Fatalf("unexpected immediate_feedback_mode: %q", cfg.ImmediateFeedbackMode)
+	}
+	if cfg.ImmediateFeedbackReaction != DefaultImmediateFeedbackReaction {
+		t.Fatalf("unexpected immediate_feedback_reaction: %q", cfg.ImmediateFeedbackReaction)
+	}
 	if cfg.LLMProvider != DefaultLLMProvider {
 		t.Fatalf("unexpected llm_provider: %s", cfg.LLMProvider)
 	}
@@ -287,6 +293,52 @@ trigger_mode: "all"
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "unsupported trigger_mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFromFile_ImmediateFeedbackModeTrimmedLowercase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+immediate_feedback_mode: "  ReAcTiOn  "
+immediate_feedback_reaction: "  smile  "
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if cfg.ImmediateFeedbackMode != ImmediateFeedbackModeReaction {
+		t.Fatalf("unexpected immediate_feedback_mode: %q", cfg.ImmediateFeedbackMode)
+	}
+	if cfg.ImmediateFeedbackReaction != "SMILE" {
+		t.Fatalf("unexpected immediate_feedback_reaction: %q", cfg.ImmediateFeedbackReaction)
+	}
+}
+
+func TestLoadFromFile_ImmediateFeedbackModeInvalid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+immediate_feedback_mode: "wave"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported immediate_feedback_mode") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

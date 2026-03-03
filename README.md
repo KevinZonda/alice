@@ -130,6 +130,8 @@ codex_prompt_prefix: ""
 claude_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
+immediate_feedback_mode: "reply"
+immediate_feedback_reaction: "SMILE"
 
 queue_capacity: 256
 worker_concurrency: 1
@@ -151,6 +153,8 @@ Optional:
 - `codex_command` / `codex_timeout_secs`, `claude_command` / `claude_timeout_secs`: CLI command path and timeout (seconds) for each backend.
 - `env`: key-value environment variables injected into the selected LLM process (for example HTTP/HTTPS/SOCKS proxy settings).
 - `codex_prompt_prefix` / `claude_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
+- `immediate_feedback_mode`: immediate feedback strategy for reply-style messages. Supports `reply` (default, send `收到！`) and `reaction` (prefer a message reaction, then fall back to `收到！` if reaction fails).
+- `immediate_feedback_reaction`: Feishu reaction type used when `immediate_feedback_mode=reaction`, default `SMILE`.
 - `codex_mcp_auto_register`: whether to auto-run `codex mcp add` or `claude mcp add` at startup for the bundled `alice-mcp-server` command (default `true`).
 - `codex_mcp_register_strict`: when `true`, startup fails if MCP registration fails; when `false`, registration failure only logs warning and startup continues (default `false`).
 - `codex_mcp_server_name`: MCP server name used in LLM MCP registration (default `alice-feishu`).
@@ -188,7 +192,7 @@ Optional:
 - The message path does not wait for idle-summary writes; new messages are handled immediately.
 - In reply flow, the bot prefers topic replies (`reply_in_thread=true`) for ack/progress/final messages; if Feishu rejects topic mode, it falls back to normal replies.
 - For MCP `alice-feishu` tools (`send_image`/`send_file`), send target is always derived from current session context and cannot be overridden by tool arguments: private chats send to the current private chat; group/topic chats with `source_message_id` reply to that message (thread-preferred).
-- The bot immediately replies to the source message with `收到！`.
+- The bot sends immediate feedback according to `immediate_feedback_mode`: by default it replies with `收到！`, and it can be switched to prefer a message reaction instead.
 - During Codex execution, streamed `agent_message` updates are sent as card replies first; if card reply fails, fallback is rich-text (`post`) then plain text.
 - If outgoing content contains resolved mentions, the connector sends plain text directly (instead of card/post) to ensure Feishu mention delivery works.
 - Streamed `file_change` updates use the same card-first reply path, for example: `internal/x.go已更改，+23-34`.

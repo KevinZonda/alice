@@ -128,6 +128,8 @@ codex_prompt_prefix: ""
 claude_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
+immediate_feedback_mode: "reply"
+immediate_feedback_reaction: "SMILE"
 
 queue_capacity: 256
 worker_concurrency: 1
@@ -149,6 +151,8 @@ log_level: "info"
 - `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
 - `env`：注入到所选 LLM 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix` / `claude_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
+- `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
+- `immediate_feedback_reaction`：`immediate_feedback_mode=reaction` 时使用的飞书 reaction 类型，默认 `SMILE`。
 - `codex_mcp_auto_register`：启动时是否自动执行 `codex mcp add` 或 `claude mcp add` 注册内置 `alice-mcp-server`（默认 `true`）。
 - `codex_mcp_register_strict`：为 `true` 时，MCP 注册失败将导致启动失败；为 `false` 时仅记录告警并继续启动（默认 `false`）。
 - `codex_mcp_server_name`：注册到 LLM MCP 的服务名（默认 `alice-feishu`）。
@@ -193,7 +197,7 @@ log_level: "info"
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 在“引用回复”链路里，机器人会优先使用“话题回复”（`reply_in_thread=true`）发送收到/进度/结果；若飞书拒绝话题模式，则自动回退普通引用回复。
 - 对于 MCP `alice-feishu` 工具（`send_image`/`send_file`），发送目标始终由当前会话上下文自动决定，且不能由工具参数覆盖：私聊发送到当前私聊；群聊/话题群存在 `source_message_id` 时按该消息引用回复（优先 thread）。
-- 收到用户消息后，机器人会第一时间引用回复 `收到！`。
+- 收到用户消息后，机器人会按 `immediate_feedback_mode` 立即反馈：默认引用回复 `收到！`，也可改成优先给原消息添加 reaction。
 - Codex 执行期间，流式 `agent_message` 会优先以卡片回复；若卡片失败，会依次回退到富文本（`post`）和纯文本回复。
 - 若回复内容中包含可解析的 @提及，连接器会直接发送纯文本消息（不走卡片/富文本），以确保飞书侧正确触发 mention。
 - Codex 执行期间，流式 `file_change` 事件也走同样的“卡片优先”回复链路，例如：`internal/x.go已更改，+23-34`。

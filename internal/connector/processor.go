@@ -21,6 +21,8 @@ type Processor struct {
 	sender          Sender
 	failureMessage  string
 	thinkingMessage string
+	feedbackMode    string
+	feedbackEmoji   string
 	mu              sync.Mutex
 	sessions        map[string]sessionState
 	stateFilePath   string
@@ -32,6 +34,10 @@ type Processor struct {
 const interruptedReplyMessage = "已收到你的新消息，当前回复已中断并切换到最新输入。"
 const restartNotificationMessage = "Alice已重新启动"
 const fileChangeEventPrefix = "[file_change] "
+const immediateFeedbackReplyText = "收到！"
+const immediateFeedbackModeReply = "reply"
+const immediateFeedbackModeReaction = "reaction"
+const defaultImmediateFeedbackEmoji = "SMILE"
 const idleSummaryPrompt = "请基于当前会话上下文，提炼后续仍有价值的信息摘要。\n" +
 	"要求：\n" +
 	"1. 只提炼：事实、约束、决策、待办、偏好变化。\n" +
@@ -70,9 +76,19 @@ func NewProcessorWithMemory(
 		sender:          sender,
 		failureMessage:  failureMessage,
 		thinkingMessage: thinkingMessage,
+		feedbackMode:    immediateFeedbackModeReply,
+		feedbackEmoji:   defaultImmediateFeedbackEmoji,
 		sessions:        make(map[string]sessionState),
 		now:             time.Now,
 	}
+}
+
+func (p *Processor) SetImmediateFeedback(mode, emojiType string) {
+	if p == nil {
+		return
+	}
+	p.feedbackMode = normalizeImmediateFeedbackMode(mode)
+	p.feedbackEmoji = normalizeImmediateFeedbackEmoji(emojiType)
 }
 
 func (p *Processor) ProcessJob(ctx context.Context, job Job) bool {
@@ -152,11 +168,7 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcessState {
 	sessionKey := sessionKeyForJob(job)
 	p.rememberSessionScope(sessionKey, memoryScopeKeyForJob(job))
-	ackMessageID, err := p.replyCardWithFallback(ctx, job, job.SourceMessageID, "收到！")
-	if err != nil {
-		log.Printf("send ack reply failed event_id=%s: %v", job.EventID, err)
-		ackMessageID = ""
-	}
+	ackDelivered := p.sendImmediateFeedback(ctx, job)
 
 	lastSentAgentMessage := ""
 	sendAgentMessage := func(agentMessage string) {
@@ -208,7 +220,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	if errors.Is(runErr, context.Canceled) {
 		if wasInterruptedByNewMessage(ctx) {
 			notifyCtx := context.WithoutCancel(ctx)
-			if ackMessageID != "" {
+			if ackDelivered {
 				if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 					log.Printf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 				}
@@ -236,7 +248,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			return JobProcessRetryAfterRestart
 		}
 		notifyCtx := context.WithoutCancel(ctx)
-		if ackMessageID != "" {
+		if ackDelivered {
 			if _, replyErr := p.replyCardWithFallback(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 				log.Printf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
 			}
@@ -259,6 +271,44 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		}
 	}
 	return JobProcessCompleted
+}
+
+func (p *Processor) sendImmediateFeedback(ctx context.Context, job Job) bool {
+	if p == nil {
+		return false
+	}
+	if p.feedbackMode == immediateFeedbackModeReaction && strings.TrimSpace(job.SourceMessageID) != "" {
+		if err := p.sender.AddReaction(ctx, job.SourceMessageID, p.feedbackEmoji); err == nil {
+			return true
+		} else {
+			log.Printf("send ack reaction failed event_id=%s message_id=%s emoji=%s: %v", job.EventID, job.SourceMessageID, p.feedbackEmoji, err)
+		}
+	}
+
+	if _, err := p.replyCardWithFallback(ctx, job, job.SourceMessageID, immediateFeedbackReplyText); err != nil {
+		log.Printf("send ack reply failed event_id=%s: %v", job.EventID, err)
+		return false
+	}
+	return true
+}
+
+func normalizeImmediateFeedbackMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case immediateFeedbackModeReaction:
+		return immediateFeedbackModeReaction
+	case immediateFeedbackModeReply:
+		fallthrough
+	default:
+		return immediateFeedbackModeReply
+	}
+}
+
+func normalizeImmediateFeedbackEmoji(raw string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(raw))
+	if normalized == "" {
+		return defaultImmediateFeedbackEmoji
+	}
+	return normalized
 }
 
 func fileChangeReplyTargets(job Job) []string {
