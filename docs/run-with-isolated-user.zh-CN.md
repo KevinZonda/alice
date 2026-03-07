@@ -48,7 +48,7 @@ chmod 700 /home/<your-user>
 ```bash
 sudo -u codexbot -H bash -lc '
   cd /home/codexbot
-  git clone https://gitee.com/alicespace/alice.git alice
+  git clone https://github.com/Alice-space/alice.git alice
   cd alice
   cp config.example.yaml config.yaml
 '

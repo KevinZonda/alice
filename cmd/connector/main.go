@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/bootstrap"
-	"gitee.com/alicespace/alice/internal/config"
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/bootstrap"
+	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 func main() {

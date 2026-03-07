@@ -13,8 +13,8 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 
-	"gitee.com/alicespace/alice/internal/config"
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 type App struct {

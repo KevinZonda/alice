@@ -14,7 +14,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
-	"gitee.com/alicespace/alice/internal/memory"
+	"github.com/Alice-space/alice/internal/memory"
 )
 
 type LarkSender struct {

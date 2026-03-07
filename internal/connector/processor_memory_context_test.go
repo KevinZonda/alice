@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitee.com/alicespace/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
 func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {

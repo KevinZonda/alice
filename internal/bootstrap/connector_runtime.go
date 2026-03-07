@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"gitee.com/alicespace/alice/internal/config"
-	"gitee.com/alicespace/alice/internal/connector"
-	"gitee.com/alicespace/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/connector"
+	"github.com/Alice-space/alice/internal/llm"
 )
 
 type ConnectorRuntime struct {

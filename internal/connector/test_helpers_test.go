@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/config"
-	"gitee.com/alicespace/alice/internal/llm"
-	"gitee.com/alicespace/alice/internal/memory"
+	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/memory"
 )
 
 type codexStub struct {

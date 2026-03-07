@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"gitee.com/alicespace/alice/internal/llm"
-	"gitee.com/alicespace/alice/internal/logging"
-	"gitee.com/alicespace/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
 func defaultIfEmpty(value string, fallback string) string {

@@ -3,7 +3,7 @@ package llm
 import (
 	"context"
 
-	coreclaude "gitee.com/alicespace/alice/internal/llm/claude"
+	coreclaude "github.com/Alice-space/alice/internal/llm/claude"
 )
 
 type claudeMCPRegistrar struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/llm"
 )
 
 func TestInspector_ListAndGet_BySessionKey(t *testing.T) {

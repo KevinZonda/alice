@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 type Runner struct {

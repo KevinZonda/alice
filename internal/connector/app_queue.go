@@ -8,7 +8,7 @@ import (
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 func (a *App) resolveJobSessionKey(job *Job, message *larkim.EventMessage) {

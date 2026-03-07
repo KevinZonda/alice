@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/llm"
-	"gitee.com/alicespace/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
 const (

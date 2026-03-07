@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	coreclaude "gitee.com/alicespace/alice/internal/llm/claude"
+	coreclaude "github.com/Alice-space/alice/internal/llm/claude"
 )
 
 type claudeBackend struct {

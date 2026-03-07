@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/codearmy"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/codearmy"
 )
 
 const (

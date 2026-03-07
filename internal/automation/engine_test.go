@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/llm"
 )
 
 type senderStub struct {

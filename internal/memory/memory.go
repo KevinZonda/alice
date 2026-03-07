@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 const (

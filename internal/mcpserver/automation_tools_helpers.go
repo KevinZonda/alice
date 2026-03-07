@@ -8,8 +8,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
 func parseManageMode(raw string, groupScope bool) (automation.ManageMode, error) {

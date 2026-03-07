@@ -8,11 +8,11 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/mark3labs/mcp-go/server"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/bootstrap"
-	"gitee.com/alicespace/alice/internal/config"
-	"gitee.com/alicespace/alice/internal/connector"
-	"gitee.com/alicespace/alice/internal/mcpserver"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/bootstrap"
+	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/connector"
+	"github.com/Alice-space/alice/internal/mcpserver"
 )
 
 func main() {

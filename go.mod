@@ -1,4 +1,4 @@
-module gitee.com/alicespace/alice
+module github.com/Alice-space/alice
 
 go 1.25.0
 

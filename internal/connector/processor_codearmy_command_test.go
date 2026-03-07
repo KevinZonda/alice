@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/alicespace/alice/internal/automation"
-	"gitee.com/alicespace/alice/internal/codearmy"
-	"gitee.com/alicespace/alice/internal/llm"
+	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/codearmy"
+	"github.com/Alice-space/alice/internal/llm"
 )
 
 type codexCallCountingStub struct {

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"gitee.com/alicespace/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 func configureInterruptibleCommand(cmd *exec.Cmd, processName string) {

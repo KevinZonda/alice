@@ -8,7 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"gitee.com/alicespace/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
 type senderStub struct {
