@@ -18,12 +18,14 @@ trigger_mode: "at"
 # - prefix: only process messages starting with this prefix, and strip prefix before LLM input
 trigger_prefix: ""
 
-# LLM runtime (supported providers: codex, claude)
+# LLM runtime (supported providers: codex, claude, kimi)
 llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 172800
 claude_command: "claude"
 claude_timeout_secs: 120
+kimi_command: "kimi"
+kimi_timeout_secs: 120
 # Automatically register MCP server into the selected LLM CLI at startup.
 codex_mcp_auto_register: true
 # If true, startup fails when MCP registration fails.
@@ -42,6 +44,7 @@ memory_dir: ".memory"
 # Optional, default is empty. Set this only if you want a global instruction prefix.
 codex_prompt_prefix: ""
 claude_prompt_prefix: ""
+kimi_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
 # Immediate feedback after receiving a reply-style message:

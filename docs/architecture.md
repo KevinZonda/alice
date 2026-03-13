@@ -142,16 +142,11 @@ Actively used:
 - `github.com/go-resty/resty/v2`
 - `github.com/oklog/run`
 - `github.com/oklog/ulid/v2`
-- `gopkg.in/yaml.v3`
-
-Still good candidates for later cleanup:
-
-- `go.etcd.io/bbolt`
-  Could replace the JSON-file automation store if we want simpler persistence and lower write amplification.
-- `github.com/rs/zerolog` + `gopkg.in/natefinch/lumberjack.v2`
-  Could replace the lightweight debug logger once log routing/rotation becomes operationally important.
+- `github.com/rs/zerolog`
 - `github.com/spf13/cobra`
-  Useful if `cmd/connector` and `cmd/alice-mcp-server` grow more subcommands.
+- `go.etcd.io/bbolt`
+- `gopkg.in/natefinch/lumberjack.v2`
+- `gopkg.in/yaml.v3`
 
 ## End-to-end flow
 
@@ -161,4 +156,6 @@ Still good candidates for later cleanup:
 4. LLM backend renders prompt templates from disk and runs `codex`/`claude`/`kimi`.
 5. Skills invoked by the agent call the runtime HTTP API through bundled shell scripts.
 6. Runtime HTTP API operates memory, automation, and message sending using the same session context.
-7. Debug traces record each agent call in markdown for replay/audit.
+7. Automation tasks are persisted in `automation.db` through `bbolt`, migrating legacy JSON snapshots on first open.
+8. Runtime logs are emitted through `zerolog`, with optional file rotation handled by `lumberjack`.
+9. Debug traces record each agent call in markdown for replay/audit.

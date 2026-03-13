@@ -115,6 +115,8 @@ codex_command: "codex"
 codex_timeout_secs: 120
 claude_command: "claude"
 claude_timeout_secs: 120
+kimi_command: "kimi"
+kimi_timeout_secs: 120
 codex_mcp_auto_register: true
 codex_mcp_register_strict: false
 codex_mcp_server_name: "alice-feishu"
@@ -126,6 +128,7 @@ memory_dir: ".memory"
 
 codex_prompt_prefix: ""
 claude_prompt_prefix: ""
+kimi_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
 immediate_feedback_mode: "reply"
@@ -138,6 +141,11 @@ idle_summary_hours: 8
 group_context_window_minutes: 5
 
 log_level: "info"
+log_file: ""
+log_max_size_mb: 20
+log_max_backups: 5
+log_max_age_days: 7
+log_compress: false
 ```
 
 必填项：
@@ -147,10 +155,10 @@ log_level: "info"
 
 可选项：
 
-- `llm_provider`：LLM 后端类型选择。支持 `codex`（默认）与 `claude`。
-- `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
+- `llm_provider`：LLM 后端类型选择。支持 `codex`（默认）、`claude`、`kimi`。
+- `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`、`kimi_command` / `kimi_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
 - `env`：注入到所选 LLM 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
-- `codex_prompt_prefix` / `claude_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
+- `codex_prompt_prefix` / `claude_prompt_prefix` / `kimi_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
 - `immediate_feedback_reaction`：`immediate_feedback_mode=reaction` 时使用的飞书 reaction 类型，默认 `SMILE`。
 - `codex_mcp_auto_register`：启动时是否自动执行 `codex mcp add` 或 `claude mcp add` 注册内置 `alice-mcp-server`（默认 `true`）。
@@ -159,6 +167,7 @@ log_level: "info"
 - `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `600`。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
 - `group_context_window_minutes`：群聊未触发消息的缓存窗口（分钟，默认 `5`）。窗口内文本与多媒体会在后续触发时并入上下文（`at`/`prefix` 模式）。
+- `log_file` / `log_max_size_mb` / `log_max_backups` / `log_max_age_days` / `log_compress`：可选滚动日志文件配置，底层使用 `zerolog + lumberjack`。
 - `trigger_mode`：群聊触发策略，支持 `at`（默认）、`active`、`prefix`。
 - `trigger_prefix`：群聊触发前缀。`active` 下命中此前缀会忽略，但艾特机器人仍会触发；`prefix` 下“命中前缀”或“艾特机器人”任一满足即触发。`prefix` 模式下命中前缀时会在发送给 Codex 前剥离前缀。
 - `feishu_bot_open_id` / `feishu_bot_user_id`：群聊/话题群中用于匹配机器人艾特的 ID。
@@ -188,6 +197,7 @@ log_level: "info"
 - 首次启动时会自动创建 `memory_dir` 及其 `daily/` 子目录。
 - 连接器会把每个聊天的会话状态持久化到 `memory_dir/session_state.json`，重启后仍可续接线程。
 - 连接器会把队列中/执行中的任务持久化到 `memory_dir/runtime_state.json`，重启后会继续回复未完成或未回复的消息。
+- 自动化任务会通过 `bbolt` 持久化到 `memory_dir/automation.db`；若检测到旧的 `automation_state.json`，首次打开时会自动导入。
 - 若任务文本明显是“自更新并重启自己”，且处理过程中因重启导致中断，会将该任务视为已完成，避免重启后循环再次处理同一更新指令。
 - 每次调用 Codex 前，只会注入长期记忆；分日期记忆只提供目录位置，让 Codex 按需检索。
 - 会话复用改为“按话题优先”：

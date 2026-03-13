@@ -117,6 +117,8 @@ codex_command: "codex"
 codex_timeout_secs: 120
 claude_command: "claude"
 claude_timeout_secs: 120
+kimi_command: "kimi"
+kimi_timeout_secs: 120
 codex_mcp_auto_register: true
 codex_mcp_register_strict: false
 codex_mcp_server_name: "alice-feishu"
@@ -128,6 +130,7 @@ memory_dir: ".memory"
 
 codex_prompt_prefix: ""
 claude_prompt_prefix: ""
+kimi_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
 immediate_feedback_mode: "reply"
@@ -140,6 +143,11 @@ idle_summary_hours: 8
 group_context_window_minutes: 5
 
 log_level: "info"
+log_file: ""
+log_max_size_mb: 20
+log_max_backups: 5
+log_max_age_days: 7
+log_compress: false
 ```
 
 Required keys:
@@ -149,10 +157,10 @@ Required keys:
 
 Optional:
 
-- `llm_provider`: LLM backend provider selector. Supported values: `codex` (default) and `claude`.
-- `codex_command` / `codex_timeout_secs`, `claude_command` / `claude_timeout_secs`: CLI command path and timeout (seconds) for each backend.
+- `llm_provider`: LLM backend provider selector. Supported values: `codex` (default), `claude`, and `kimi`.
+- `codex_command` / `codex_timeout_secs`, `claude_command` / `claude_timeout_secs`, `kimi_command` / `kimi_timeout_secs`: CLI command path and timeout (seconds) for each backend.
 - `env`: key-value environment variables injected into the selected LLM process (for example HTTP/HTTPS/SOCKS proxy settings).
-- `codex_prompt_prefix` / `claude_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
+- `codex_prompt_prefix` / `claude_prompt_prefix` / `kimi_prompt_prefix`: global instruction prefix prepended for new threads only; default is empty.
 - `immediate_feedback_mode`: immediate feedback strategy for reply-style messages. Supports `reply` (default, send `收到！`) and `reaction` (prefer a message reaction, then fall back to `收到！` if reaction fails).
 - `immediate_feedback_reaction`: Feishu reaction type used when `immediate_feedback_mode=reaction`, default `SMILE`.
 - `codex_mcp_auto_register`: whether to auto-run `codex mcp add` or `claude mcp add` at startup for the bundled `alice-mcp-server` command (default `true`).
@@ -161,6 +169,7 @@ Optional:
 - `automation_task_timeout_secs`: timeout window for a single automation user task execution (`send_text`/`run_llm`), default `600`.
 - `idle_summary_hours`: idle threshold (hours) before background daily summary write (default `8`).
 - `group_context_window_minutes`: sliding window duration (minutes) for caching non-triggered group messages (text + multimedia), merged on the next trigger in `at`/`prefix` mode (default `5`).
+- `log_file` / `log_max_size_mb` / `log_max_backups` / `log_max_age_days` / `log_compress`: optional rotating log file settings backed by `zerolog + lumberjack`.
 - `trigger_mode`: group trigger strategy. Supported values: `at` (default), `active`, `prefix`.
 - `trigger_prefix`: prefix used by group trigger strategy. In `active`, messages starting with this prefix are ignored unless they mention the bot; in `prefix`, messages are processed when either the prefix matches or the bot is mentioned. When the prefix matches in `prefix` mode, it is stripped before sending to Codex.
 - `feishu_bot_open_id` / `feishu_bot_user_id`: bot IDs used for mention matching in group/topic-group chats.
@@ -183,6 +192,7 @@ Optional:
 - On first startup, the connector auto-creates `memory_dir` and its `daily/` subdirectory.
 - The connector also persists per-chat session state in `memory_dir/session_state.json` to keep thread continuity across restarts.
 - The connector persists queued jobs in `memory_dir/runtime_state.json`; after restart it resumes queued jobs that were not started yet.
+- Automation tasks are persisted in `memory_dir/automation.db` via `bbolt`; existing legacy `automation_state.json` data is imported automatically on first open.
 - If shutdown/restart happens while a job is being processed, that in-progress job is discarded and will not be resumed after restart.
 - Before each Codex call, only long-term memory is injected; date-based memory is exposed as a directory path for Codex to search on demand.
 - Session reuse is now thread-aware:

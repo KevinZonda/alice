@@ -142,16 +142,11 @@ MCP 不再是 Alice 业务能力扩展的主入口。
 - `github.com/go-resty/resty/v2`
 - `github.com/oklog/run`
 - `github.com/oklog/ulid/v2`
-- `gopkg.in/yaml.v3`
-
-仍然值得后续引入的候选：
-
-- `go.etcd.io/bbolt`
-  如果后续希望把 automation JSON 文件存储替换掉，它能进一步减少手写持久化代码。
-- `github.com/rs/zerolog` + `gopkg.in/natefinch/lumberjack.v2`
-  当日志路由、分级、滚动需求变强时，适合替换当前轻量 logger。
+- `github.com/rs/zerolog`
 - `github.com/spf13/cobra`
-  如果 `cmd/connector`、`cmd/alice-mcp-server` 继续长大，可以统一到更清晰的 CLI 结构。
+- `go.etcd.io/bbolt`
+- `gopkg.in/natefinch/lumberjack.v2`
+- `gopkg.in/yaml.v3`
 
 ## 端到端链路
 
@@ -161,4 +156,6 @@ MCP 不再是 Alice 业务能力扩展的主入口。
 4. LLM backend 从磁盘模板渲染 prompt，并调用 `codex` / `claude` / `kimi`。
 5. agent 使用的外置 skill 通过脚本调用 runtime HTTP API。
 6. runtime HTTP API 复用同一份 session context 操作 memory、automation 和消息发送。
-7. debug trace 以 Markdown 形式记录每次 agent 调用，便于追踪和审计。
+7. automation task 通过 `bbolt` 持久化到 `automation.db`，并在首次打开时自动迁移旧 JSON 快照。
+8. 运行时日志统一经由 `zerolog` 输出，可选文件滚动由 `lumberjack` 负责。
+9. debug trace 以 Markdown 形式记录每次 agent 调用，便于追踪和审计。
