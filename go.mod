@@ -7,6 +7,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/gin-gonic/gin v1.10.0
+	github.com/go-resty/resty/v2 v2.16.2
 	github.com/larksuite/oapi-sdk-go/v3 v3.5.3
 	github.com/mark3labs/mcp-go v0.44.0
 	github.com/oklog/run v1.1.0

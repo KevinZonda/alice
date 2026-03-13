@@ -41,7 +41,6 @@ type Manager struct {
 	mu      sync.Mutex
 }
 
-func NewManager(dir string, prompts *prompting.Loader) *Manager {
 type ScopeSnapshot struct {
 	ScopeKey          string    `json:"scope_key"`
 	GlobalLongPath    string    `json:"global_long_path"`

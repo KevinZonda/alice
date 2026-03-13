@@ -1,58 +1,164 @@
-# Architecture and Refactor Plan
+# Alice Runtime Architecture
 
 [中文版本](./architecture.zh-CN.md)
 
-This document defines the target architecture for `alice` and tracks ongoing refactor slices.
+This document describes the current target architecture after the runtime/skills refactor shipped on March 13, 2026.
 
 ## Design goals
 
-- High cohesion: each package should own one clear responsibility.
-- Low coupling: business flow should depend on interfaces, not concrete transport details.
-- Recoverability: restart and runtime-state restoration must stay deterministic.
-- Operability: deployment and runbook behavior must stay stable during refactors.
+- Keep the connector process focused on orchestration, not prompt literals or tool-specific business logic.
+- Treat LLM backends as interchangeable adapters.
+- Move chat-scoped operational capabilities into reusable skills that talk to Alice through a local HTTP API.
+- Keep MCP as a compatibility layer for media/file tools instead of the primary expansion surface.
+- Make debug traces auditable: every agent call should record markdown input/output/tool activity.
 
-## Bounded modules
+## Component map
 
-- `cmd/connector`: process bootstrap only (config load, dependency wiring, run loop).
-- `internal/connector`: Feishu event intake, queueing, per-session sequencing, reply orchestration.
-- `internal/llm/codex`: Codex CLI invocation and stream parsing.
-- `internal/memory`: long-term and daily memory persistence.
-- `internal/automation`: task scheduling, persistence, and execution engine.
-- `cmd/alice-mcp-server` + `internal/mcpserver`: MCP server entry and handlers.
+- `cmd/connector`
+  Starts the Feishu connector, automation engine, and local runtime HTTP API in one process group.
+- `internal/connector`
+  Handles Feishu websocket intake, queueing, session serialization, interruption, reply dispatch, and per-run env injection.
+- `internal/llm`
+  Backend factory plus provider adapters for `codex`, `claude`, and `kimi`.
+- `internal/prompting`
+  File-backed prompt/template renderer using Go templates plus `sprig`.
+- `internal/memory`
+  Scoped memory storage and prompt assembly, plus HTTP-friendly snapshot/update helpers.
+- `internal/automation`
+  Task persistence/execution for `send_text`, `run_llm`, and `run_workflow`.
+- `internal/runtimeapi`
+  Local authenticated HTTP server and client used by skills and MCP proxies.
+- `internal/mcpserver`
+  Compatibility MCP surface. Media/file tools prefer the runtime HTTP API and fall back to direct sender behavior.
+- `skills/`
+  Runtime-facing operational skills such as `alice-memory`, `alice-scheduler`, and `alice-code-army`.
 
-## Dependency rules
+## Prompt system
 
-- `cmd/*` may depend on `internal/*`; `internal/*` must not depend on `cmd/*`.
-- `internal/connector` may call `internal/llm`, `internal/memory`, `internal/automation` via interfaces.
-- Feishu SDK usage should stay in connector/sender-facing adapters.
-- Runtime mutable state should be centralized in dedicated state components.
+Prompts are no longer embedded as large string literals in code paths.
 
-## Runtime flow
+- Prompt root: `prompts/`
+- LLM initial prompt template: `prompts/llm/initial_prompt.md.tmpl`
+- Memory prompt template: `prompts/memory/prompt.md.tmpl`
+- Code Army phase templates:
+  - `prompts/code_army/manager.md.tmpl`
+  - `prompts/code_army/worker.md.tmpl`
+  - `prompts/code_army/reviewer.md.tmpl`
 
-1. Feishu WS event enters `App` (`internal/connector/app.go`).
-2. Queue/session steering is handled by dedicated runtime helpers (`internal/connector/app_queue.go`).
-3. Worker serializes processing by session-level mutex.
-4. `Processor` builds prompt/context, invokes backend, and delegates reply downgrade policy to `replyDispatcher` (`internal/connector/reply_dispatcher.go`).
-5. Session/runtime state and memory are flushed asynchronously.
+`internal/prompting` loads templates from disk, caches compiled templates with `xxhash`, and exposes `sprig` helpers for richer prompt logic.
 
-## Refactor status (this iteration)
+## Backend abstraction
 
-- Introduced `runtimeStore` (`internal/connector/runtime_store.go`) to centralize mutable runtime state:
-  - `latest` session versions
-  - `pending` jobs
-  - group `mediaWindow`
-  - per-session mutex map
-  - runtime-state persistence metadata
-- Updated `App` and related runtime/media-window paths to use the centralized store.
-- Split connector orchestration by responsibility:
-  - `internal/connector/app.go`: websocket lifecycle and worker loop
-  - `internal/connector/app_queue.go`: session routing, queueing, and active-run steering
-- Extracted `replyDispatcher` (`internal/connector/reply_dispatcher.go`) so transport fallback policy is no longer embedded in `Processor`.
-- Refactored connector bootstrap into staged builder steps in `internal/bootstrap/connector_runtime_builder.go`.
-- Removed deprecated interactive card patch path (`PatchCard`) from `Sender` abstractions and concrete sender implementation.
+The backend factory now supports:
 
-## Next slices
+- `codex`
+- `claude`
+- `kimi`
 
-1. Split `Processor` into pipeline stages (`context build`, `backend invoke`, `reply render`) for better test isolation.
-2. Clarify memory ownership by introducing a coordinator boundary between prompt assembly, idle summaries, and persistence hooks.
-3. Continue shrinking `cmd/connector/main.go` into thinner startup wiring as more builder slices stabilize.
+Key behaviors:
+
+- Shared high-level `llm.Backend` contract remains stable.
+- `kimi` uses the local `kimi` CLI in print/stream-json mode and reuses Alice session ids as Kimi session ids.
+- Providers that do not support MCP registration, such as `kimi`, simply skip MCP auto-registration.
+
+## Runtime HTTP API
+
+The connector now exposes a local authenticated HTTP API, intended for skills and thin proxies.
+
+Current API groups:
+
+- `/api/v1/messages/*`
+  Send text/image/file into the current chat context.
+- `/api/v1/memory/*`
+  Inspect memory context, rewrite long-term memory, append daily summaries.
+- `/api/v1/automation/*`
+  Create/list/get/patch/delete scheduled tasks.
+- `/api/v1/workflows/code-army/status`
+  Inspect `code_army` workflow state for the current conversation.
+
+Configuration:
+
+- `runtime_http_addr`
+- `runtime_http_token`
+
+If `runtime_http_token` is omitted, the connector generates a per-process token and injects it into agent environments.
+
+## Skills model
+
+Operational modules are now exposed as skills instead of being reachable only through MCP tools:
+
+- `skills/alice-memory`
+  Inspect/update current chat memory through `scripts/alice-memory.sh`.
+- `skills/alice-scheduler`
+  Manage automation tasks and workflow status through `scripts/alice-scheduler.sh`.
+- `skills/alice-code-army`
+  Now composes with `alice-scheduler` instead of invoking MCP automation tools directly.
+
+These skills rely on:
+
+- `ALICE_RUNTIME_API_BASE_URL`
+- `ALICE_RUNTIME_API_TOKEN`
+- existing session env such as `ALICE_MCP_RECEIVE_ID`, `ALICE_MCP_SESSION_KEY`, and related actor metadata
+
+## MCP strategy
+
+MCP is no longer the preferred extension surface for Alice business operations.
+
+Current posture:
+
+- Skills + runtime HTTP are the primary path for memory/scheduling/workflow operations.
+- `alice-mcp-server` remains available for compatibility.
+- `send_image` and `send_file` now prefer the runtime HTTP client path and fall back to direct sender behavior when the local runtime API is unavailable.
+
+This keeps legacy Codex MCP behavior alive while reducing duplication between skills and MCP handlers.
+
+## Debug traces
+
+When `log_level=debug`, every agent call emits a markdown trace containing:
+
+- provider
+- agent name
+- thread/session id
+- model/profile
+- rendered input
+- observed tool calls
+- final output or error
+
+This applies to:
+
+- normal assistant runs
+- scheduler-triggered `run_llm`
+- `code_army` phase agents (`manager`, `worker`, `reviewer`)
+- backend adapters that can surface tool activity (`codex`, `kimi`, and partial `claude`)
+
+## Library adoption in this refactor
+
+Actively used:
+
+- `github.com/Masterminds/sprig/v3`
+- `github.com/cespare/xxhash/v2`
+- `github.com/evanphx/json-patch/v5`
+- `github.com/gin-gonic/gin`
+- `github.com/go-resty/resty/v2`
+- `github.com/oklog/run`
+- `github.com/oklog/ulid/v2`
+- `gopkg.in/yaml.v3`
+
+Still good candidates for later cleanup:
+
+- `go.etcd.io/bbolt`
+  Could replace the JSON-file automation store if we want simpler persistence and lower write amplification.
+- `github.com/rs/zerolog` + `gopkg.in/natefinch/lumberjack.v2`
+  Could replace the lightweight debug logger once log routing/rotation becomes operationally important.
+- `github.com/spf13/cobra`
+  Useful if `cmd/connector` and `cmd/alice-mcp-server` grow more subcommands.
+
+## End-to-end flow
+
+1. Feishu event enters `internal/connector`.
+2. Connector serializes work per session and builds per-run env.
+3. Env includes current chat context plus runtime HTTP auth.
+4. LLM backend renders prompt templates from disk and runs `codex`/`claude`/`kimi`.
+5. Skills invoked by the agent call the runtime HTTP API through bundled shell scripts.
+6. Runtime HTTP API operates memory, automation, and message sending using the same session context.
+7. Debug traces record each agent call in markdown for replay/audit.

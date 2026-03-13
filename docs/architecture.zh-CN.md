@@ -1,58 +1,164 @@
-# 架构设计与重构规划
+# Alice 运行时架构
 
 [English](./architecture.md)
 
-本文档定义 `alice` 的目标架构，并记录重构阶段成果。
+本文档描述 2026 年 3 月 13 日这轮 runtime/skills 重构后的目标架构。
 
 ## 设计目标
 
-- 高内聚：每个包只负责单一核心职责。
-- 低耦合：核心流程优先依赖接口，而非具体传输实现。
-- 可恢复：重启后的状态恢复行为可预测、可重复。
-- 可运维：重构期间不破坏既有部署与运行手册行为。
+- 让 connector 只负责编排，不再承载大段 prompt 字面量和具体工具业务。
+- 把 LLM 后端明确做成可替换适配层。
+- 把会话级运维能力迁移成可复用的外置 skill，通过本地 HTTP API 与 Alice 通信。
+- 把 MCP 收敛为兼容层，而不是 Alice 扩展能力的主入口。
+- 让调试链路可审计：每次 agent 调用都能看到 Markdown 格式的输入、输出、tool 调用。
 
-## 模块边界
+## 组件地图
 
-- `cmd/connector`：仅负责启动编排（加载配置、组装依赖、运行主循环）。
-- `internal/connector`：飞书事件接入、排队、按会话串行、回复编排。
-- `internal/llm/codex`：Codex CLI 调用与流式事件解析。
-- `internal/memory`：长期记忆与分日期记忆持久化。
-- `internal/automation`：自动化任务调度、存储与执行引擎。
-- `cmd/alice-mcp-server` + `internal/mcpserver`：MCP 服务入口与处理逻辑。
+- `cmd/connector`
+  启动 Feishu connector、automation engine 和本地 runtime HTTP API。
+- `internal/connector`
+  负责 Feishu websocket 接入、排队、按 session 串行、抢占中断、回复派发，以及 agent 运行时环境变量注入。
+- `internal/llm`
+  后端工厂与 provider 适配层，当前支持 `codex`、`claude`、`kimi`。
+- `internal/prompting`
+  基于磁盘模板文件的渲染器，使用 Go template + `sprig`。
+- `internal/memory`
+  管理 scoped memory、memory prompt 组装，以及 HTTP 暴露用的 snapshot/update 能力。
+- `internal/automation`
+  定时任务的持久化与执行，支持 `send_text`、`run_llm`、`run_workflow`。
+- `internal/runtimeapi`
+  本地鉴权 HTTP server/client，供 skills 和 MCP 代理复用。
+- `internal/mcpserver`
+  兼容 MCP 层；媒体/文件工具优先走 runtime HTTP，失败时再回退到直接 sender。
+- `skills/`
+  外置运行时技能，如 `alice-memory`、`alice-scheduler`、`alice-code-army`。
 
-## 依赖约束
+## Prompt 体系
 
-- `cmd/*` 可以依赖 `internal/*`；`internal/*` 不能反向依赖 `cmd/*`。
-- `internal/connector` 通过接口使用 `internal/llm`、`internal/memory`、`internal/automation`。
-- 飞书 SDK 调用集中在 connector/sender 适配层，避免外溢。
-- 运行期可变状态集中在专门状态组件中管理。
+prompt 不再以内联大字符串散落在代码里。
 
-## 运行链路
+- Prompt 根目录：`prompts/`
+- LLM 首轮 prompt 模板：`prompts/llm/initial_prompt.md.tmpl`
+- Memory prompt 模板：`prompts/memory/prompt.md.tmpl`
+- Code Army phase 模板：
+  - `prompts/code_army/manager.md.tmpl`
+  - `prompts/code_army/worker.md.tmpl`
+  - `prompts/code_army/reviewer.md.tmpl`
 
-1. 飞书 WS 事件进入 `App`（`internal/connector/app.go`）。
-2. 会话路由、排队与抢占控制由独立运行态辅助模块处理（`internal/connector/app_queue.go`）。
-3. Worker 通过 session 级互斥保证同会话串行处理。
-4. `Processor` 构造上下文并调用后端，消息降级发送策略委托给 `replyDispatcher`（`internal/connector/reply_dispatcher.go`）。
-5. 会话/运行态与记忆模块异步落盘。
+`internal/prompting` 从磁盘读取模板，使用 `xxhash` 做编译缓存，并暴露 `sprig` 函数，避免把 prompt 逻辑重新手搓一遍。
 
-## 本次重构已完成
+## 后端抽象
 
-- 新增 `runtimeStore`（`internal/connector/runtime_store.go`）集中管理运行态：
-  - `latest` 会话版本
-  - `pending` 任务
-  - 群聊 `mediaWindow`
-  - 会话互斥锁映射
-  - 运行态持久化版本信息
-- `App` 与运行态/上下文窗口相关逻辑已统一改为使用 `runtimeStore`。
-- 按职责拆分 connector 编排：
-  - `internal/connector/app.go`：WebSocket 生命周期与 worker 主循环
-  - `internal/connector/app_queue.go`：会话路由、入队和 active-run 抢占
-- 新增 `replyDispatcher`（`internal/connector/reply_dispatcher.go`），把卡片/富文本/纯文本回退策略从 `Processor` 中抽离。
-- 启动装配改为分阶段 builder：`internal/bootstrap/connector_runtime_builder.go`。
-- 删除废弃的交互卡片增量更新链路：移除 `Sender` 接口及实现中的 `PatchCard`。
+当前后端支持：
 
-## 后续重构切片
+- `codex`
+- `claude`
+- `kimi`
 
-1. 将 `Processor` 拆分为 `上下文构建`、`后端调用`、`回复渲染` 三段流水线，提升可测性。
-2. 梳理记忆模块归属，引入更明确的协调边界，区分 prompt 组装、空闲摘要与持久化职责。
-3. 继续压薄 `cmd/connector/main.go`，让启动入口只保留稳定的装配调用。
+关键约束：
+
+- 统一保持 `llm.Backend` 高层接口不变。
+- `kimi` 通过本机 `kimi` CLI 的 `print/stream-json` 模式运行，并把 Alice 的 thread/session 直接映射到 Kimi 的 session。
+- 对不支持 MCP 注册的 provider（例如 `kimi`），自动跳过 MCP auto-register，而不是强行报错。
+
+## Runtime HTTP API
+
+connector 进程现在会同时暴露本地鉴权 HTTP API，供 skills 和轻量代理使用。
+
+当前 API 分组：
+
+- `/api/v1/messages/*`
+  向当前会话发送 text/image/file。
+- `/api/v1/memory/*`
+  查看 memory 上下文、覆盖长期记忆、追加 daily summary。
+- `/api/v1/automation/*`
+  创建、列出、查询、补丁更新、删除定时任务。
+- `/api/v1/workflows/code-army/status`
+  查询当前会话的 `code_army` 工作流状态。
+
+配置项：
+
+- `runtime_http_addr`
+- `runtime_http_token`
+
+如果没有显式配置 `runtime_http_token`，connector 会在启动时生成一次性 token，并注入到 agent 运行环境。
+
+## Skills 形态
+
+memory 和定时任务能力现在以外置 skill 的形式暴露，而不是只能从 MCP 进入：
+
+- `skills/alice-memory`
+  通过 `scripts/alice-memory.sh` 查看和更新当前会话 memory。
+- `skills/alice-scheduler`
+  通过 `scripts/alice-scheduler.sh` 管理 automation task 和 workflow 状态。
+- `skills/alice-code-army`
+  现在组合 `alice-scheduler`，不再直接依赖 MCP automation tools。
+
+这些 skill 依赖的运行时环境变量：
+
+- `ALICE_RUNTIME_API_BASE_URL`
+- `ALICE_RUNTIME_API_TOKEN`
+- 既有会话环境变量，如 `ALICE_MCP_RECEIVE_ID`、`ALICE_MCP_SESSION_KEY`、actor 元数据等
+
+## MCP 策略
+
+MCP 不再是 Alice 业务能力扩展的主入口。
+
+当前策略：
+
+- memory / scheduler / workflow 以 skills + runtime HTTP 为主路径。
+- `alice-mcp-server` 继续保留，承担兼容职责。
+- `send_image` 和 `send_file` 现在优先通过 runtime HTTP client 发起，请求失败时再回退到旧的直连 sender 行为。
+
+这样做的结果是：Codex 里的 MCP、外置 skill、Alice 核心运行时共享同一份会话鉴权和消息 API，而不是各自复制一套逻辑。
+
+## Debug Trace
+
+当 `log_level=debug` 时，每次 agent 调用都会输出一份 Markdown trace，至少包含：
+
+- provider
+- agent 名称
+- thread/session id
+- model / profile
+- 渲染后的输入
+- 观察到的 tool 调用
+- 最终输出或错误
+
+覆盖范围：
+
+- 普通 assistant 调用
+- scheduler 触发的 `run_llm`
+- `code_army` 的 phase agent（`manager`、`worker`、`reviewer`）
+- 能暴露 tool 活动的后端适配层（`codex`、`kimi`，以及部分 `claude`）
+
+## 本次已采用的库
+
+实际落地使用：
+
+- `github.com/Masterminds/sprig/v3`
+- `github.com/cespare/xxhash/v2`
+- `github.com/evanphx/json-patch/v5`
+- `github.com/gin-gonic/gin`
+- `github.com/go-resty/resty/v2`
+- `github.com/oklog/run`
+- `github.com/oklog/ulid/v2`
+- `gopkg.in/yaml.v3`
+
+仍然值得后续引入的候选：
+
+- `go.etcd.io/bbolt`
+  如果后续希望把 automation JSON 文件存储替换掉，它能进一步减少手写持久化代码。
+- `github.com/rs/zerolog` + `gopkg.in/natefinch/lumberjack.v2`
+  当日志路由、分级、滚动需求变强时，适合替换当前轻量 logger。
+- `github.com/spf13/cobra`
+  如果 `cmd/connector`、`cmd/alice-mcp-server` 继续长大，可以统一到更清晰的 CLI 结构。
+
+## 端到端链路
+
+1. Feishu 事件进入 `internal/connector`。
+2. Connector 按 session 串行调度，并组装本轮 agent 环境变量。
+3. 环境变量里同时带上当前会话上下文和 runtime HTTP 鉴权信息。
+4. LLM backend 从磁盘模板渲染 prompt，并调用 `codex` / `claude` / `kimi`。
+5. agent 使用的外置 skill 通过脚本调用 runtime HTTP API。
+6. runtime HTTP API 复用同一份 session context 操作 memory、automation 和消息发送。
+7. debug trace 以 Markdown 形式记录每次 agent 调用，便于追踪和审计。
