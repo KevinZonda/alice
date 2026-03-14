@@ -1,4 +1,0 @@
-interface:
-  display_name: "Alice Codebase Onboarding"
-  short_description: "Trace Alice runtime flow, deployment health, and self-update path."
-  default_prompt: "Use $alice-codebase-onboarding to inspect the current Alice repository/runtime, then give exact evidence-backed fix or self-update commands."

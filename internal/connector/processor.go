@@ -3,9 +3,6 @@ package connector
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -42,22 +39,11 @@ type Processor struct {
 }
 
 const interruptedReplyMessage = "已收到你的新消息，当前回复已中断并切换到最新输入。"
-const restartNotificationMessage = "Alice已重新启动"
 const fileChangeEventPrefix = "[file_change] "
 const immediateFeedbackReplyText = "收到！"
 const immediateFeedbackModeReply = "reply"
 const immediateFeedbackModeReaction = "reaction"
 const defaultImmediateFeedbackEmoji = "SMILE"
-
-var selfUpdateIntentPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)self[\s_-]*update`),
-	regexp.MustCompile(`(?i)update[\s_-]*self`),
-	regexp.MustCompile(`(?i)update.*restart`),
-	regexp.MustCompile(`(?i)restart.*(self|yourself|bot)`),
-	regexp.MustCompile(`更新.*重启`),
-	regexp.MustCompile(`重启.*(自己|你自己)`),
-	regexp.MustCompile(`(?i)update-self-and-sync-skill\.sh`),
-}
 
 func NewProcessor(
 	backend llm.Backend,
@@ -173,12 +159,6 @@ func (p *Processor) ProcessJob(ctx context.Context, job Job) bool {
 func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessState {
 	job.WorkflowPhase = normalizeJobWorkflowPhase(job.WorkflowPhase)
 	p.enrichJobUserNames(ctx, &job)
-	if job.WorkflowPhase == jobWorkflowPhaseRestartNotification {
-		return p.processRestartNotification(ctx, job)
-	}
-	if job.WorkflowPhase == jobWorkflowPhasePostRestartFinalize {
-		return p.processPostRestartFinalize(ctx, job)
-	}
 	if handled, state := p.processBuiltinCommand(ctx, job); handled {
 		return state
 	}
@@ -217,14 +197,6 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 			logging.Infof("llm interrupted by newer message event_id=%s", job.EventID)
 			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 			return JobProcessRetryAfterRestart
-		}
-		if ctx.Err() != nil && isRestartIntentJob(job) {
-			logging.Debugf(
-				"job state decided event_id=%s state=%s reason=shutdown_restart_intent",
-				job.EventID,
-				JobProcessPostRestartFinalize,
-			)
-			return JobProcessPostRestartFinalize
 		}
 		logging.Infof("llm canceled event_id=%s", job.EventID)
 		logging.Debugf("memory update skipped event_id=%s changed=false reason=llm_canceled", job.EventID)
@@ -310,14 +282,6 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		}
 		// Parent context cancellation usually means app shutdown.
 		if ctx.Err() != nil {
-			if isRestartIntentJob(job) {
-				logging.Debugf(
-					"job state decided event_id=%s state=%s reason=shutdown_restart_intent",
-					job.EventID,
-					JobProcessPostRestartFinalize,
-				)
-				return JobProcessPostRestartFinalize
-			}
 			logging.Debugf(
 				"job state decided event_id=%s state=%s reason=context_canceled",
 				job.EventID,
@@ -417,77 +381,4 @@ func fileChangeReplyTargets(job Job) []string {
 		targets = append(targets, normalized)
 	}
 	return targets
-}
-
-func isRestartIntentJob(job Job) bool {
-	candidates := []string{
-		strings.TrimSpace(job.Text),
-		strings.TrimSpace(job.RawContent),
-	}
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
-		}
-		for _, pattern := range selfUpdateIntentPatterns {
-			if pattern.MatchString(candidate) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (p *Processor) processRestartNotification(ctx context.Context, job Job) JobProcessState {
-	sendErr := p.replies.respond(ctx, job, restartNotificationMessage)
-	if sendErr != nil {
-		logging.Warnf("send restart notification failed event_id=%s: %v", job.EventID, sendErr)
-		logging.Debugf(
-			"job state decided event_id=%s state=%s reason=restart_notification_send_failed",
-			job.EventID,
-			JobProcessRetryAfterRestart,
-		)
-		return JobProcessRetryAfterRestart
-	}
-
-	p.recordInteraction(job, p.buildCurrentUserInput(job), restartNotificationMessage, false)
-	logging.Debugf(
-		"job state decided event_id=%s state=%s reason=restart_notification_completed",
-		job.EventID,
-		JobProcessCompleted,
-	)
-	return JobProcessCompleted
-}
-
-func (p *Processor) processPostRestartFinalize(ctx context.Context, job Job) JobProcessState {
-	sessionKey := sessionKeyForJob(job)
-	threadID := strings.TrimSpace(p.getThreadID(sessionKey))
-	now := p.now()
-	pid := os.Getpid()
-
-	summary := fmt.Sprintf(
-		"重启操作已完成，并已在重启后自检通过。\n时间：%s\n进程：PID=%d\n会话：%s\n线程：%s",
-		now.Format(time.RFC3339),
-		pid,
-		sessionKey,
-		defaultIfEmpty(threadID, "无"),
-	)
-
-	sendErr := p.replies.respond(ctx, job, summary)
-	if sendErr != nil {
-		logging.Warnf("send post-restart finalize reply failed event_id=%s: %v", job.EventID, sendErr)
-		logging.Debugf(
-			"job state decided event_id=%s state=%s reason=post_restart_finalize_send_failed",
-			job.EventID,
-			JobProcessRetryAfterRestart,
-		)
-		return JobProcessRetryAfterRestart
-	}
-
-	p.recordInteraction(job, p.buildCurrentUserInput(job), summary, false)
-	logging.Debugf(
-		"job state decided event_id=%s state=%s reason=post_restart_finalize_completed",
-		job.EventID,
-		JobProcessCompleted,
-	)
-	return JobProcessCompleted
 }

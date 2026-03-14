@@ -472,50 +472,6 @@ func TestProcessor_CanceledNonReplySkipsSendingAndMemory(t *testing.T) {
 	}
 }
 
-func TestProcessor_RestartNotificationPhaseSkipsCodexAndSendsFixedMessage(t *testing.T) {
-	fakeCodex := newBlockingResumableCodexStub()
-	sender := &senderStub{}
-	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
-
-	processor := NewProcessorWithMemory(
-		fakeCodex,
-		sender,
-		"Codex 暂时不可用，请稍后重试。",
-		"正在思考中...",
-		memory,
-	)
-
-	state := processor.ProcessJobState(context.Background(), Job{
-		ReceiveID:       "oc_chat",
-		ReceiveIDType:   "chat_id",
-		SourceMessageID: "om_src",
-		Text:            "hello",
-		WorkflowPhase:   jobWorkflowPhaseRestartNotification,
-	})
-
-	if state != JobProcessCompleted {
-		t.Fatalf("expected completed state, got %s", state)
-	}
-	if got := fakeCodex.CallCount(); got != 0 {
-		t.Fatalf("restart notification should skip codex call, got %d", got)
-	}
-	if sender.replyTextCalls != 0 {
-		t.Fatalf("expected zero text replies, got %d", sender.replyTextCalls)
-	}
-	if sender.replyCardCalls != 1 {
-		t.Fatalf("expected one restart notification card reply, got %d", sender.replyCardCalls)
-	}
-	if len(sender.replyCards) != 1 || !strings.Contains(sender.replyCards[0], restartNotificationMessage) {
-		t.Fatalf("unexpected restart notification card reply history: %#v", sender.replyCards)
-	}
-	if sender.sendCalls != 0 {
-		t.Fatalf("reply message should not send direct chat message, got sendCalls=%d", sender.sendCalls)
-	}
-	if memory.saveCalls != 1 {
-		t.Fatalf("restart notification should be recorded once in memory, got %d", memory.saveCalls)
-	}
-}
-
 func TestProcessor_ReplyMentionUsesTextReply(t *testing.T) {
 	fakeCodex := codexStub{resp: "@李志昊 请看下这个结果"}
 	sender := &senderStub{}

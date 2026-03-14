@@ -136,7 +136,6 @@ Bundled skills are embedded into the binary (`skills/**`) and extracted to `${CO
 
 Included skills:
 
-- `alice-codebase-onboarding`
 - `alice-memory`
 - `alice-message`
 - `alice-scheduler`

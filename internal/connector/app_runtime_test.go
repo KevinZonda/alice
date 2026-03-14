@@ -335,7 +335,7 @@ func TestApp_RuntimeStateRestoreKeepsPendingQueueOrderWithinSession(t *testing.T
 	}
 }
 
-func TestApp_InterruptedJobNotifiesAfterRestartWithoutCodex(t *testing.T) {
+func TestApp_InterruptedJobRemainsPendingForRetryAfterRestart(t *testing.T) {
 	cfg := configForTest()
 	statePath := t.TempDir() + "/runtime_state.json"
 	blockingCodex := newBlockingResumableCodexStub()
@@ -378,46 +378,30 @@ func TestApp_InterruptedJobNotifiesAfterRestartWithoutCodex(t *testing.T) {
 		if !ok {
 			return false
 		}
-		return pendingJob.WorkflowPhase == jobWorkflowPhaseRestartNotification
-	}, "interrupted in-progress job should be kept pending as restart notification")
+		return normalizeJobWorkflowPhase(pendingJob.WorkflowPhase) == jobWorkflowPhaseNormal
+	}, "interrupted in-progress job should remain pending in normal phase")
 
 	if err := app.FlushRuntimeState(); err != nil {
 		t.Fatalf("flush runtime state failed: %v", err)
 	}
 
-	restoredCodex := newBlockingResumableCodexStub()
-	restoredSender := &senderStub{}
-	restoredProcessor := NewProcessor(
-		restoredCodex,
-		restoredSender,
-		"Codex 暂时不可用，请稍后重试。",
-		"正在思考中...",
-	)
-	restored := NewApp(cfg, restoredProcessor)
+	restored := NewApp(cfg, nil)
 	if err := restored.LoadRuntimeState(statePath); err != nil {
 		t.Fatalf("load persisted runtime state failed: %v", err)
 	}
-	restoredCtx, restoredCancel := context.WithCancel(context.Background())
-	defer restoredCancel()
-	go restored.workerLoop(restoredCtx, 0)
-
-	waitForCondition(t, 2*time.Second, func() bool {
-		return restoredSender.SendCardCalls() == 1
-	}, "expected restart notification to be sent after restart")
-	if !strings.Contains(restoredSender.LastSendCard(), restartNotificationMessage) {
-		t.Fatalf("unexpected restart notification card message: %q", restoredSender.LastSendCard())
+	if got := len(restored.queue); got != 1 {
+		t.Fatalf("expected one restored queue job, got %d", got)
 	}
-	if got := restoredCodex.CallCount(); got != 0 {
-		t.Fatalf("restart notification should skip codex call, got %d", got)
+	recovered := <-restored.queue
+	if recovered.EventID != job.EventID {
+		t.Fatalf("unexpected recovered event id: %s", recovered.EventID)
 	}
-	waitForCondition(t, 2*time.Second, func() bool {
-		restored.state.mu.Lock()
-		defer restored.state.mu.Unlock()
-		return len(restored.state.pending) == 0
-	}, "restart notification job should be completed and cleared")
+	if normalizeJobWorkflowPhase(recovered.WorkflowPhase) != jobWorkflowPhaseNormal {
+		t.Fatalf("expected recovered job in normal phase, got %q", recovered.WorkflowPhase)
+	}
 }
 
-func TestApp_RestartMarksInProgressForNotificationAndKeepsQueuedJobs(t *testing.T) {
+func TestApp_RestartKeepsInProgressAndQueuedJobsPending(t *testing.T) {
 	cfg := configForTest()
 	statePath := t.TempDir() + "/runtime_state.json"
 	blockingCodex := newBlockingResumableCodexStub()
@@ -470,9 +454,9 @@ func TestApp_RestartMarksInProgressForNotificationAndKeepsQueuedJobs(t *testing.
 		if !firstExists || !secondExists {
 			return false
 		}
-		return firstPending.WorkflowPhase == jobWorkflowPhaseRestartNotification &&
+		return normalizeJobWorkflowPhase(firstPending.WorkflowPhase) == jobWorkflowPhaseNormal &&
 			normalizeJobWorkflowPhase(secondPending.WorkflowPhase) == jobWorkflowPhaseNormal
-	}, "expected in-progress job marked for restart notification and queued job kept pending")
+	}, "expected in-progress and queued jobs kept pending in normal phase")
 
 	if err := app.FlushRuntimeState(); err != nil {
 		t.Fatalf("flush runtime state failed: %v", err)
@@ -490,8 +474,8 @@ func TestApp_RestartMarksInProgressForNotificationAndKeepsQueuedJobs(t *testing.
 	if firstRecovered.EventID != inProgress.EventID {
 		t.Fatalf("unexpected first recovered event id: %s", firstRecovered.EventID)
 	}
-	if firstRecovered.WorkflowPhase != jobWorkflowPhaseRestartNotification {
-		t.Fatalf("expected first recovered job in restart notification phase, got %q", firstRecovered.WorkflowPhase)
+	if normalizeJobWorkflowPhase(firstRecovered.WorkflowPhase) != jobWorkflowPhaseNormal {
+		t.Fatalf("expected first recovered job in normal phase, got %q", firstRecovered.WorkflowPhase)
 	}
 	if secondRecovered.EventID != queued.EventID {
 		t.Fatalf("unexpected second recovered event id: %s", secondRecovered.EventID)
@@ -569,72 +553,5 @@ func TestApp_RuntimeStatePersistAndRestoreMediaWindow(t *testing.T) {
 	}
 	if !strings.Contains(restoredSpeaker, "ou_user_1") {
 		t.Fatalf("expected restored speaker metadata, got %q", restoredSpeaker)
-	}
-}
-
-func TestApp_SelfUpdateInterruptedJobMarkedForRestartNotification(t *testing.T) {
-	cfg := configForTest()
-	statePath := t.TempDir() + "/runtime_state.json"
-	blockingCodex := newBlockingResumableCodexStub()
-	sender := &senderStub{}
-	processor := NewProcessor(
-		blockingCodex,
-		sender,
-		"Codex 暂时不可用，请稍后重试。",
-		"正在思考中...",
-	)
-	app := NewApp(cfg, processor)
-	if err := app.LoadRuntimeState(statePath); err != nil {
-		t.Fatalf("load runtime state failed: %v", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go app.workerLoop(ctx, 0)
-
-	job := &Job{
-		ReceiveID:       "oc_chat",
-		ReceiveIDType:   "chat_id",
-		SourceMessageID: "om_self_update",
-		EventID:         "evt_self_update",
-		Text:            "修改完后更新并重启你自己",
-	}
-	queued, _, _ := app.enqueueJob(job)
-	if !queued {
-		t.Fatal("expected job to be queued")
-	}
-
-	waitForCondition(t, 2*time.Second, func() bool {
-		return blockingCodex.CallCount() == 1
-	}, "expected codex call to start")
-
-	cancel()
-	waitForCondition(t, 2*time.Second, func() bool {
-		app.state.mu.Lock()
-		defer app.state.mu.Unlock()
-		pendingJob, ok := app.state.pending[pendingJobKey(*job)]
-		if !ok {
-			return false
-		}
-		return pendingJob.WorkflowPhase == jobWorkflowPhaseRestartNotification
-	}, "self-update in-progress job should be marked for restart notification after shutdown cancellation")
-
-	if err := app.FlushRuntimeState(); err != nil {
-		t.Fatalf("flush runtime state failed: %v", err)
-	}
-
-	restored := NewApp(cfg, nil)
-	if err := restored.LoadRuntimeState(statePath); err != nil {
-		t.Fatalf("load persisted runtime state failed: %v", err)
-	}
-	if got := len(restored.queue); got != 1 {
-		t.Fatalf("expected one restored queue job for interrupted self-update task, got %d", got)
-	}
-	recovered := <-restored.queue
-	if recovered.EventID != job.EventID {
-		t.Fatalf("unexpected recovered event id: %s", recovered.EventID)
-	}
-	if recovered.WorkflowPhase != jobWorkflowPhaseRestartNotification {
-		t.Fatalf("expected recovered self-update job in restart notification phase, got %q", recovered.WorkflowPhase)
 	}
 }

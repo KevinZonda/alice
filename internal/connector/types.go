@@ -100,15 +100,12 @@ type Job struct {
 type JobProcessState string
 
 const (
-	JobProcessCompleted           JobProcessState = "completed"
-	JobProcessRetryAfterRestart   JobProcessState = "retry_after_restart"
-	JobProcessPostRestartFinalize JobProcessState = "post_restart_finalize"
+	JobProcessCompleted         JobProcessState = "completed"
+	JobProcessRetryAfterRestart JobProcessState = "retry_after_restart"
 )
 
 const (
-	jobWorkflowPhaseNormal              = "normal"
-	jobWorkflowPhasePostRestartFinalize = "post_restart_finalize"
-	jobWorkflowPhaseRestartNotification = "restart_notification"
+	jobWorkflowPhaseNormal = "normal"
 )
 
 func normalizeJobWorkflowPhase(raw string) string {
@@ -116,10 +113,6 @@ func normalizeJobWorkflowPhase(raw string) string {
 	switch normalized {
 	case "", jobWorkflowPhaseNormal:
 		return jobWorkflowPhaseNormal
-	case jobWorkflowPhasePostRestartFinalize:
-		return jobWorkflowPhasePostRestartFinalize
-	case jobWorkflowPhaseRestartNotification:
-		return jobWorkflowPhaseRestartNotification
 	default:
 		return jobWorkflowPhaseNormal
 	}

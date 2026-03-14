@@ -176,17 +176,7 @@ sudo -u codexbot -H bash -lc '
 '
 ```
 
-## 9. 让它“自己重启自己”（无 sudo）
-
-当你让 Codex 修改完项目后，可以在命令末尾执行：
-
-```bash
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
-systemctl --user restart --no-block alice-codex-connector.service
-```
-
-## 10. 验证“仅新用户 home 可写”
+## 9. 验证“仅新用户 home 可写”
 
 ```bash
 sudo -u codexbot -H bash -lc 'touch /home/codexbot/alice/.write-ok'

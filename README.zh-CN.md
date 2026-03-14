@@ -93,7 +93,6 @@ make precommit-install
 
 本仓库已内置可复用 skill（目录 [`skills/`](./skills)）：
 
-- `alice-codebase-onboarding`
 - `alice-memory`
 - `alice-message`
 - `alice-scheduler`
@@ -211,7 +210,6 @@ log_compress: false
 - 连接器会把每个聊天的会话状态持久化到 `memory_dir/session_state.json`，重启后仍可续接线程。
 - 连接器会把队列中/执行中的任务持久化到 `memory_dir/runtime_state.json`，重启后会继续回复未完成或未回复的消息。
 - 自动化任务会通过 `bbolt` 持久化到 `memory_dir/automation.db`；若检测到旧的 `automation_state.json`，首次打开时会自动导入。
-- 若任务文本明显是“自更新并重启自己”，且处理过程中因重启导致中断，会将该任务视为已完成，避免重启后循环再次处理同一更新指令。
 - 每次调用 Codex 前，只会注入长期记忆；分日期记忆只提供目录位置，让 Codex 按需检索。
 - 会话复用改为“按话题优先”：
   - 同一飞书话题线程（`thread_id`，没有则回退 `root_id`）内的消息复用同一个 Codex 线程。

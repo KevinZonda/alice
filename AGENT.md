@@ -28,10 +28,9 @@ Before coding, define:
 - Risks and rollback path.
 - Acceptance criteria (tests/build/runtime checks).
 
-If task involves runtime/deploy/self-troubleshooting, collect facts first:
+If task involves runtime/deploy troubleshooting, collect facts first:
 
 ```bash
-/home/codexbot/.alice/.codex/skills/alice-codebase-onboarding/scripts/check_alice_runtime.sh
 journalctl --user-unit alice-codex-connector.service -n 200 --no-pager
 journalctl --user-unit alice-codex-connector.service --since "30 min ago" --no-pager
 ```
@@ -79,21 +78,7 @@ git -C /home/codexbot/alice commit -m "<clear-message>"
 git -C /home/codexbot/alice push
 ```
 
-## 7. Self-Update and Deployment Rule
-
-For self-update, use unified updater only (do not ad-hoc pull/restart):
-
-```bash
-/home/codexbot/alice/scripts/update-self-and-sync-skill.sh
-```
-
-Compatibility wrapper path (skill directory):
-
-```bash
-/home/codexbot/.alice/.codex/skills/alice-codebase-onboarding/scripts/update-self-and-sync-skill.sh
-```
-
-## 8. Definition of Done
+## 7. Definition of Done
 
 A change is done only when all are true:
 
@@ -101,4 +86,4 @@ A change is done only when all are true:
 - Mandatory checks passed.
 - Docs/config/tests synced with behavior.
 - Commit pushed.
-- (If deploy/self-update task) service health re-verified with evidence.
+- (If deploy task) service health re-verified with evidence.
