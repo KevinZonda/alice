@@ -3,7 +3,9 @@ package prompting
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,18 +15,22 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/cespare/xxhash/v2"
+
+	aliceassets "github.com/Alice-space/alice"
 )
 
 type Loader struct {
-	root  string
-	mu    sync.RWMutex
-	cache map[string]*template.Template
+	root     string
+	embedded fs.FS
+	mu       sync.RWMutex
+	cache    map[string]*template.Template
 }
 
 func NewLoader(root string) *Loader {
 	return &Loader{
-		root:  strings.TrimSpace(root),
-		cache: make(map[string]*template.Template),
+		root:     strings.TrimSpace(root),
+		embedded: aliceassets.PromptFS,
+		cache:    make(map[string]*template.Template),
 	}
 }
 
@@ -39,15 +45,34 @@ func (l *Loader) RenderFile(name string, data any) (string, error) {
 	if l == nil {
 		return "", fmt.Errorf("prompt loader is nil")
 	}
-	path, err := l.resolvePath(name)
+	cleanName, err := normalizeTemplateName(name)
 	if err != nil {
 		return "", err
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read prompt template %q failed: %w", path, err)
+
+	diskPath := ""
+	if strings.TrimSpace(l.root) != "" {
+		diskPath, err = l.resolvePath(cleanName)
+		if err != nil {
+			return "", err
+		}
+		raw, err := os.ReadFile(diskPath)
+		if err == nil {
+			return l.render(diskPath, string(raw), data)
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("read prompt template %q failed: %w", diskPath, err)
+		}
 	}
-	return l.render(path, string(raw), data)
+
+	raw, err := l.readEmbedded(cleanName)
+	if err != nil {
+		if diskPath != "" {
+			return "", fmt.Errorf("read prompt template %q failed: %w", diskPath, fs.ErrNotExist)
+		}
+		return "", fmt.Errorf("read prompt template %q failed: %w", cleanName, err)
+	}
+	return l.render(cleanName, string(raw), data)
 }
 
 func (l *Loader) RenderString(name, raw string, data any) (string, error) {
@@ -103,28 +128,41 @@ func (l *Loader) resolvePath(name string) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("prompt root is empty")
 	}
-	clean := filepath.Clean(strings.TrimSpace(name))
-	if clean == "." || clean == "" {
-		return "", fmt.Errorf("prompt template name is empty")
-	}
 
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return "", fmt.Errorf("resolve prompt root failed: %w", err)
 	}
-	path := filepath.Join(rootAbs, clean)
-	pathAbs, err := filepath.Abs(path)
+	pathAbs, err := filepath.Abs(filepath.Join(rootAbs, filepath.FromSlash(name)))
 	if err != nil {
-		return "", fmt.Errorf("resolve prompt template %q failed: %w", clean, err)
+		return "", fmt.Errorf("resolve prompt template %q failed: %w", name, err)
 	}
 	rel, err := filepath.Rel(rootAbs, pathAbs)
 	if err != nil {
-		return "", fmt.Errorf("resolve prompt template %q failed: %w", clean, err)
+		return "", fmt.Errorf("resolve prompt template %q failed: %w", name, err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("prompt template %q escapes root %q", clean, rootAbs)
+		return "", fmt.Errorf("prompt template %q escapes root %q", name, rootAbs)
 	}
 	return pathAbs, nil
+}
+
+func normalizeTemplateName(name string) (string, error) {
+	clean := path.Clean(strings.ReplaceAll(strings.TrimSpace(name), "\\", "/"))
+	if clean == "." || clean == "" {
+		return "", fmt.Errorf("prompt template name is empty")
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
+		return "", fmt.Errorf("prompt template %q escapes embedded prompt root", clean)
+	}
+	return clean, nil
+}
+
+func (l *Loader) readEmbedded(name string) ([]byte, error) {
+	if l == nil || l.embedded == nil {
+		return nil, fs.ErrNotExist
+	}
+	return fs.ReadFile(l.embedded, name)
 }
 
 func templateFuncMap() template.FuncMap {
