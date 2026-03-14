@@ -63,7 +63,7 @@ func TestProcessor_CodeArmyStatusCommand_ListsActiveTasksAndStates(t *testing.T)
 		t.Fatalf("write state file failed: %v", err)
 	}
 
-	store := automation.NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := automation.NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	_, err = store.CreateTask(automation.Task{
 		Scope:    automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 		Route:    automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},

@@ -3,6 +3,7 @@ package automation
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -122,7 +123,7 @@ func TestEngine_RunSystemTask(t *testing.T) {
 
 func TestEngine_RunUserTask(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC)
-	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	store.now = func() time.Time { return base }
 
 	created, err := store.CreateTask(Task{
@@ -163,7 +164,7 @@ func TestEngine_RunUserTask(t *testing.T) {
 
 func TestEngine_RunUserTask_RunLLM(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 1, 2, 0, time.UTC)
-	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	store.now = func() time.Time { return base }
 
 	created, err := store.CreateTask(Task{
@@ -266,7 +267,7 @@ func TestEngine_RunUserTask_UsesConfiguredTimeout(t *testing.T) {
 
 func TestEngine_RunUserTask_RunWorkflow(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 2, 3, 0, time.UTC)
-	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	store.now = func() time.Time { return base }
 
 	created, err := store.CreateTask(Task{
@@ -386,7 +387,7 @@ func TestEngine_RunUserTask_RunWorkflow_SkipsAutomationTimeout(t *testing.T) {
 
 func TestEngine_RunUserTask_RunWorkflow_WithMentionsFallsBackToText(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 2, 3, 0, time.UTC)
-	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	store.now = func() time.Time { return base }
 
 	_, err := store.CreateTask(Task{
@@ -435,7 +436,7 @@ func TestEngine_RunUserTask_RunWorkflow_WithMentionsFallsBackToText(t *testing.T
 
 func TestEngine_RunUserTask_RunWorkflow_CardFailureFallsBackToText(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 2, 3, 0, time.UTC)
-	store := NewStore(filepath.Join(t.TempDir(), "automation_state.json"))
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	store.now = func() time.Time { return base }
 
 	_, err := store.CreateTask(Task{
@@ -482,5 +483,25 @@ func TestEngine_SetUserTaskTimeout_NonPositiveFallsBackToDefault(t *testing.T) {
 	engine.SetUserTaskTimeout(0)
 	if got := engine.userTaskTimeoutDuration(); got != defaultUserTaskTimeout {
 		t.Fatalf("unexpected default timeout: %s", got)
+	}
+}
+
+func TestRenderActionTemplate_InvalidTemplateReturnsError(t *testing.T) {
+	_, err := renderActionTemplate("{{ if }}", time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("expected renderActionTemplate to return error for invalid template")
+	}
+	if !strings.Contains(err.Error(), "render action template failed") {
+		t.Fatalf("unexpected template error: %v", err)
+	}
+}
+
+func TestRenderActionTemplate_EmptyInputReturnsEmpty(t *testing.T) {
+	got, err := renderActionTemplate("   ", time.Time{})
+	if err != nil {
+		t.Fatalf("expected nil error for empty template, got %v", err)
+	}
+	if got != "" {
+		t.Fatalf("expected empty rendered text, got %q", got)
 	}
 }

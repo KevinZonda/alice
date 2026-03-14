@@ -8,11 +8,9 @@ import (
 )
 
 const (
-	GlobalDirName         = "global"
-	ResourceDirName       = "resources"
-	ScopeRootDirName      = "scopes"
-	LayoutVersionFileName = "layout_version"
-	ScopedLayoutVersion   = "3"
+	GlobalDirName    = "global"
+	ResourceDirName  = "resources"
+	ScopeRootDirName = "scopes"
 )
 
 type scopePaths struct {
@@ -55,10 +53,6 @@ func globalLongTermPath(root string) string {
 
 func globalDailyDir(root string) string {
 	return filepath.Join(strings.TrimSpace(root), GlobalDirName, ShortTermDirName)
-}
-
-func layoutVersionPath(root string) string {
-	return filepath.Join(strings.TrimSpace(root), LayoutVersionFileName)
 }
 
 func resourceBaseDir(root string) string {

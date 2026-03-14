@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	aliceassets "github.com/Alice-space/alice"
 	"github.com/Alice-space/alice/internal/config"
@@ -20,7 +19,6 @@ type SkillLinkReport struct {
 	Discovered int
 	Linked     int
 	Updated    int
-	BackedUp   int
 	Unchanged  int
 	Failed     int
 }
@@ -58,13 +56,10 @@ func EnsureBundledSkillsLinked(workspaceDir string) (SkillLinkReport, error) {
 
 		report.Discovered++
 		dst := filepath.Join(dstRoot, name)
-		changed, backedUp, failed := ensureEmbeddedSkillInstalled(name, dst)
+		changed, failed := ensureEmbeddedSkillInstalled(name, dst)
 		if failed {
 			report.Failed++
 			continue
-		}
-		if backedUp {
-			report.BackedUp++
 		}
 		switch changed {
 		case "linked":
@@ -92,51 +87,37 @@ func hasEmbeddedSkillManifest(skillName string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func ensureEmbeddedSkillInstalled(skillName, dst string) (changed string, backedUp bool, failed bool) {
+func ensureEmbeddedSkillInstalled(skillName, dst string) (changed string, failed bool) {
 	info, err := os.Lstat(dst)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
-				return "", false, true
+				return "", true
 			}
-			return "linked", false, false
+			return "linked", false
 		}
-		return "", false, true
+		return "", true
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
-		if removeErr := os.Remove(dst); removeErr != nil {
-			return "", false, true
-		}
-		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
-			return "", false, true
-		}
-		return "updated", false, false
+		return "", true
 	}
 
 	if !info.IsDir() {
-		backupPath := fmt.Sprintf("%s.backup-%s", dst, time.Now().Format("20060102150405"))
-		if renameErr := os.Rename(dst, backupPath); renameErr != nil {
-			return "", false, true
-		}
-		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
-			_ = os.Rename(backupPath, dst)
-			return "", false, true
-		}
-		return "linked", true, false
+		return "", true
 	}
 
 	if hasEmbeddedMarker(dst) {
 		if removeErr := os.RemoveAll(dst); removeErr != nil {
-			return "", false, true
+			return "", true
 		}
 		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
-			return "", false, true
+			return "", true
 		}
-		return "updated", false, false
+		return "updated", false
 	}
 
-	return "unchanged", false, false
+	return "unchanged", false
 }
 
 func materializeEmbeddedSkill(skillName, dst string) error {

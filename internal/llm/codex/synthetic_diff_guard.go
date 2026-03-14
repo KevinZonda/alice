@@ -7,9 +7,9 @@ import (
 )
 
 type syntheticDiffLease struct {
-	repos         []string
-	repoVersions  map[string]uint64
-	contaminated  bool
+	repos        []string
+	repoVersions map[string]uint64
+	contaminated bool
 }
 
 type syntheticDiffRunGuard struct {

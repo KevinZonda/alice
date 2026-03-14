@@ -93,13 +93,6 @@ func TestParseEventLine_FileChangeWithChangesArray(t *testing.T) {
 	}
 }
 
-func TestParseEventLine_FileChangeLegacyType(t *testing.T) {
-	_, _, fileChange, _ := parseEventLine(`{"type":"item.completed","item":{"type":"filechange","path":"internal/connector/processor.go","added_lines":2,"removed_lines":1}}`)
-	if fileChange != "- `internal/connector/processor.go` 已更改 (+2/-1)" {
-		t.Fatalf("unexpected file change message for legacy type: %q", fileChange)
-	}
-}
-
 func TestParseEventLine_FileChangeDetectsAddedAndDeleted(t *testing.T) {
 	_, _, added, _ := parseEventLine(`{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"new.txt","kind":"create"}]}}`)
 	if added != "- `new.txt` 已新增" {
@@ -561,7 +554,7 @@ func TestEnrichFileChangeMessageStats_UsesGitDiffForZeroStats(t *testing.T) {
 		t.Fatalf("write changed file failed: %v", err)
 	}
 
-	got := enrichFileChangeMessageStats(context.Background(), "a.txt已更改，+0-0", []string{repoDir})
+	got := enrichFileChangeMessageStats(context.Background(), "- `a.txt` 已更改 (+0/-0)", []string{repoDir})
 	if got != "- `a.txt` 已更改 (+2/-1)" {
 		t.Fatalf("unexpected enriched message: %q", got)
 	}
@@ -590,7 +583,7 @@ func TestEnrichFileChangeMessageStats_StripsZeroStatsWhenNoDiffFound(t *testing.
 	runInRepo("git", "add", "a.txt")
 	runInRepo("git", "commit", "-m", "init")
 
-	got := enrichFileChangeMessageStats(context.Background(), "a.txt已更改，+0-0", []string{repoDir})
+	got := enrichFileChangeMessageStats(context.Background(), "- `a.txt` 已更改 (+0/-0)", []string{repoDir})
 	if got != "- `a.txt` 已更改" {
 		t.Fatalf("unexpected fallback message: %q", got)
 	}
@@ -618,7 +611,7 @@ func TestEnrichFileChangeMessageStats_UsesNoIndexDiffForUntrackedFile(t *testing
 		t.Fatalf("write untracked file failed: %v", err)
 	}
 
-	got := enrichFileChangeMessageStats(context.Background(), "new.txt已更改，+0-0", []string{repoDir})
+	got := enrichFileChangeMessageStats(context.Background(), "- `new.txt` 已更改 (+0/-0)", []string{repoDir})
 	if got != "- `new.txt` 已新增 (+3/-0)" {
 		t.Fatalf("unexpected untracked message: %q", got)
 	}
@@ -652,7 +645,7 @@ func TestEnrichFileChangeMessageStats_DetectsDeletedFile(t *testing.T) {
 		t.Fatalf("delete tracked file failed: %v", err)
 	}
 
-	got := enrichFileChangeMessageStats(context.Background(), "old.txt已更改，+0-0", []string{repoDir})
+	got := enrichFileChangeMessageStats(context.Background(), "- `old.txt` 已更改 (+0/-0)", []string{repoDir})
 	if got != "- `old.txt` 已删除 (+0/-2)" {
 		t.Fatalf("unexpected deleted file message: %q", got)
 	}

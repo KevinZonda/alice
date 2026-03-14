@@ -174,6 +174,6 @@ Actively used:
 4. LLM backend renders prompt templates from disk and runs `codex`/`claude`/`kimi`.
 5. Skills invoked by the agent call `alice runtime ...`, which then talks to the runtime HTTP API.
 6. Runtime HTTP API operates memory, automation, and message sending using the same session context.
-7. Automation tasks are persisted in `automation.db` through `bbolt`, migrating legacy JSON snapshots on first open.
+7. Automation tasks are persisted in `automation.db` through `bbolt`.
 8. Runtime logs are emitted through `zerolog`, with optional file rotation handled by `lumberjack`.
 9. Debug traces record each agent call in markdown for replay/audit.

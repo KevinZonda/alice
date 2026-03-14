@@ -35,7 +35,7 @@ func TestEnsureBundledSkillsLinked_InstallsEmbeddedSkills(t *testing.T) {
 	}
 }
 
-func TestEnsureBundledSkillsLinked_ReplacesSymlink(t *testing.T) {
+func TestEnsureBundledSkillsLinked_RejectsSymlink(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv(config.EnvCodexHome, codexHome)
 
@@ -52,14 +52,11 @@ func TestEnsureBundledSkillsLinked_ReplacesSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sync bundled skills failed: %v", err)
 	}
-	if report.Updated <= 0 {
-		t.Fatalf("expected updated skills > 0 when replacing symlink, got %+v", report)
+	if report.Failed <= 0 {
+		t.Fatalf("expected failed skills > 0 when symlink exists, got %+v", report)
 	}
-	if isSymlink(t, skillDir) {
-		t.Fatalf("symlink should be replaced by real directory: %s", skillDir)
-	}
-	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
-		t.Fatalf("embedded skill manifest missing after symlink replacement: %v", err)
+	if !isSymlink(t, skillDir) {
+		t.Fatalf("legacy symlink should not be auto-migrated: %s", skillDir)
 	}
 }
 

@@ -1,48 +1,48 @@
 ---
 name: alice-scheduler
-description: Manage Alice automation tasks in the current chat through Alice's local runtime HTTP API. Use when the user wants to create, list, inspect, patch, pause, resume, or delete scheduled tasks, including `run_llm` and `run_workflow` jobs.
+description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化任务。适用于创建、列出、查看、补丁更新、暂停、恢复、删除任务，以及处理 `run_llm` / `run_workflow` 任务。
 ---
 
-# Alice Scheduler
+# Alice 调度器
 
-Use `scripts/alice-scheduler.sh` to operate automation tasks for the current chat. The script uses the local runtime HTTP API and current session context automatically.
+使用 `scripts/alice-scheduler.sh` 管理当前会话自动化任务。脚本会自动使用本地 runtime HTTP API 与当前会话上下文。
 
-## Commands
+## 常用命令
 
-- List tasks in current scope:
+- 列出当前作用域任务：
   `scripts/alice-scheduler.sh list`
-- Create a task from JSON:
+- 用 JSON 创建任务：
   `scripts/alice-scheduler.sh create <<'JSON'`
   `{ "title": "daily sync", "schedule": { "type": "cron", "cron_expr": "0 1 * * *" }, "action": { "type": "run_llm", "prompt": "总结今天的进展" } }`
   `JSON`
-- Get one task:
+- 查看单个任务：
   `scripts/alice-scheduler.sh get task_xxx`
-- Patch a task with merge patch JSON:
+- 用 merge patch 更新任务：
   `scripts/alice-scheduler.sh patch task_xxx '{"status":"paused"}'`
-- Delete a task:
+- 删除任务：
   `scripts/alice-scheduler.sh delete task_xxx`
-- Inspect `code_army` workflow state in current chat:
+- 查看当前会话 `code_army` 工作流状态：
   `scripts/alice-scheduler.sh code-army-status`
   `scripts/alice-scheduler.sh code-army-status rust-cli-calculator`
 
-## Task Shape
+## 任务结构
 
-- `schedule.type`: `interval` or `cron`
-- `schedule.every_seconds`: required for `interval`, minimum `60`
-- `schedule.cron_expr`: required for `cron`
-- `action.type`: `send_text`, `run_llm`, or `run_workflow`
-- `action.workflow`: for workflow tasks, currently use `code_army`
-- `manage_mode`: `creator_only` or `scope_all` (`scope_all` only makes sense in group chats)
+- `schedule.type`：`interval` 或 `cron`
+- `schedule.every_seconds`：`interval` 必填，最小 `60`
+- `schedule.cron_expr`：`cron` 必填
+- `action.type`：`send_text`、`run_llm`、`run_workflow`
+- `action.workflow`：工作流任务当前使用 `code_army`
+- `manage_mode`：`creator_only` 或 `scope_all`（`scope_all` 仅群聊有意义）
 
-## Workflow
+## 工作流
 
-1. Use `list` before patching or deleting when task id is unknown.
-2. Prefer `patch` with a narrow merge patch instead of rewriting the whole task.
-3. For one-off runs, create an `interval` task with `every_seconds: 60` and `max_runs: 1`.
-4. Use `code-army-status` to inspect workflow progress after scheduling `run_workflow`.
+1. 不知道任务 ID 时，先 `list` 再改删。
+2. 更新任务优先用小范围 `patch`，不要整对象重写。
+3. 一次性执行推荐：`interval + every_seconds: 60 + max_runs: 1`。
+4. 触发 `run_workflow` 后，用 `code-army-status` 跟踪进度。
 
-## Reply Pattern
+## 回复模式
 
-- State the operation performed and the relevant `task.id`.
-- Include the exact `next_run_at` for new or rescheduled tasks.
-- Call out whether the task is one-off or recurring.
+- 明确说明执行了什么操作，以及对应的 `task.id`。
+- 新建或重排任务时，给出精确 `next_run_at`。
+- 说明这是一次性任务还是周期任务。

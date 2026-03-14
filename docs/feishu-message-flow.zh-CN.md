@@ -64,7 +64,7 @@ Feishu websocket event
 - `automation.Store` / `automation.Engine`
   负责定时任务持久化与调度。
 - `runtimeapi.Server`
-  暴露本地 HTTP API，给 skills 和兼容层调用。
+  暴露本地 HTTP API，给 skills 调用。
 
 运行时还会准备一组路径：
 

@@ -1,95 +1,93 @@
 ---
 name: feishu-task
-description: Manage official Feishu Task v2 objects via OpenAPI for task and tasklist CRUD, assignment, deadline updates, and member collaboration. Use only when the user explicitly says `飞书任务`, `Feishu Task`, `Task v2`, or otherwise clearly requests the official Feishu task system. Do not trigger for Alice automation tasks unless the user explicitly asks for Alice tasks.
+description: 通过飞书 OpenAPI 的 Task v2 管理官方任务与任务清单（CRUD、分派、截止时间、成员协作）。仅当用户明确提到 `飞书任务`、`Feishu Task`、`Task v2` 时触发；不要把它和 Alice 自动化任务混用。
 ---
 
-# Feishu Task
+# 飞书任务
 
-## Overview
+## 概览
 
-Use official Feishu OpenAPI `task/v2` to manage tasks and tasklists.
-Keep this skill strictly separated from Alice automation tasks.
+本 skill 只使用飞书官方 `task/v2` OpenAPI 管理任务与任务清单。
+必须与 Alice 自动化任务严格隔离。
 
-## Boundary Rules
+## 边界规则
 
-1. Treat `Alice任务` and `飞书任务` as different systems.
-- `Alice任务`: connector-local automation tasks (for example `automation_task_*` operations).
-- `飞书任务`: official Feishu OpenAPI Task objects (`/open-apis/task/v2/...`).
+1. `Alice任务` 与 `飞书任务` 是两套系统。
+- `Alice任务`：连接器本地自动化任务（例如 `automation_task_*`）。
+- `飞书任务`：官方 OpenAPI Task 资源（`/open-apis/task/v2/...`）。
 
-2. Trigger this skill only with explicit Feishu-task intent.
-- Positive signals: `飞书任务`、`Feishu Task`、`task/v2`、`任务清单` with OpenAPI context.
-- Negative/ambiguous signals: generic `任务` with no qualifier. Ask a clarification question before acting.
+2. 只有用户明确表达“飞书任务意图”才触发本 skill。
+- 正向信号：`飞书任务`、`Feishu Task`、`task/v2`、带 OpenAPI 语境的“任务清单”。
+- 负向或模糊信号：只说“任务”但未限定系统。先追问再执行。
 
-3. Prefer Task v2 APIs for all operations in this skill.
-- Do not fallback to `task/v1` unless user explicitly asks for compatibility behavior.
+3. 本 skill 的全部操作仅使用 Task v2。
+- 只调用 `task/v2` 端点，不混入其他版本。
 
-## Workflow
+## 工作流
 
-1. Confirm system scope before execution.
-- If user says `飞书任务`, continue with this skill.
-- If user says `Alice任务`, switch to Alice automation path.
+1. 先确认系统边界。
+- 用户说“飞书任务”才继续。
+- 用户说“Alice任务”则切换到 Alice 自动化路径。
 
-2. Confirm token mode and identity type.
-- For `当前人的任务`, use `user_access_token` (Task v2 list endpoint requires user token).
-- For create/update/delete operations, user token or tenant token can be used by API support.
-- Default `user_id_type` to `open_id` unless user requests otherwise.
+2. 确认 token 模式和身份类型。
+- “当前人的任务”使用 `user_access_token`（Task v2 列表接口要求用户 token）。
+- 创建/更新/删除通常支持用户 token 或 tenant token。
+- 默认 `user_id_type=open_id`，除非用户明确要求其他类型。
 
-3. Execute operation via script first.
-- Use `scripts/feishu-task-v2.sh` for deterministic CRUD calls.
-- If script cannot satisfy a specific payload, call the same Task v2 endpoint directly.
+3. 先用脚本执行。
+- 优先使用 `scripts/feishu-task-v2.sh` 做可预测 CRUD。
+- 若脚本参数覆盖不到，再直接调用同一 Task v2 接口。
 
-4. Return concise operation output.
-- Include task/tasklist identifiers, key fields changed, and next action suggestion.
-- When API returns non-zero code, include code and msg and stop blind retries.
+4. 返回简洁结果。
+- 包含任务/任务清单 ID、关键变更字段、建议下一步。
+- 若 API 返回非零 code，必须带上 `code` 与 `msg`，并停止盲目重试。
 
-## Required Operation Coverage
+## 必备操作覆盖
 
-Use the following mappings when user asks for CRUD:
+1. 查看我当前管理的任务。
+- `list-managed-tasklists` 后 `list-tasklist-tasks <tasklist_guid>`。
+- 对应端点：`GET /open-apis/task/v2/tasklists`、`GET /open-apis/task/v2/tasklists/:tasklist_guid/tasks`。
 
-1. Check tasks currently managed by me.
-- `list-managed-tasklists` then `list-tasklist-tasks <tasklist_guid>`.
-- Endpoints: `GET /open-apis/task/v2/tasklists`, `GET /open-apis/task/v2/tasklists/:tasklist_guid/tasks`.
+2. 查看当前人的任务。
+- `list-my-tasks`。
+- 对应端点：`GET /open-apis/task/v2/tasks`（`type=my_tasks`）。
 
-2. Check current person's tasks.
-- `list-my-tasks`.
-- Endpoint: `GET /open-apis/task/v2/tasks` (with `type=my_tasks`).
+3. 发布新任务。
+- `create-task`。
+- 对应端点：`POST /open-apis/task/v2/tasks`。
 
-3. Publish a new task.
-- `create-task`.
-- Endpoint: `POST /open-apis/task/v2/tasks`.
+4. 为任务分配成员。
+- `assign-task`。
+- 对应端点：`POST /open-apis/task/v2/tasks/:task_guid/add_members`。
 
-4. Assign specific people to a task.
-- `assign-task`.
-- Endpoint: `POST /open-apis/task/v2/tasks/:task_guid/add_members`.
+5. 设置任务截止时间。
+- `set-deadline`。
+- 对应端点：`PATCH /open-apis/task/v2/tasks/:task_guid`，`update_fields=["due"]`。
 
-5. Set task deadline.
-- `set-deadline`.
-- Endpoint: `PATCH /open-apis/task/v2/tasks/:task_guid` with `update_fields=["due"]`.
+6. 创建与管理任务清单。
+- `create-tasklist`、`list-tasklists`、`update-tasklist-name`、`delete-tasklist`、`add-tasklist-member`、`remove-tasklist-member`。
+- 对应端点均在 `/open-apis/task/v2/tasklists` 下。
 
-6. Create and manage tasklists.
-- `create-tasklist`, `list-tasklists`, `update-tasklist-name`, `delete-tasklist`, `add-tasklist-member`, `remove-tasklist-member`.
-- Endpoints under `/open-apis/task/v2/tasklists`.
+7. 必备补充操作。
+- `get-task`、`update-task-summary`、`delete-task`、`remove-task-member`。
+- 可幂等写操作尽量携带 `client_token`。
 
-7. Must-have extra operations.
-- `get-task`, `update-task-summary`, `delete-task`, `remove-task-member`.
-- Keep `client_token` for idempotent writes where possible.
-
-## Quick Commands
+## 快速命令
 
 ```bash
-# show help
+# 查看帮助
 $CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh help
 
-# list my tasks (requires FEISHU_USER_ACCESS_TOKEN)
+# 查看我的任务（需要 FEISHU_USER_ACCESS_TOKEN）
 $CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh list-my-tasks
 
-# create task
+# 创建任务
 $CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh create-task "准备周会材料" "周三前完成"
 
-# set deadline (timestamp in ms)
+# 设置截止时间（毫秒时间戳）
 $CODEX_HOME/skills/feishu-task/scripts/feishu-task-v2.sh set-deadline <task_guid> 1767225600000 false
 ```
 
-## References
+## 参考资料
 
-- Read `references/task-v2-api-map.md` for API and SDK mapping.
+- 详见 `references/task-v2-api-map.md`。

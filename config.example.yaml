@@ -5,7 +5,8 @@ feishu_app_secret: "xxxxxx"
 # Optional, default is https://open.feishu.cn
 feishu_base_url: "https://open.feishu.cn"
 # Optional but recommended for group chats: strict bot mention filtering
-# If both are empty, all group/topic-group messages are ignored.
+# In trigger_mode=at (default), if both are empty, all group/topic-group messages are ignored.
+# In trigger_mode=active/prefix, matching follows trigger_mode + trigger_prefix rules.
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
 # Group trigger mode:
@@ -36,7 +37,8 @@ alice_home: ""
 # prompt_dir default: <alice_home>/prompts
 workspace_dir: ""
 # Optional: environment variables passed to LLM process (proxy, etc.)
-# CODEX_HOME defaults to <alice_home>/.codex when omitted.
+# Connector process sets CODEX_HOME to <alice_home>/.codex at startup.
+# LLM subprocess env uses that value by default unless env.CODEX_HOME is explicitly set.
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
   ALL_PROXY: "socks5://127.0.0.1:7891"

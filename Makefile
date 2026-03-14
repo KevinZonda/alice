@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-.PHONY: build run fmt fmt-check vet test secret-check check precommit-install
+.PHONY: build run fmt fmt-check vet test race secret-check script-check check precommit-install
 
 build:
 	go build -o bin/alice ./cmd/connector
@@ -25,10 +25,18 @@ vet:
 test:
 	go test ./...
 
+race:
+	go test -race ./internal/connector
+
 secret-check:
 	./scripts/secret-check.sh
 
-check: secret-check fmt-check vet test
+script-check:
+	@for f in $$(find scripts -type f -name '*.sh' | sort); do \
+		bash -n "$$f"; \
+	done
+
+check: secret-check script-check fmt-check vet test race
 
 precommit-install:
 	@mkdir -p .githooks

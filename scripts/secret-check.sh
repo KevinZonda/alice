@@ -17,6 +17,13 @@ fi
 
 matches=""
 
+list_scannable_files() {
+  git ls-files -z | while IFS= read -r -d '' file; do
+    [[ -f "$file" ]] || continue
+    printf '%s\0' "$file"
+  done
+}
+
 collect_matches() {
   local m="$1"
   if [[ -n "$m" ]]; then
@@ -28,7 +35,7 @@ collect_matches() {
 }
 
 # 1) Well-known token/key formats
-collect_matches "$(git ls-files -z | xargs -0 -r rg -n --no-heading -I -S \
+collect_matches "$(list_scannable_files | xargs -0 -r rg -n --no-heading -I -S \
   -e 'AKIA[0-9A-Z]{16}' \
   -e 'sk-[A-Za-z0-9]{20,}' \
   -e 'xox[baprs]-[A-Za-z0-9-]{20,}' \
@@ -36,7 +43,7 @@ collect_matches "$(git ls-files -z | xargs -0 -r rg -n --no-heading -I -S \
   -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' || true)"
 
 # 2) Generic assignment patterns for common secret-like keys (value length guarded)
-collect_matches "$(git ls-files -z | xargs -0 -r rg -n --no-heading -I -S -i \
+collect_matches "$(list_scannable_files | xargs -0 -r rg -n --no-heading -I -S -i \
   '(app_secret|client_secret|access_token|tenant_access_token|refresh_token|api[_-]?key|secret[_-]?key|signing_secret|encrypt_key|password)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9._~+/-=]{12,}["'"'"']?' || true)"
 
 if [[ -n "$matches" ]]; then

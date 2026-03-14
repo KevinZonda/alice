@@ -113,10 +113,6 @@ func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 }
 
 func (b *connectorRuntimeBuilder) prepareMemory() error {
-	if err := memory.MigrateToScopedLayout(b.paths.memoryDir); err != nil {
-		return err
-	}
-
 	memoryManager := memory.NewManager(b.paths.memoryDir, b.promptLoader)
 	if err := memoryManager.Init(); err != nil {
 		return err

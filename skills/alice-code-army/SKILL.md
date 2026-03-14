@@ -1,33 +1,33 @@
 ---
 name: alice-code-army
-description: Operate Alice's built-in `code_army` workflow through Alice's local scheduler HTTP API. Use when the user asks to start, continue, inspect, pause, resume, delete, or test a `code army` / `code_army` workflow in the current Feishu conversation, especially for one-off coding iterations or recurring workflow runs.
+description: 通过 Alice 本地调度 API 操作内置 `code_army` 工作流。适用于在当前飞书会话中启动、续跑、查看、暂停、恢复、删除或测试 `code_army`。
 ---
 
-# Alice Code Army
+# Alice 代码军队
 
-Run `code_army` via `alice-scheduler` instead of re-reading the repository. Keep actions scoped to the current conversation and rely on Alice to route replies automatically.
+通过 `alice-scheduler` 驱动 `code_army`，不要重复扫描整个仓库。所有操作都限定在当前会话，由 Alice 自动路由回复。
 
-## Defaults
+## 默认约定
 
-- Use `../alice-scheduler/scripts/alice-scheduler.sh create` to start runs.
-- Use `../alice-scheduler/scripts/alice-scheduler.sh list|get|patch|delete` to manage tasks.
-- Use `../alice-scheduler/scripts/alice-scheduler.sh code-army-status` to inspect workflow state in the current conversation.
-- Set `action_type` to `run_workflow` and `workflow` to `code_army`.
-- For a one-off test run, create an interval task with `every_seconds: 60` and `max_runs: 1`.
-- `code_army` does not have an immediate-run API. The first execution happens at `next_run_at`, so tell the user the exact scheduled time.
-- Reuse an explicit `state_key` when the user may run multiple workflows in the same conversation.
-- Reusing the same `state_key` continues the existing state. The stored objective is retained, so later prompts should stay aligned with the original goal instead of trying to redefine it.
-- A single workflow execution should complete the current phase cycle: `manager -> worker -> reviewer -> gate`, then stop at the next stable phase for the following run.
-- Only set `model` or `profile` when the user asks for them or the surrounding workflow already depends on them.
+- 启动任务：`../alice-scheduler/scripts/alice-scheduler.sh create`
+- 管理任务：`../alice-scheduler/scripts/alice-scheduler.sh list|get|patch|delete`
+- 查看工作流状态：`../alice-scheduler/scripts/alice-scheduler.sh code-army-status`
+- `action.type` 必须为 `run_workflow`，`workflow` 必须为 `code_army`
+- 一次性测试推荐 `every_seconds: 60` 且 `max_runs: 1`
+- `code_army` 没有“立即执行”接口，首次执行发生在 `next_run_at`，回复用户时必须写明时间
+- 同一会话中并行多条工作流时，使用明确 `state_key`
+- 复用同一个 `state_key` 会延续旧状态与目标，不应在后续 prompt 里重置目标
+- 单次执行应走完当前阶段循环：`manager -> worker -> reviewer -> gate`，并停在下一轮稳定阶段
+- `model` / `profile` 仅在用户明确要求或已有流程依赖时设置
 
-## Start A One-Off Run
+## 启动一次性运行
 
-1. Turn the user request into a concrete workflow objective.
-2. Pick a short `state_key` if the run should be inspectable or resumable later.
-3. Create a one-off task with `schedule.type: "interval"`, `schedule.every_seconds: 60`, `action.type: "run_workflow"`, `action.workflow: "code_army"`, and `max_runs: 1`.
-4. After creation, report `task.id`, `next_run_at`, and the `state_key` you used.
+1. 把用户需求整理成具体的工作流目标。
+2. 若后续要可追踪/可续跑，先选一个短 `state_key`。
+3. 创建一次性任务：`schedule.type: "interval"`、`schedule.every_seconds: 60`、`action.type: "run_workflow"`、`action.workflow: "code_army"`、`max_runs: 1`。
+4. 创建后反馈 `task.id`、`next_run_at`、`state_key`。
 
-Example:
+示例：
 
 ```sh
 ../alice-scheduler/scripts/alice-scheduler.sh create <<'JSON'
@@ -45,9 +45,9 @@ Example:
 JSON
 ```
 
-## Continue Or Iterate
+## 继续推进
 
-Use the same `state_key` to continue an existing workflow state. The simplest pattern is to create another one-off task for the next round:
+要延续已有状态，复用同一个 `state_key`。常用做法是再次创建一次性任务：
 
 ```sh
 ../alice-scheduler/scripts/alice-scheduler.sh create <<'JSON'
@@ -65,46 +65,50 @@ Use the same `state_key` to continue an existing workflow state. The simplest pa
 JSON
 ```
 
-If the user wants an always-on loop instead of manual nudges, create or update a recurring task with either a larger interval or a cron schedule.
+如果用户希望持续运行而不是手动触发，改为周期任务（更大 interval 或 cron）。
 
-## Inspect State
+## 查看状态
 
-Call `../alice-scheduler/scripts/alice-scheduler.sh code-army-status` with or without `state_key`.
+执行 `../alice-scheduler/scripts/alice-scheduler.sh code-army-status`（可带或不带 `state_key`）。
 
-- Without `state_key`: list all `code_army` states in the current conversation.
-- With `state_key`: load the exact workflow snapshot.
-- Read these fields first: `phase`, `iteration`, `last_decision`, `updated_at`, `history`.
+- 不带 `state_key`：列出当前会话全部 `code_army` 状态
+- 带 `state_key`：读取指定工作流快照
+- 优先阅读字段：`phase`、`iteration`、`last_decision`、`updated_at`、`history`
 
-Phase semantics:
+阶段含义：
 
-- `manager`: planning the current iteration
-- `worker`: producing the implementation plan/output
-- `reviewer`: reviewing the worker result
-- `gate`: deciding whether to advance to the next iteration or send the workflow back to `worker`
+- `manager`：规划本轮工作
+- `worker`：产出实现结果
+- `reviewer`：审查产物
+- `gate`：决定进入下一迭代或退回返工
 
-Interpretation:
+状态解释：
 
-- `last_decision: "pass"` means the next gate will advance to the next iteration.
-- `last_decision: "fail"` means the next gate will send the workflow back for rework.
-- `history` is the quickest way to summarize what changed since the previous run.
+- `last_decision: "pass"`：下一次 gate 会推进到下一迭代
+- `last_decision: "fail"`：下一次 gate 会打回给 worker 返工
+- `history`：最快速的变更摘要来源
 
-## Manage Tasks
+## 管理任务
 
-- List tasks in the current scope before editing or deleting when the task id is not already known.
-- Pause or resume with `../alice-scheduler/scripts/alice-scheduler.sh patch <task_id> '{"status":"paused"}'` or `{"status":"active"}`.
-- Change cadence with `patch`.
-- Remove obsolete tasks with `../alice-scheduler/scripts/alice-scheduler.sh delete <task_id>`.
+- 不确定任务 ID 时，先 `list` 再编辑/删除。
+- 暂停/恢复：
+  `../alice-scheduler/scripts/alice-scheduler.sh patch <task_id> '{"status":"paused"}'`
+  或
+  `../alice-scheduler/scripts/alice-scheduler.sh patch <task_id> '{"status":"active"}'`
+- 节奏调整使用 `patch`。
+- 删除不再需要的任务：
+  `../alice-scheduler/scripts/alice-scheduler.sh delete <task_id>`
 
-## Cron Note
+## Cron 说明
 
-Alice automation currently validates plain 5-field cron expressions. Do not prepend `CRON_TZ=...` inside `cron_expr`. When the user wants a Shanghai-time schedule, compute the UTC-equivalent 5-field cron value, state the intended `Asia/Shanghai` time explicitly in the reply, and note the conversion.
+Alice 自动化当前仅接受标准 5 段 cron。`cron_expr` 中不要写 `CRON_TZ=...`。用户要求按上海时间调度时，需要换算为 UTC 的 5 段表达式，并在回复里明确标注目标 `Asia/Shanghai` 时间与换算关系。
 
-## Reply Pattern
+## 回复模式
 
-When you operate this workflow, report:
+操作该工作流时，回复需包含：
 
-- whether you created, updated, listed, inspected, or deleted a task
-- the `task.id` and `state_key` when relevant
-- the exact `next_run_at` for newly created or rescheduled tasks
-- whether the run is one-off or recurring
-- any limitation that affects user expectations, especially the lack of immediate execution
+- 本次动作（创建、更新、列出、查看、删除）
+- 相关 `task.id` 与 `state_key`
+- 新建或重排任务的精确 `next_run_at`
+- 一次性还是周期任务
+- 影响预期的限制（尤其“无立即执行”）

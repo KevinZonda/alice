@@ -31,8 +31,9 @@ Before coding, define:
 If task involves runtime/deploy troubleshooting, collect facts first:
 
 ```bash
-journalctl --user-unit alice-codex-connector.service -n 200 --no-pager
-journalctl --user-unit alice-codex-connector.service --since "30 min ago" --no-pager
+# default installer unit; if installed with --service, replace alice.service accordingly
+journalctl --user-unit alice.service -n 200 --no-pager
+journalctl --user-unit alice.service --since "30 min ago" --no-pager
 ```
 
 ## 4. Mandatory Validation Gates

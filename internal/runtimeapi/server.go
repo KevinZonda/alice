@@ -795,19 +795,29 @@ func validatePathUnderRoot(path string, root string) error {
 	if path == "" {
 		return errors.New("path is empty")
 	}
-	if strings.TrimSpace(root) == "" {
-		return nil
+	if !filepath.IsAbs(path) {
+		return errors.New("path must be absolute")
 	}
-	pathAbs, err := filepath.Abs(path)
-	if err != nil {
-		return err
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return errors.New("resource root is empty")
 	}
+	pathAbs := filepath.Clean(path)
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return err
 	}
-	pathAbs = filepath.Clean(pathAbs)
 	rootAbs = filepath.Clean(rootAbs)
+	rootInfo, err := os.Stat(rootAbs)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("resource root does not exist: %s", rootAbs)
+		}
+		return err
+	}
+	if !rootInfo.IsDir() {
+		return fmt.Errorf("resource root is not a directory: %s", rootAbs)
+	}
 	rel, err := filepath.Rel(rootAbs, pathAbs)
 	if err != nil {
 		return err

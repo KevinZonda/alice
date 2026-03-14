@@ -113,12 +113,11 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool) error {
 		logging.Warnf("sync bundled skills failed: %v", err)
 	} else if skillReport.Discovered > 0 {
 		logging.Infof(
-			"bundled skills synced codex_home=%s discovered=%d linked=%d updated=%d backed_up=%d unchanged=%d failed=%d",
+			"bundled skills synced codex_home=%s discovered=%d linked=%d updated=%d unchanged=%d failed=%d",
 			skillReport.CodexHome,
 			skillReport.Discovered,
 			skillReport.Linked,
 			skillReport.Updated,
-			skillReport.BackedUp,
 			skillReport.Unchanged,
 			skillReport.Failed,
 		)

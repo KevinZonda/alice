@@ -1,60 +1,60 @@
 ---
 name: file-printing
-description: 'Print user-provided files through CUPS on this machine. Use when users ask to print an attached file or local file path, check or set the default printer, inspect print queue status, or troubleshoot failed print jobs (for example: "打印这个文件", "用HL5590打印", "查看打印任务状态").'
+description: '通过本机 CUPS 打印用户提供的文件。适用于用户要求打印附件/本地文件、查看或设置默认打印机、检查队列状态、排查打印失败（例如“打印这个文件”“用HL5590打印”“查看打印任务状态”）。'
 ---
 
-# File Printing
+# 文件打印
 
-Follow this workflow to print files reliably and report actionable status.
+按以下流程执行，保证打印结果可追踪、可反馈。
 
-## Workflow
+## 工作流
 
-1. Resolve file input.
-- Prefer attachment path from user message context.
-- Accept absolute local path when provided directly.
-- Verify readability with `test -r <file_path>` before submitting.
+1. 解析文件输入。
+- 优先使用用户消息上下文里的附件路径。
+- 用户直接给了绝对路径也可接受。
+- 提交前先用 `test -r <file_path>` 校验可读性。
 
-2. Resolve target printer.
-- Prefer explicit printer from user instruction.
-- Otherwise use current user default from `lpoptions` (`Default <printer>`).
-- If missing and user does not object, set default to `HL5590` via `lpoptions -d HL5590`.
+2. 解析目标打印机。
+- 优先使用用户明确指定的打印机。
+- 否则读取当前用户默认打印机：`lpoptions`（`Default <printer>`）。
+- 若无默认且用户不反对，可执行 `lpoptions -d HL5590` 设置默认。
 
-3. Submit print job.
-- Run `scripts/print_file.sh <file_path>` for default behavior.
-- Add options only when requested: `--printer`, `--copies`, `--sides`, `--media`, `--option`.
-- Return `JOB_ID` and `PRINTER` to user after successful submission.
+3. 提交打印任务。
+- 默认执行：`scripts/print_file.sh <file_path>`。
+- 仅在用户要求时附加参数：`--printer`、`--copies`、`--sides`、`--media`、`--option`。
+- 成功后向用户返回 `JOB_ID` 与 `PRINTER`。
 
-4. Confirm queue status.
-- Check active jobs with `lpstat -W not-completed -o` (or `lpstat -o`).
-- Report whether the job is queued/printing and include the relevant line.
+4. 确认队列状态。
+- 查询未完成任务：`lpstat -W not-completed -o`（或 `lpstat -o`）。
+- 回复中明确任务处于“排队/打印中”，并附相关行。
 
-5. Handle errors explicitly.
-- If output contains `Forbidden`, explain this is a permission restriction from CUPS policy and ask whether to proceed with user-level fallback/default.
-- If file format fails, run `file --mime-type <file_path>` and suggest converting to PDF before reprint.
-- If printer is unavailable, run `lpstat -p <printer>` and report state/reason.
+5. 明确处理异常。
+- 若输出含 `Forbidden`，说明是 CUPS 权限策略限制，并询问是否走用户侧默认路径/降级方案。
+- 若文件格式失败，执行 `file --mime-type <file_path>`，建议先转 PDF 再打印。
+- 若打印机不可用，执行 `lpstat -p <printer>`，返回状态与原因。
 
-## Commands
+## 常用命令
 
-- Set default printer (current user): `lpoptions -d HL5590`
-- Show default printer (current user): `lpoptions | sed -n '1p'`
-- Show configured printers: `lpstat -p`
-- Show device mapping: `lpstat -v`
-- Show queue: `lpstat -W not-completed -o`
+- 设置当前用户默认打印机：`lpoptions -d HL5590`
+- 查看当前用户默认打印机：`lpoptions | sed -n '1p'`
+- 查看已配置打印机：`lpstat -p`
+- 查看设备映射：`lpstat -v`
+- 查看队列：`lpstat -W not-completed -o`
 
-## Script
+## 脚本
 
-- Main script: `scripts/print_file.sh`
-- Purpose: Validate input, submit print job via `lp`, and emit parse-friendly output (`PRINTER`, `JOB_ID`, `RAW`).
-- Safe check before real print: `scripts/print_file.sh --dry-run <file_path>`
+- 主脚本：`scripts/print_file.sh`
+- 作用：校验输入、通过 `lp` 提交任务、输出可解析结果（`PRINTER`、`JOB_ID`、`RAW`）
+- 真正打印前可先做安全检查：`scripts/print_file.sh --dry-run <file_path>`
 
-## Example
+## 示例
 
-User: "把这个PDF打印两份，双面长边。"
+用户：“把这个 PDF 打印两份，双面长边。”
 
-Run:
+执行：
 `scripts/print_file.sh /abs/path/file.pdf --copies 2 --sides two-sided-long-edge`
 
-Reply with:
-- printer name
-- job id
-- queue status line
+回复中包含：
+- 打印机名称
+- 作业 ID
+- 队列状态行

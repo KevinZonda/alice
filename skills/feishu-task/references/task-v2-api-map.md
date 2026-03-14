@@ -1,83 +1,83 @@
-# Feishu Task v2 API Map
+# 飞书 Task v2 API 对照表
 
-## Scope Separation
+## 系统边界
 
-- `Alice任务` means connector-local automation tasks.
-- `飞书任务` means official Feishu OpenAPI task resources.
-- This skill is only for `飞书任务`.
+- `Alice任务`：连接器本地自动化任务。
+- `飞书任务`：飞书官方 OpenAPI Task 资源。
+- 本 skill 仅用于 `飞书任务`。
 
-## Token Rules
+## Token 规则
 
-- `GET /open-apis/task/v2/tasks` (`list tasks`) is user-token only in official SDK metadata.
-- Most other Task v2 endpoints accept both tenant token and user token.
-- For "当前人的任务", prefer `user_access_token`.
+- `GET /open-apis/task/v2/tasks`（列表）在官方 SDK 元数据中要求 `user_access_token`。
+- 其余多数 Task v2 端点支持 `tenant token` 与 `user token`。
+- 涉及“当前人的任务”时优先使用 `user_access_token`。
 
-## CRUD Coverage
+## CRUD 覆盖
 
-### Task CRUD
+### 任务 CRUD
 
-- Create task: `POST /open-apis/task/v2/tasks`
-- Get task: `GET /open-apis/task/v2/tasks/:task_guid`
-- List tasks: `GET /open-apis/task/v2/tasks`
-- Update task: `PATCH /open-apis/task/v2/tasks/:task_guid`
-- Delete task: `DELETE /open-apis/task/v2/tasks/:task_guid`
+- 创建任务：`POST /open-apis/task/v2/tasks`
+- 获取任务：`GET /open-apis/task/v2/tasks/:task_guid`
+- 列表任务：`GET /open-apis/task/v2/tasks`
+- 更新任务：`PATCH /open-apis/task/v2/tasks/:task_guid`
+- 删除任务：`DELETE /open-apis/task/v2/tasks/:task_guid`
 
-### Task Member / Assignment
+### 任务成员 / 分派
 
-- Add assignees: `POST /open-apis/task/v2/tasks/:task_guid/add_members`
-- Remove assignees: `POST /open-apis/task/v2/tasks/:task_guid/remove_members`
+- 添加成员：`POST /open-apis/task/v2/tasks/:task_guid/add_members`
+- 移除成员：`POST /open-apis/task/v2/tasks/:task_guid/remove_members`
 
-### Deadline / Due
+### 截止时间
 
-- Update due time: `PATCH /open-apis/task/v2/tasks/:task_guid` with:
-  - `task.due.timestamp` (ms)
-  - `task.due.is_all_day` (boolean)
+- 更新截止时间：`PATCH /open-apis/task/v2/tasks/:task_guid`，字段为：
+  - `task.due.timestamp`（毫秒）
+  - `task.due.is_all_day`（布尔）
   - `update_fields: ["due"]`
 
-### Tasklist CRUD
+### 任务清单 CRUD
 
-- Create tasklist: `POST /open-apis/task/v2/tasklists`
-- Get tasklist: `GET /open-apis/task/v2/tasklists/:tasklist_guid`
-- List tasklists: `GET /open-apis/task/v2/tasklists`
-- Update tasklist: `PATCH /open-apis/task/v2/tasklists/:tasklist_guid`
-- Delete tasklist: `DELETE /open-apis/task/v2/tasklists/:tasklist_guid`
+- 创建清单：`POST /open-apis/task/v2/tasklists`
+- 获取清单：`GET /open-apis/task/v2/tasklists/:tasklist_guid`
+- 列表清单：`GET /open-apis/task/v2/tasklists`
+- 更新清单：`PATCH /open-apis/task/v2/tasklists/:tasklist_guid`
+- 删除清单：`DELETE /open-apis/task/v2/tasklists/:tasklist_guid`
 
-### Tasklist Membership
+### 清单成员
 
-- Add tasklist members: `POST /open-apis/task/v2/tasklists/:tasklist_guid/add_members`
-- Remove tasklist members: `POST /open-apis/task/v2/tasklists/:tasklist_guid/remove_members`
+- 添加清单成员：`POST /open-apis/task/v2/tasklists/:tasklist_guid/add_members`
+- 移除清单成员：`POST /open-apis/task/v2/tasklists/:tasklist_guid/remove_members`
 
-### Tasklist Task Queries
+### 清单内任务查询
 
-- List tasks in a tasklist: `GET /open-apis/task/v2/tasklists/:tasklist_guid/tasks`
+- 查询清单内任务：`GET /open-apis/task/v2/tasklists/:tasklist_guid/tasks`
 
-## Required User Requests -> API Mapping
+## 用户诉求 -> API 映射
 
-- 检查当前你管理的任务:
+- 检查“你当前管理的任务”：
   - `GET /task/v2/tasklists`
   - `GET /task/v2/tasklists/:tasklist_guid/tasks`
-- 当前人的任务:
+- 查看“当前人的任务”：
   - `GET /task/v2/tasks?type=my_tasks`
-- 发布新的任务:
+- 发布新任务：
   - `POST /task/v2/tasks`
-- assign 特定的人:
+- assign 特定成员：
   - `POST /task/v2/tasks/:task_guid/add_members`
-- 设置 deadline:
-  - `PATCH /task/v2/tasks/:task_guid` (`update_fields=["due"]`)
-- 创建和管理任务清单:
+- 设置 deadline：
+  - `PATCH /task/v2/tasks/:task_guid`（`update_fields=["due"]`）
+- 创建和管理任务清单：
   - `POST/GET/PATCH/DELETE /task/v2/tasklists...`
 
-## SDK Pointers
+## SDK 参考
 
-- Node SDK:
-  - package: `@larksuiteoapi/node-sdk`
-  - namespace examples:
+- Node SDK：
+  - 包：`@larksuiteoapi/node-sdk`
+  - 命名空间示例：
     - `client.task.v2.task.create(...)`
     - `client.task.v2.task.addMembers(...)`
     - `client.task.v2.tasklist.create(...)`
-- Go SDK:
-  - module: `github.com/larksuite/oapi-sdk-go/v3`
-  - namespace examples:
+- Go SDK：
+  - 模块：`github.com/larksuite/oapi-sdk-go/v3`
+  - 命名空间示例：
     - `client.Task.V2.Task.Create(...)`
     - `client.Task.V2.Task.AddMembers(...)`
     - `client.Task.V2.Tasklist.Create(...)`

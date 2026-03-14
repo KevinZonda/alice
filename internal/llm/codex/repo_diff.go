@@ -345,9 +345,6 @@ func parseFormattedFileChangeLine(line string) (parsedFileChangeLine, bool) {
 	if parsed, ok := parseMarkdownFileChangeLine(line); ok {
 		return parsed, true
 	}
-	if parsed, ok := parseLegacyFileChangeLine(line); ok {
-		return parsed, true
-	}
 	return parsedFileChangeLine{}, false
 }
 
@@ -412,74 +409,6 @@ func parseMarkdownStats(statsPart string) (additions int, deletions int, ok bool
 		return 0, 0, false
 	}
 	return add, del, true
-}
-
-func parseLegacyFileChangeLine(line string) (parsedFileChangeLine, bool) {
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return parsedFileChangeLine{}, false
-	}
-
-	legacyMarkers := []struct {
-		Marker string
-		Status fileChangeStatus
-	}{
-		{Marker: "已新增，+", Status: fileChangeStatusAdded},
-		{Marker: "已删除，+", Status: fileChangeStatusDeleted},
-		{Marker: "已更改，+", Status: fileChangeStatusModified},
-	}
-	for _, marker := range legacyMarkers {
-		idx := strings.LastIndex(line, marker.Marker)
-		if idx < 0 {
-			continue
-		}
-		path := strings.TrimSpace(line[:idx])
-		if path == "" {
-			return parsedFileChangeLine{}, false
-		}
-
-		statsPart := strings.TrimSpace(line[idx+len(marker.Marker):])
-		parts := strings.SplitN(statsPart, "-", 2)
-		if len(parts) != 2 {
-			return parsedFileChangeLine{}, false
-		}
-		add, addErr := strconv.Atoi(strings.TrimSpace(parts[0]))
-		del, delErr := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if addErr != nil || delErr != nil {
-			return parsedFileChangeLine{}, false
-		}
-
-		return parsedFileChangeLine{
-			Path:     path,
-			Status:   marker.Status,
-			Stat:     fileDiffStat{Additions: add, Deletions: del},
-			HasStats: true,
-		}, true
-	}
-
-	legacyNoStatMarkers := []struct {
-		Suffix string
-		Status fileChangeStatus
-	}{
-		{Suffix: "已新增", Status: fileChangeStatusAdded},
-		{Suffix: "已删除", Status: fileChangeStatusDeleted},
-		{Suffix: "已更改", Status: fileChangeStatusModified},
-	}
-	for _, marker := range legacyNoStatMarkers {
-		if !strings.HasSuffix(line, marker.Suffix) {
-			continue
-		}
-		path := strings.TrimSpace(strings.TrimSuffix(line, marker.Suffix))
-		if path == "" {
-			return parsedFileChangeLine{}, false
-		}
-		return parsedFileChangeLine{
-			Path:   path,
-			Status: marker.Status,
-		}, true
-	}
-
-	return parsedFileChangeLine{}, false
 }
 
 func resolveFileChangeStatByGitDiff(ctx context.Context, repos []string, path string) (fileDiffStat, bool) {

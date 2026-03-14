@@ -1,32 +1,32 @@
 ---
 name: alice-memory
-description: Inspect or update Alice memory for the current chat through Alice's local runtime HTTP API. Use when the user wants to view current session memory, edit long-term memory, append a daily note/summary, or confirm which memory files are active for the conversation.
+description: 通过 Alice 本地 runtime HTTP API 查看或更新当前会话记忆。适用于查看当前会话记忆上下文、改写长期记忆、追加当日摘要，或确认会话正在使用的记忆文件。
 ---
 
-# Alice Memory
+# Alice 记忆
 
-Use `scripts/alice-memory.sh` instead of editing `.memory` paths by hand. The script reads the current session context and runtime auth from environment variables injected by Alice.
+优先使用 `scripts/alice-memory.sh`，不要手工改 `.memory` 目录路径。脚本会读取 Alice 注入的当前会话上下文和鉴权环境变量。
 
-## Commands
+## 常用命令
 
-- Inspect current memory context:
+- 查看当前记忆上下文：
   `scripts/alice-memory.sh context`
-- Overwrite current session long-term memory:
+- 覆盖当前会话长期记忆：
   `scripts/alice-memory.sh write-session '偏好中文回复；关注稳定性。'`
-- Overwrite global long-term memory:
+- 覆盖全局长期记忆：
   `scripts/alice-memory.sh write-global '所有会话默认先给结论。'`
-- Append a daily summary entry for the current session:
+- 为当前会话追加当日摘要：
   `scripts/alice-memory.sh daily-summary '今天确认了新的部署窗口和风险项。'`
 
-## Workflow
+## 工作流
 
-1. Run `context` first when you need to understand which files are in play.
-2. Prefer `write-session` for chat-specific preferences or constraints.
-3. Use `write-global` only for stable cross-chat rules.
-4. Use `daily-summary` for time-bound notes that should stay in the per-day log.
+1. 需要先搞清楚当前会话绑定了哪些记忆文件时，先执行 `context`。
+2. 会话特有偏好或约束优先写 `write-session`。
+3. 只有跨会话都稳定生效的规则才写入 `write-global`。
+4. 有时效性的事项写入 `daily-summary`，保留在按日期日志中。
 
-## Reply Pattern
+## 回复模式
 
-- Mention whether you inspected, rewrote, or appended memory.
-- Include the affected file path from the API response when relevant.
-- Summarize the updated memory content briefly instead of dumping the whole file unless the user asked for it.
+- 明确说明你是“查看 / 覆盖 / 追加”了哪类记忆。
+- 需要时带上 API 返回的实际文件路径。
+- 除非用户明确要求，不要整文件回显，只做简要摘要。

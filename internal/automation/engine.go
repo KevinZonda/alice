@@ -296,7 +296,10 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 	runAt := e.nowTime()
 	switch task.Action.Type {
 	case ActionTypeSendText:
-		rendered := renderActionTemplate(task.Action.Text, runAt)
+		rendered, err := renderActionTemplate(task.Action.Text, runAt)
+		if err != nil {
+			return taskDispatch{}, err
+		}
 		text, err := BuildDispatchText(Action{
 			Type:           ActionTypeSendText,
 			Text:           rendered,
@@ -311,7 +314,10 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		if runner == nil {
 			return taskDispatch{}, errors.New("automation llm runner is nil")
 		}
-		prompt := renderActionTemplate(task.Action.Prompt, runAt)
+		prompt, err := renderActionTemplate(task.Action.Prompt, runAt)
+		if err != nil {
+			return taskDispatch{}, err
+		}
 		if prompt == "" {
 			return taskDispatch{}, errors.New("action prompt is empty for run_llm")
 		}
@@ -329,7 +335,10 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		if reply == "" {
 			return taskDispatch{}, errors.New("llm reply is empty")
 		}
-		prefix := renderActionTemplate(task.Action.Text, runAt)
+		prefix, err := renderActionTemplate(task.Action.Text, runAt)
+		if err != nil {
+			return taskDispatch{}, err
+		}
 		message := reply
 		if prefix != "" {
 			message = prefix + "\n" + reply
@@ -348,7 +357,10 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		if runner == nil {
 			return taskDispatch{}, errors.New("automation workflow runner is nil")
 		}
-		prompt := renderActionTemplate(task.Action.Prompt, runAt)
+		prompt, err := renderActionTemplate(task.Action.Prompt, runAt)
+		if err != nil {
+			return taskDispatch{}, err
+		}
 		if prompt == "" {
 			return taskDispatch{}, errors.New("action prompt is empty for run_workflow")
 		}
@@ -368,7 +380,10 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		if reply == "" {
 			return taskDispatch{}, errors.New("workflow reply is empty")
 		}
-		prefix := renderActionTemplate(task.Action.Text, runAt)
+		prefix, err := renderActionTemplate(task.Action.Text, runAt)
+		if err != nil {
+			return taskDispatch{}, err
+		}
 		message := reply
 		if prefix != "" {
 			message = prefix + "\n\n" + reply
@@ -409,10 +424,10 @@ func (e *Engine) nowTime() time.Time {
 	return now.UTC()
 }
 
-func renderActionTemplate(raw string, now time.Time) string {
+func renderActionTemplate(raw string, now time.Time) (string, error) {
 	template := strings.TrimSpace(raw)
 	if template == "" {
-		return ""
+		return "", nil
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -431,9 +446,9 @@ func renderActionTemplate(raw string, now time.Time) string {
 		"Unix": now.Unix(),
 	})
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("render action template failed: %w", err)
 	}
-	return strings.TrimSpace(rendered)
+	return strings.TrimSpace(rendered), nil
 }
 
 func (e *Engine) buildTaskRunEnv(task Task) map[string]string {

@@ -374,9 +374,6 @@ func (s *Store) openDB() error {
 		if err := writeSnapshotVersion(tx, defaultSnapshotVersion); err != nil {
 			return err
 		}
-		if err := s.importLegacySnapshotIfNeeded(tx); err != nil {
-			return err
-		}
 		return nil
 	}); err != nil {
 		_ = db.Close()
@@ -385,60 +382,6 @@ func (s *Store) openDB() error {
 
 	s.db = db
 	return nil
-}
-
-func (s *Store) importLegacySnapshotIfNeeded(tx *bolt.Tx) error {
-	tasksBucket := tx.Bucket(automationTasksBucket)
-	if tasksBucket == nil {
-		return errors.New("automation tasks bucket is missing")
-	}
-	cursor := tasksBucket.Cursor()
-	if key, _ := cursor.First(); key != nil {
-		return nil
-	}
-
-	legacyPath := s.legacySnapshotPath()
-	if legacyPath == "" {
-		return nil
-	}
-	data, err := os.ReadFile(legacyPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("read legacy automation state failed: %w", err)
-	}
-	if len(data) == 0 {
-		return nil
-	}
-
-	var snapshot Snapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return fmt.Errorf("parse legacy automation state failed: %w", err)
-	}
-	normalized := make([]Task, 0, len(snapshot.Tasks))
-	for _, task := range snapshot.Tasks {
-		task = NormalizeTask(task)
-		if task.ID == "" {
-			continue
-		}
-		normalized = append(normalized, task)
-	}
-	snapshot.Tasks = normalized
-	if snapshot.Version <= 0 {
-		snapshot.Version = defaultSnapshotVersion
-	}
-	return writeSnapshotTx(tx, snapshot)
-}
-
-func (s *Store) legacySnapshotPath() string {
-	if s == nil {
-		return ""
-	}
-	if !strings.HasSuffix(strings.ToLower(strings.TrimSpace(s.path)), ".db") {
-		return ""
-	}
-	return filepath.Join(filepath.Dir(s.path), "automation_state.json")
 }
 
 func (s *Store) viewSnapshot(fn func(snapshot Snapshot) error) error {

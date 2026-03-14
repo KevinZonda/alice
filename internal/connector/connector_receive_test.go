@@ -254,7 +254,7 @@ func TestApp_OnMessageReceive_SameFeishuThreadSharesSessionKey(t *testing.T) {
 	}
 }
 
-func TestApp_OnMessageReceive_ThreadReplyReusesRootMessageSessionKey(t *testing.T) {
+func TestApp_OnMessageReceive_ThreadReplyUsesThreadSessionKey(t *testing.T) {
 	cfg := configForTest()
 	app := NewApp(cfg, nil)
 
@@ -295,7 +295,7 @@ func TestApp_OnMessageReceive_ThreadReplyReusesRootMessageSessionKey(t *testing.
 	if job1.SessionKey != "chat_id:oc_chat|message:om_root_1" {
 		t.Fatalf("unexpected first session key: %s", job1.SessionKey)
 	}
-	if job2.SessionKey != "chat_id:oc_chat|message:om_root_1" {
+	if job2.SessionKey != "chat_id:oc_chat|thread:omt_thread_1" {
 		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
 	}
 	if job1.MemoryScopeKey != "chat_id:oc_chat" || job2.MemoryScopeKey != "chat_id:oc_chat" {
@@ -304,7 +304,7 @@ func TestApp_OnMessageReceive_ThreadReplyReusesRootMessageSessionKey(t *testing.
 	if job1.SessionVersion != 1 {
 		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
 	}
-	if job2.SessionVersion != 2 {
+	if job2.SessionVersion != 1 {
 		t.Fatalf("unexpected second session version: %d", job2.SessionVersion)
 	}
 }

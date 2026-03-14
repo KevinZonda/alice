@@ -472,11 +472,8 @@ func buildSessionKeyCandidatesForMessage(receiveIDType, receiveID string, messag
 
 		if threadID != "" {
 			appendSessionKeyCandidate(&candidates, base+"|thread:"+threadID)
-		}
-		if rootID != "" {
-			// Keep historical thread-key fallback, and also provide message-key alias for root.
+		} else if rootID != "" {
 			appendSessionKeyCandidate(&candidates, base+"|thread:"+rootID)
-			appendSessionKeyCandidate(&candidates, base+"|message:"+rootID)
 		}
 		if sourceMessageID != "" {
 			appendSessionKeyCandidate(&candidates, base+"|message:"+sourceMessageID)

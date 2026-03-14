@@ -1,6 +1,8 @@
 .env
 config.yaml
 *.log
+.codex/
+.githooks/
 
 bin/
 dist/

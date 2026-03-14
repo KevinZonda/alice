@@ -268,16 +268,16 @@ func (a *App) workerLoop(ctx context.Context, idx int) {
 			cancelRun(nil)
 			a.clearActiveRun(sessionKey, job.SessionVersion)
 			sessionMu.Unlock()
-				switch result {
-				case JobProcessCompleted:
-					a.completePendingJob(job)
-				case JobProcessRetryAfterRestart:
-					if ctx.Err() != nil {
-						logging.Infof(
-							"job interrupted, keep pending for retry event_id=%s session=%s version=%d state=%s",
-							job.EventID,
-							job.SessionKey,
-							job.SessionVersion,
+			switch result {
+			case JobProcessCompleted:
+				a.completePendingJob(job)
+			case JobProcessRetryAfterRestart:
+				if ctx.Err() != nil {
+					logging.Infof(
+						"job interrupted, keep pending for retry event_id=%s session=%s version=%d state=%s",
+						job.EventID,
+						job.SessionKey,
+						job.SessionVersion,
 						result,
 					)
 					continue

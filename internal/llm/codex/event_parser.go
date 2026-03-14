@@ -67,7 +67,7 @@ func parseEventLine(line string) (reasoning string, agentMessage string, fileCha
 		return text, "", "", ""
 	case "agent_message":
 		return "", text, "", ""
-	case "file_change", "filechange":
+	case "file_change":
 		return "", "", parseFileChangeMessage(item), ""
 	default:
 		return "", "", "", ""

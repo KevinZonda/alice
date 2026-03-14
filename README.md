@@ -12,7 +12,7 @@ A Feishu long-connection connector for Codex / Claude / Kimi.
 ## Highlights
 
 - Standalone runtime: binary can run without repository checkout
-- Embedded prompts and skills: extracted on first run
+- Embedded prompts + skills: prompts are bundled in binary; bundled skills are synced on startup
 - Isolated runtime home: defaults to `${ALICE_HOME:-~/.alice}`
 - Isolated Codex home: defaults to `${ALICE_HOME}/.codex`
 - Tag-based release pipeline: test + cross-build + GitHub Release
@@ -24,12 +24,13 @@ By default Alice uses:
 - Config: `${ALICE_HOME:-~/.alice}/config.yaml`
 - Binary: `${ALICE_HOME:-~/.alice}/bin/alice`
 - Runtime state: `${ALICE_HOME:-~/.alice}/memory/`
-- Bundled skills: `${CODEX_HOME:-${ALICE_HOME:-~/.alice}/.codex}/skills/`
+- Bundled skills: `${ALICE_HOME:-~/.alice}/.codex/skills/`
 
 ## Requirements
 
-- Go 1.23+ (source build only)
+- Go 1.25+ (source build only)
 - `codex` CLI (or `claude` / `kimi`) installed and logged in
+- Linux host with `systemd --user` (for one-line install script)
 - Feishu app with:
   - bot capability
   - `im.message.receive_v1` subscription
@@ -48,70 +49,53 @@ go test ./...
 go run ./cmd/connector
 ```
 
-## Standalone Install & Deployment (No Repo Required)
+## One-Line Install / Update / Uninstall (Recommended)
 
-This mode is for production/runtime hosts where you only keep the binary and runtime files.
+Installer script (in this repo): [`scripts/alice-installer.sh`](./scripts/alice-installer.sh)
 
-1. Download a release asset from GitHub Releases (`linux_amd64`, `linux_arm64`, `darwin_*`, `windows_amd64`).
-2. Place it under `${ALICE_HOME:-~/.alice}/bin/alice`.
-3. Create `${ALICE_HOME:-~/.alice}/config.yaml`.
-4. Run the binary directly.
-
-Example (Linux):
+Install latest release (also works as update if run again):
 
 ```bash
-export ALICE_HOME="$HOME/.alice"
-mkdir -p "$ALICE_HOME/bin" "$ALICE_HOME/logs"
-
-# Replace VERSION with an actual tag, for example v1.2.3
-VERSION="vX.Y.Z"
-ASSET="alice_${VERSION}_linux_amd64.tar.gz"
-
-curl -fL "https://github.com/Alice-space/alice/releases/download/${VERSION}/${ASSET}" -o "/tmp/${ASSET}"
-tar -xzf "/tmp/${ASSET}" -C "$ALICE_HOME/bin"
-mv "$ALICE_HOME/bin/alice_${VERSION}_linux_amd64" "$ALICE_HOME/bin/alice"
-chmod +x "$ALICE_HOME/bin/alice"
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install
 ```
 
-Create config (`$ALICE_HOME/config.yaml`):
-
-```yaml
-feishu_app_id: "cli_xxxxx"
-feishu_app_secret: "xxxxxx"
-llm_provider: "codex"
-codex_command: "codex"
-# Optional: runtime home (default ~/.alice)
-alice_home: ""
-# Optional: defaults are already under alice_home
-workspace_dir: ""
-memory_dir: ""
-prompt_dir: ""
-```
-
-Run foreground:
+Update to latest release (explicit action):
 
 ```bash
-"$HOME/.alice/bin/alice"
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- update
 ```
 
-Use a custom runtime home:
+Install/update to a pinned version:
 
 ```bash
-"$HOME/.alice/bin/alice" --alice-home "/path/to/alice-home"
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
 ```
 
-Run background (without systemd):
+Uninstall (remove service + binary + `~/.alice`):
 
 ```bash
-nohup "$HOME/.alice/bin/alice" \
-  >"$HOME/.alice/logs/connector.log" 2>&1 &
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall
 ```
 
-Notes:
+Uninstall but keep runtime data:
 
-- Alice writes pid file by default at `${ALICE_HOME}/run/alice.pid`.
-- On startup, embedded skills are materialized to `${CODEX_HOME}/skills`.
-- Legacy skill symlinks are auto-migrated to real directories.
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
+```
+
+What the installer does:
+
+- Downloads the latest GitHub Release asset and installs `${ALICE_HOME:-~/.alice}/bin/alice`
+- Verifies release checksum against `SHA256SUMS` when available
+- Initializes `${ALICE_HOME:-~/.alice}` directories and default `config.yaml` (if missing)
+- Copies existing Codex auth (`auth.json`) into `${ALICE_HOME}/.codex/` when available
+- Installs and manages `systemd --user` service (`alice.service` by default; override with `--service NAME`) for auto-restart
+- Attempts to enable user linger so the service can stay alive after logout
+
+After first install:
+
+1. Edit `${ALICE_HOME:-~/.alice}/config.yaml` and set `feishu_app_id` + `feishu_app_secret`
+2. Re-run the install command once to start/restart the service with your config
 
 ## Configuration
 
@@ -180,9 +164,11 @@ make run
 `make check` includes:
 
 - secret scan
+- shell script syntax check
 - gofmt check
 - `go vet ./...`
 - `go test ./...`
+- `go test -race ./internal/connector`
 
 ## Docs
 

@@ -1,4 +1,4 @@
-# 飞书 -> Codex 连接器（Go，长连接）
+# 飞书 -> LLM 连接器（Codex / Claude / Kimi，Go，长连接）
 
 [English](./README.md)
 
@@ -6,7 +6,7 @@
 
 1. 使用 **飞书官方 Go SDK**（`github.com/larksuite/oapi-sdk-go/v3`）的长连接（`ws`）模式。
 2. 接收 `im.message.receive_v1` 文本消息事件。
-3. 每条文本消息调用一次 `codex exec`。
+3. 每条消息调用当前 `llm_provider` 对应 CLI（`codex` / `claude` / `kimi`）。
 4. 将回复发送回飞书。
 
 该模式**不需要公网 IP**，因为它走的是飞书长连接（WebSocket），不是公网 webhook 回调。
@@ -17,8 +17,9 @@
 
 ## 运行要求
 
-- Go 1.23+（已在 Go 1.26 验证）
-- 已安装并登录 `codex` CLI（`codex login status`）
+- Go 1.25+（源码构建，需与 `go.mod` 一致）
+- 已安装并登录所选后端 CLI（`codex` / `claude` / `kimi`）
+- Linux 主机且可用 `systemd --user`（用于一键安装脚本）
 - 飞书应用侧需要：
   - 开启机器人能力
   - 订阅 `im.message.receive_v1` 事件
@@ -41,6 +42,51 @@ go test ./...
 # 启动连接器
 go run ./cmd/connector
 ```
+
+## 一句话安装 / 更新 / 卸载（推荐）
+
+安装脚本位于仓库：[`scripts/alice-installer.sh`](./scripts/alice-installer.sh)
+
+安装最新版本（重复执行同一命令即更新）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install
+```
+
+显式更新到最新版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- update
+```
+
+安装/更新到指定版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
+```
+
+卸载（删除服务、二进制、`~/.alice`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall
+```
+
+卸载但保留运行数据：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
+```
+
+脚本会自动完成：
+
+- 下载最新 GitHub Release 并安装到 `${ALICE_HOME:-~/.alice}/bin/alice`
+- 若 release 提供 `SHA256SUMS`，会先校验校验和再解压安装
+- 初始化 `${ALICE_HOME:-~/.alice}` 目录和默认 `config.yaml`（若不存在）
+- 检测并复制已有 Codex 登录凭证 `auth.json` 到 `${ALICE_HOME}/.codex/`
+- 安装并管理 `systemd --user` 服务（默认 `alice.service`，自动拉起与崩溃重启）
+- 尝试开启 linger，尽量保证退出登录后服务仍保持活跃
+
+首次安装后请先配置 `${ALICE_HOME:-~/.alice}/config.yaml` 中的 `feishu_app_id` 和 `feishu_app_secret`，然后再次执行安装命令触发启动/重启。
 
 ## 编译
 
@@ -70,7 +116,14 @@ go build -o bin/alice ./cmd/connector
 make check
 ```
 
-`make check` 包含密钥扫描（`make secret-check`），用于拦截误提交的 key/token。
+`make check` 包含：
+
+- 密钥扫描（`make secret-check`），用于拦截误提交的 key/token
+- shell 脚本语法检查
+- `gofmt` 格式检查
+- `go vet ./...`
+- `go test ./...`
+- `go test -race ./internal/connector`
 
 安装 git hooks：
 
@@ -100,7 +153,7 @@ make precommit-install
 - `file-printing`
 - `feishu-task`
 
-连接器启动时会把内嵌的自带 skill 自动释放到 `$CODEX_HOME/skills`（默认 `~/.alice/.codex/skills`）。历史软链接会自动迁移为真实目录；非托管的自定义同名目录保持不变。
+连接器启动时会把内嵌的自带 skill 自动释放到 `$CODEX_HOME/skills`（默认 `~/.alice/.codex/skills`）。非托管的自定义同名目录保持不变。
 
 ## 配置文件
 
@@ -172,7 +225,7 @@ log_compress: false
 - `runtime_http_addr` / `runtime_http_token`：Alice 本地 runtime HTTP API 的监听地址和鉴权 token。若 `runtime_http_token` 为空，Alice 会在每次启动时自动生成一个 token 并注入 agent 环境变量。
 - `alice_home`：运行时根目录（默认 `~/.alice`）。
 - `workspace_dir` / `memory_dir` / `prompt_dir`：运行时目录。默认在 `alice_home` 下，分别是 `workspace/`、`memory/`、`prompts/`。
-- `CODEX_HOME`：若进程环境中未预设，Alice 默认使用 `alice_home/.codex`，并自动注入到 Codex/Claude/Kimi 子进程（除非在 `env` 里显式覆盖）。
+- `CODEX_HOME`：Alice 启动时会强制设置为 `alice_home/.codex`；子进程默认继承该值（若在 `env` 里显式设置则以显式值为准）。
 - `env`：注入到所选 LLM 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix` / `claude_prompt_prefix` / `kimi_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
@@ -193,7 +246,7 @@ log_compress: false
 
 ## 运行行为
 
-- 二进制可直接前台运行，不依赖 systemd；若需要进程托管可按需接入 systemd。
+- 二进制可直接前台运行；生产部署建议使用安装脚本创建 `systemd --user` 服务做自动拉起与保活。
 - 支持接收消息类型：`text`、`image`、`sticker`、`audio`、`file`。
 - 群聊/话题群触发由 `trigger_mode` 控制：
   - `at`：仅处理艾特机器人的消息。若 `feishu_bot_open_id` 与 `feishu_bot_user_id` 都为空，则群聊/话题群消息全部忽略。
@@ -211,7 +264,7 @@ log_compress: false
 - 首次启动时会自动创建 `memory_dir` 及其 `daily/` 子目录。
 - 连接器会把每个聊天的会话状态持久化到 `memory_dir/session_state.json`，重启后仍可续接线程。
 - 连接器会把队列中/执行中的任务持久化到 `memory_dir/runtime_state.json`，重启后会继续回复未完成或未回复的消息。
-- 自动化任务会通过 `bbolt` 持久化到 `memory_dir/automation.db`；若检测到旧的 `automation_state.json`，首次打开时会自动导入。
+- 自动化任务会通过 `bbolt` 持久化到 `memory_dir/automation.db`。
 - 每次调用 Codex 前，只会注入长期记忆；分日期记忆只提供目录位置，让 Codex 按需检索。
 - 会话复用改为“按话题优先”：
   - 同一飞书话题线程（`thread_id`，没有则回退 `root_id`）内的消息复用同一个 Codex 线程。
