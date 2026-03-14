@@ -6,7 +6,7 @@ build:
 	go build -o bin/alice-connector ./cmd/connector
 
 run:
-	go run ./cmd/connector -c config.yaml
+	go run ./cmd/connector
 
 fmt:
 	gofmt -w $(shell find . -name '*.go' -type f)

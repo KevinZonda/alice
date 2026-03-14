@@ -28,8 +28,9 @@
 ## 快速开始
 
 ```bash
-cp config.example.yaml config.yaml
-# 编辑 config.yaml
+mkdir -p ~/.alice
+cp config.example.yaml ~/.alice/config.yaml
+# 编辑 ~/.alice/config.yaml
 
 # 安装依赖
 go mod tidy
@@ -38,7 +39,7 @@ go mod tidy
 go test ./...
 
 # 启动连接器
-go run ./cmd/connector -c config.yaml
+go run ./cmd/connector
 ```
 
 ## 编译
@@ -52,7 +53,7 @@ go build -o bin/alice-connector ./cmd/connector
 运行：
 
 ```bash
-./bin/alice-connector -c config.yaml
+./bin/alice-connector
 ```
 
 同一个二进制还提供给 skill 使用的 runtime CLI：
@@ -100,11 +101,11 @@ make precommit-install
 - `file-printing`
 - `feishu-task`
 
-连接器启动时会自动把仓库内全部自带 skill 链接到 `$CODEX_HOME/skills`（默认 `~/.codex/skills`）。若同名目录已存在且不是软链接，会先自动备份一次再替换为软链接。
+连接器启动时会把内嵌的自带 skill 自动释放到 `$CODEX_HOME/skills`（默认 `~/.alice/.codex/skills`）。历史软链接会自动迁移为真实目录；非托管的自定义同名目录保持不变。
 
 ## 配置文件
 
-程序从 YAML 配置文件读取参数（默认路径：`config.yaml`）。
+程序从 YAML 配置文件读取参数（默认路径：`${ALICE_HOME:-~/.alice}/config.yaml`）。
 
 你也可以传入自定义路径：
 
@@ -130,11 +131,12 @@ kimi_command: "kimi"
 kimi_timeout_secs: 120
 runtime_http_addr: "127.0.0.1:7331"
 runtime_http_token: ""
-workspace_dir: "."
+workspace_dir: ""
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
   ALL_PROXY: "socks5://127.0.0.1:7891"
-memory_dir: ".memory"
+memory_dir: ""
+prompt_dir: ""
 
 codex_prompt_prefix: ""
 claude_prompt_prefix: ""
@@ -168,6 +170,8 @@ log_compress: false
 - `llm_provider`：LLM 后端类型选择。支持 `codex`（默认）、`claude`、`kimi`。
 - `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`、`kimi_command` / `kimi_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
 - `runtime_http_addr` / `runtime_http_token`：Alice 本地 runtime HTTP API 的监听地址和鉴权 token。若 `runtime_http_token` 为空，Alice 会在每次启动时自动生成一个 token 并注入 agent 环境变量。
+- `workspace_dir` / `memory_dir` / `prompt_dir`：运行时目录。默认在 `${ALICE_HOME:-~/.alice}` 下，分别是 `workspace/`、`memory/`、`prompts/`。
+- `CODEX_HOME`：若进程环境中未预设，Alice 默认使用 `${ALICE_HOME:-~/.alice}/.codex`，并自动注入到 Codex/Claude/Kimi 子进程（除非在 `env` 里显式覆盖）。
 - `env`：注入到所选 LLM 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix` / `claude_prompt_prefix` / `kimi_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
@@ -188,6 +192,7 @@ log_compress: false
 
 ## 运行行为
 
+- 二进制可直接前台运行，不依赖 systemd；若需要进程托管可按需接入 systemd。
 - 支持接收消息类型：`text`、`image`、`sticker`、`audio`、`file`。
 - 群聊/话题群触发由 `trigger_mode` 控制：
   - `at`：仅处理艾特机器人的消息。若 `feishu_bot_open_id` 与 `feishu_bot_user_id` 都为空，则群聊/话题群消息全部忽略。

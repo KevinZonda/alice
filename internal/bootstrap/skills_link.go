@@ -2,11 +2,18 @@ package bootstrap
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	aliceassets "github.com/Alice-space/alice"
+	"github.com/Alice-space/alice/internal/config"
 )
+
+const embeddedSkillMarkerFile = ".alice-embedded-skill"
 
 type SkillLinkReport struct {
 	CodexHome  string
@@ -19,24 +26,12 @@ type SkillLinkReport struct {
 }
 
 func EnsureBundledSkillsLinked(workspaceDir string) (SkillLinkReport, error) {
+	_ = workspaceDir
+
 	report := SkillLinkReport{}
-
-	workspaceDir = strings.TrimSpace(workspaceDir)
-	if workspaceDir == "" {
-		workspaceDir = "."
-	}
-	workspaceAbs, err := filepath.Abs(workspaceDir)
+	entries, err := fs.ReadDir(aliceassets.SkillsFS, ".")
 	if err != nil {
-		return report, fmt.Errorf("resolve workspace dir failed: %w", err)
-	}
-
-	repoSkillsRoot := filepath.Join(workspaceAbs, "skills")
-	entries, err := os.ReadDir(repoSkillsRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return report, nil
-		}
-		return report, fmt.Errorf("read bundled skills dir failed: %w", err)
+		return report, fmt.Errorf("read embedded bundled skills failed: %w", err)
 	}
 
 	codexHome, err := resolveCodexHome()
@@ -57,14 +52,13 @@ func EnsureBundledSkillsLinked(workspaceDir string) (SkillLinkReport, error) {
 		if name == "" || strings.HasPrefix(name, ".") {
 			continue
 		}
-		src := filepath.Join(repoSkillsRoot, name)
-		if !hasSkillManifest(src) {
+		if !hasEmbeddedSkillManifest(name) {
 			continue
 		}
-		report.Discovered++
 
+		report.Discovered++
 		dst := filepath.Join(dstRoot, name)
-		changed, backedUp, failed := ensureSkillSymlink(src, dst)
+		changed, backedUp, failed := ensureEmbeddedSkillInstalled(name, dst)
 		if failed {
 			report.Failed++
 			continue
@@ -86,32 +80,23 @@ func EnsureBundledSkillsLinked(workspaceDir string) (SkillLinkReport, error) {
 }
 
 func resolveCodexHome() (string, error) {
-	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	codexHome := strings.TrimSpace(os.Getenv(config.EnvCodexHome))
 	if codexHome != "" {
 		return codexHome, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home failed: %w", err)
-	}
-	return filepath.Join(home, ".codex"), nil
+	return config.DefaultCodexHome(), nil
 }
 
-func hasSkillManifest(skillDir string) bool {
-	info, err := os.Stat(filepath.Join(skillDir, "SKILL.md"))
+func hasEmbeddedSkillManifest(skillName string) bool {
+	info, err := fs.Stat(aliceassets.SkillsFS, path.Join(skillName, "SKILL.md"))
 	return err == nil && !info.IsDir()
 }
 
-func ensureSkillSymlink(src, dst string) (changed string, backedUp bool, failed bool) {
-	srcAbs, err := filepath.Abs(src)
-	if err != nil {
-		return "", false, true
-	}
-
+func ensureEmbeddedSkillInstalled(skillName, dst string) (changed string, backedUp bool, failed bool) {
 	info, err := os.Lstat(dst)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if linkErr := os.Symlink(srcAbs, dst); linkErr != nil {
+			if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
 				return "", false, true
 			}
 			return "linked", false, false
@@ -120,34 +105,102 @@ func ensureSkillSymlink(src, dst string) (changed string, backedUp bool, failed 
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
-		target, readErr := os.Readlink(dst)
-		if readErr != nil {
-			return "", false, true
-		}
-		targetAbs := target
-		if !filepath.IsAbs(targetAbs) {
-			targetAbs = filepath.Join(filepath.Dir(dst), targetAbs)
-		}
-		targetAbs, _ = filepath.Abs(targetAbs)
-		if filepath.Clean(targetAbs) == filepath.Clean(srcAbs) {
-			return "unchanged", false, false
-		}
 		if removeErr := os.Remove(dst); removeErr != nil {
 			return "", false, true
 		}
-		if linkErr := os.Symlink(srcAbs, dst); linkErr != nil {
+		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
 			return "", false, true
 		}
 		return "updated", false, false
 	}
 
-	backupPath := fmt.Sprintf("%s.backup-%s", dst, time.Now().Format("20060102150405"))
-	if renameErr := os.Rename(dst, backupPath); renameErr != nil {
-		return "", false, true
+	if !info.IsDir() {
+		backupPath := fmt.Sprintf("%s.backup-%s", dst, time.Now().Format("20060102150405"))
+		if renameErr := os.Rename(dst, backupPath); renameErr != nil {
+			return "", false, true
+		}
+		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
+			_ = os.Rename(backupPath, dst)
+			return "", false, true
+		}
+		return "linked", true, false
 	}
-	if linkErr := os.Symlink(srcAbs, dst); linkErr != nil {
-		_ = os.Rename(backupPath, dst)
-		return "", false, true
+
+	if hasEmbeddedMarker(dst) {
+		if removeErr := os.RemoveAll(dst); removeErr != nil {
+			return "", false, true
+		}
+		if installErr := materializeEmbeddedSkill(skillName, dst); installErr != nil {
+			return "", false, true
+		}
+		return "updated", false, false
 	}
-	return "linked", true, false
+
+	return "unchanged", false, false
+}
+
+func materializeEmbeddedSkill(skillName, dst string) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+
+	err := fs.WalkDir(aliceassets.SkillsFS, skillName, func(srcPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if srcPath == skillName {
+			return nil
+		}
+
+		rel := strings.TrimPrefix(srcPath, skillName+"/")
+		if strings.TrimSpace(rel) == "" {
+			return fmt.Errorf("resolve embedded skill path failed skill=%s src=%s", skillName, srcPath)
+		}
+		target := filepath.Join(dst, filepath.FromSlash(rel))
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+
+		content, err := fs.ReadFile(aliceassets.SkillsFS, srcPath)
+		if err != nil {
+			return err
+		}
+		mode := filePerm(entry)
+		if writeErr := os.WriteFile(target, content, mode); writeErr != nil {
+			return writeErr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	markerPath := filepath.Join(dst, embeddedSkillMarkerFile)
+	return os.WriteFile(markerPath, []byte("alice-embedded-skill\n"), 0o644)
+}
+
+func filePerm(entry fs.DirEntry) os.FileMode {
+	if entry == nil {
+		return 0o644
+	}
+	info, err := entry.Info()
+	if err != nil {
+		if strings.HasSuffix(strings.ToLower(entry.Name()), ".sh") {
+			return 0o755
+		}
+		return 0o644
+	}
+	mode := os.FileMode(info.Mode().Perm())
+	if mode == 0 {
+		mode = 0o644
+	}
+	if strings.HasSuffix(strings.ToLower(entry.Name()), ".sh") && mode&0o111 == 0 {
+		mode |= 0o111
+	}
+	return mode
+}
+
+func hasEmbeddedMarker(dst string) bool {
+	info, err := os.Stat(filepath.Join(dst, embeddedSkillMarkerFile))
+	return err == nil && !info.IsDir()
 }

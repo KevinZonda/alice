@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_path="$(readlink -f "${BASH_SOURCE[0]}")"
-repo_root="$(cd "$(dirname "$script_path")/../../.." && pwd -P)"
 runtime_bin="${ALICE_RUNTIME_BIN:-}"
-repo_bin="$repo_root/bin/alice-connector"
+alice_home="${ALICE_HOME:-$HOME/.alice}"
+home_bin="$alice_home/bin/alice-connector"
 
 if [[ -n "$runtime_bin" ]]; then
   exec "$runtime_bin" runtime memory "$@"
 fi
 
-if [[ -x "$repo_bin" ]]; then
-  exec "$repo_bin" runtime memory "$@"
+if [[ -x "$home_bin" ]]; then
+  exec "$home_bin" runtime memory "$@"
 fi
 
 exec alice-connector runtime memory "$@"

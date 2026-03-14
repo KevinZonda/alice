@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -19,7 +22,8 @@ import (
 )
 
 func newRootCmd() *cobra.Command {
-	configPath := config.DefaultConfigPath
+	configPath := config.DefaultConfigPath()
+	pidFilePath := config.DefaultPIDFilePath()
 	root := &cobra.Command{
 		Use:           "alice-connector",
 		Short:         "Run the Alice Feishu connector",
@@ -27,25 +31,37 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConnector(configPath)
+			return runConnector(configPath, pidFilePath)
 		},
 	}
-	root.PersistentFlags().StringVarP(&configPath, "config", "c", config.DefaultConfigPath, "path to config yaml")
+	root.PersistentFlags().StringVarP(&configPath, "config", "c", config.DefaultConfigPath(), "path to config yaml")
+	root.PersistentFlags().StringVar(&pidFilePath, "pid-file", config.DefaultPIDFilePath(), "path to pid file (empty disables pid lock)")
 	root.AddCommand(&cobra.Command{
 		Use:   "run",
 		Short: "Run the connector process",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConnector(configPath)
+			return runConnector(configPath, pidFilePath)
 		},
 	})
 	root.AddCommand(newRuntimeCmd())
 	return root
 }
 
-func runConnector(configPath string) error {
+func runConnector(configPath, pidFilePath string) error {
+	configPath = bootstrap.ResolveConfigPath(configPath)
+	codexHome := ensureIsolatedCodexHomeEnv()
+	pidCleanup, err := preparePIDFile(pidFilePath)
+	if err != nil {
+		return err
+	}
+	defer pidCleanup()
+
 	cfg, err := config.LoadFromFile(configPath)
 	if err != nil {
+		return err
+	}
+	if err := ensureWorkspaceDir(cfg.WorkspaceDir); err != nil {
 		return err
 	}
 	if err := logging.Configure(logging.Options{
@@ -59,6 +75,10 @@ func runConnector(configPath string) error {
 		return err
 	}
 	logging.Debugf("debug logging enabled log_level=%s config=%s", cfg.LogLevel, configPath)
+	logging.Infof("runtime CODEX_HOME=%s", codexHome)
+	if strings.TrimSpace(pidFilePath) != "" {
+		logging.Infof("pid file enabled path=%s", pidFilePath)
+	}
 
 	llmProvider, err := bootstrap.NewLLMProvider(cfg)
 	if err != nil {
@@ -197,4 +217,92 @@ func reloadConfigFromDisk(configPath string, runtime *bootstrap.ConnectorRuntime
 			strings.Join(report.RestartRequiredFields, ","),
 		)
 	}
+}
+
+func preparePIDFile(path string) (func(), error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return func() {}, nil
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve pid file path failed: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create pid file directory failed: %w", err)
+	}
+
+	existingPID, err := readPIDFile(absPath)
+	if err == nil && existingPID > 0 && existingPID != os.Getpid() && isProcessRunning(existingPID) {
+		return nil, fmt.Errorf("alice-connector is already running pid=%d pid_file=%s", existingPID, absPath)
+	}
+
+	selfPID := os.Getpid()
+	if err := os.WriteFile(absPath, []byte(strconv.Itoa(selfPID)+"\n"), 0o644); err != nil {
+		return nil, fmt.Errorf("write pid file failed: %w", err)
+	}
+	return func() {
+		currentPID, err := readPIDFile(absPath)
+		if err != nil {
+			return
+		}
+		if currentPID == selfPID {
+			_ = os.Remove(absPath)
+		}
+	}, nil
+}
+
+func readPIDFile(path string) (int, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 {
+		return 0, fmt.Errorf("invalid pid content")
+	}
+	return pid, nil
+}
+
+func isProcessRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err == nil {
+		return true
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == syscall.EPERM
+}
+
+func ensureWorkspaceDir(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("workspace_dir is not a directory: %s", path)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("check workspace_dir failed: %w", err)
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("create workspace_dir failed: %w", err)
+	}
+	return nil
+}
+
+func ensureIsolatedCodexHomeEnv() string {
+	target := config.DefaultCodexHome()
+	_ = os.Setenv(config.EnvCodexHome, target)
+	return target
 }

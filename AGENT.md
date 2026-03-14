@@ -31,7 +31,7 @@ Before coding, define:
 If task involves runtime/deploy/self-troubleshooting, collect facts first:
 
 ```bash
-/home/codexbot/.codex/skills/alice-codebase-onboarding/scripts/check_alice_runtime.sh
+/home/codexbot/.alice/.codex/skills/alice-codebase-onboarding/scripts/check_alice_runtime.sh
 journalctl --user-unit alice-codex-connector.service -n 200 --no-pager
 journalctl --user-unit alice-codex-connector.service --since "30 min ago" --no-pager
 ```
@@ -90,7 +90,7 @@ For self-update, use unified updater only (do not ad-hoc pull/restart):
 Compatibility wrapper path (skill directory):
 
 ```bash
-/home/codexbot/.codex/skills/alice-codebase-onboarding/scripts/update-self-and-sync-skill.sh
+/home/codexbot/.alice/.codex/skills/alice-codebase-onboarding/scripts/update-self-and-sync-skill.sh
 ```
 
 ## 8. Definition of Done

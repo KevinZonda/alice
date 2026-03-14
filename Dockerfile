@@ -29,7 +29,8 @@ RUN npm install -g @openai/codex @anthropic-ai/claude-code && \
 RUN useradd --create-home --shell /bin/bash alice
 
 ENV HOME=/home/alice \
-    CODEX_HOME=/home/alice/.codex \
+    ALICE_HOME=/home/alice/.alice \
+    CODEX_HOME=/home/alice/.alice/.codex \
     CLAUDE_HOME=/home/alice/.claude
 
 WORKDIR /app

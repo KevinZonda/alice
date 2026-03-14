@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/Alice-space/alice/internal/config"
 )
 
 func TestResolveMemoryDir(t *testing.T) {
@@ -31,8 +33,8 @@ func TestResolveMemoryDir(t *testing.T) {
 			name:        "default memory dir with empty workspace",
 			workspace:   "",
 			memory:      "",
-			expectedAbs: false,
-			expected:    filepath.Join(".", ".memory"),
+			expectedAbs: true,
+			expected:    config.DefaultMemoryDir(),
 		},
 	}
 
@@ -51,8 +53,8 @@ func TestResolveMemoryDir(t *testing.T) {
 }
 
 func TestResolveConfigPath(t *testing.T) {
-	if got := ResolveConfigPath(""); got != "config.yaml" {
-		t.Fatalf("empty config path should fallback to config.yaml, got=%q", got)
+	if got := ResolveConfigPath(""); got != config.DefaultConfigPath() {
+		t.Fatalf("empty config path should fallback to default config path, got=%q", got)
 	}
 
 	got := ResolveConfigPath("config.yaml")

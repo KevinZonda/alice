@@ -4,125 +4,100 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Alice-space/alice/internal/config"
 )
 
-func TestEnsureBundledSkillsLinked_NewLinks(t *testing.T) {
-	workspace := t.TempDir()
+func TestEnsureBundledSkillsLinked_InstallsEmbeddedSkills(t *testing.T) {
 	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv(config.EnvCodexHome, codexHome)
 
-	skillA := makeSkillDir(t, workspace, "alice-codebase-onboarding")
-	_ = makeNonSkillDir(t, workspace, "notes")
-
-	report, err := EnsureBundledSkillsLinked(workspace)
+	report, err := EnsureBundledSkillsLinked(t.TempDir())
 	if err != nil {
-		t.Fatalf("link bundled skills failed: %v", err)
+		t.Fatalf("sync bundled skills failed: %v", err)
 	}
-	if report.Discovered != 1 || report.Linked != 1 || report.Failed != 0 {
-		t.Fatalf("unexpected report: %+v", report)
+	if report.Discovered <= 0 {
+		t.Fatalf("expected discovered skills > 0, got %+v", report)
+	}
+	if report.Linked <= 0 {
+		t.Fatalf("expected linked skills > 0 on first sync, got %+v", report)
 	}
 
-	dst := filepath.Join(codexHome, "skills", "alice-codebase-onboarding")
-	assertSymlinkTarget(t, dst, skillA)
+	skillDir := filepath.Join(codexHome, "skills", "alice-message")
+	if isSymlink(t, skillDir) {
+		t.Fatalf("embedded install should create regular directory, got symlink: %s", skillDir)
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
+		t.Fatalf("embedded skill manifest missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, embeddedSkillMarkerFile)); err != nil {
+		t.Fatalf("embedded skill marker missing: %v", err)
+	}
 }
 
-func TestEnsureBundledSkillsLinked_UpdatesSymlink(t *testing.T) {
-	workspace := t.TempDir()
+func TestEnsureBundledSkillsLinked_ReplacesSymlink(t *testing.T) {
 	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv(config.EnvCodexHome, codexHome)
 
-	skillA := makeSkillDir(t, workspace, "feishu-task")
-	dst := filepath.Join(codexHome, "skills", "feishu-task")
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		t.Fatalf("create destination dir failed: %v", err)
+	skillDir := filepath.Join(codexHome, "skills", "alice-message")
+	if err := os.MkdirAll(filepath.Dir(skillDir), 0o755); err != nil {
+		t.Fatalf("create skills dir failed: %v", err)
 	}
-	oldTarget := t.TempDir()
-	if err := os.Symlink(oldTarget, dst); err != nil {
-		t.Fatalf("seed old symlink failed: %v", err)
+	legacy := t.TempDir()
+	if err := os.Symlink(legacy, skillDir); err != nil {
+		t.Fatalf("seed legacy symlink failed: %v", err)
 	}
 
-	report, err := EnsureBundledSkillsLinked(workspace)
+	report, err := EnsureBundledSkillsLinked(t.TempDir())
 	if err != nil {
-		t.Fatalf("link bundled skills failed: %v", err)
+		t.Fatalf("sync bundled skills failed: %v", err)
 	}
-	if report.Updated != 1 || report.Failed != 0 {
-		t.Fatalf("unexpected report: %+v", report)
+	if report.Updated <= 0 {
+		t.Fatalf("expected updated skills > 0 when replacing symlink, got %+v", report)
 	}
-	assertSymlinkTarget(t, dst, skillA)
+	if isSymlink(t, skillDir) {
+		t.Fatalf("symlink should be replaced by real directory: %s", skillDir)
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
+		t.Fatalf("embedded skill manifest missing after symlink replacement: %v", err)
+	}
 }
 
-func TestEnsureBundledSkillsLinked_BackupExistingDir(t *testing.T) {
-	workspace := t.TempDir()
+func TestEnsureBundledSkillsLinked_KeepCustomDirectory(t *testing.T) {
 	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv(config.EnvCodexHome, codexHome)
 
-	skillA := makeSkillDir(t, workspace, "alice-codebase-onboarding")
-	dst := filepath.Join(codexHome, "skills", "alice-codebase-onboarding")
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		t.Fatalf("seed conflicting dir failed: %v", err)
+	skillDir := filepath.Join(codexHome, "skills", "alice-message")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("create custom skill dir failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "SKILL.md"), []byte("legacy"), 0o644); err != nil {
-		t.Fatalf("seed legacy skill failed: %v", err)
+	custom := []byte("custom-skill\n")
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), custom, 0o644); err != nil {
+		t.Fatalf("write custom skill file failed: %v", err)
 	}
 
-	report, err := EnsureBundledSkillsLinked(workspace)
+	report, err := EnsureBundledSkillsLinked(t.TempDir())
 	if err != nil {
-		t.Fatalf("link bundled skills failed: %v", err)
+		t.Fatalf("sync bundled skills failed: %v", err)
 	}
-	if report.BackedUp != 1 || report.Linked != 1 || report.Failed != 0 {
-		t.Fatalf("unexpected report: %+v", report)
+	if report.Unchanged <= 0 {
+		t.Fatalf("expected unchanged skills > 0 for custom directory, got %+v", report)
 	}
-	assertSymlinkTarget(t, dst, skillA)
 
-	backups, err := filepath.Glob(dst + ".backup-*")
+	raw, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
 	if err != nil {
-		t.Fatalf("glob backup failed: %v", err)
+		t.Fatalf("read custom skill file failed: %v", err)
 	}
-	if len(backups) != 1 {
-		t.Fatalf("expected exactly one backup, got %d", len(backups))
+	if string(raw) != string(custom) {
+		t.Fatalf("custom skill should not be overwritten, got=%q want=%q", string(raw), string(custom))
 	}
 }
 
-func makeSkillDir(t *testing.T, workspace, name string) string {
-	t.Helper()
-	path := filepath.Join(workspace, "skills", name)
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatalf("create skill dir failed: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("name: test"), 0o644); err != nil {
-		t.Fatalf("create SKILL.md failed: %v", err)
-	}
-	return path
-}
-
-func makeNonSkillDir(t *testing.T, workspace, name string) string {
-	t.Helper()
-	path := filepath.Join(workspace, "skills", name)
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatalf("create non-skill dir failed: %v", err)
-	}
-	return path
-}
-
-func assertSymlinkTarget(t *testing.T, path, expectedTarget string) {
+func isSymlink(t *testing.T, path string) bool {
 	t.Helper()
 	info, err := os.Lstat(path)
 	if err != nil {
-		t.Fatalf("lstat symlink failed: %v", err)
+		t.Fatalf("lstat failed path=%s err=%v", path, err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected symlink, got mode=%v", info.Mode())
-	}
-	target, err := os.Readlink(path)
-	if err != nil {
-		t.Fatalf("readlink failed: %v", err)
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(path), target)
-	}
-	target, _ = filepath.Abs(target)
-	expectedTarget, _ = filepath.Abs(expectedTarget)
-	if filepath.Clean(target) != filepath.Clean(expectedTarget) {
-		t.Fatalf("unexpected symlink target got=%q want=%q", target, expectedTarget)
-	}
+	return info.Mode()&os.ModeSymlink != 0
 }

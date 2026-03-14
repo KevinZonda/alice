@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Alice-space/alice/internal/config"
 )
 
 var ErrStateNotFound = errors.New("code_army state not found")
@@ -108,7 +110,7 @@ func (i *Inspector) readStateFile(path string) (workflowState, error) {
 func (i *Inspector) stateFilePath(sessionKey, stateKey string) string {
 	root := strings.TrimSpace(i.stateDir)
 	if root == "" {
-		root = filepath.Join(".memory", "code_army")
+		root = filepath.Join(config.DefaultMemoryDir(), "code_army")
 	}
 	stateKey = sanitizeStateKey(stateKey)
 	if stateKey == "" {
@@ -124,7 +126,7 @@ func (i *Inspector) stateFilePath(sessionKey, stateKey string) string {
 func (i *Inspector) sessionDir(sessionKey string) string {
 	root := strings.TrimSpace(i.stateDir)
 	if root == "" {
-		root = filepath.Join(".memory", "code_army")
+		root = filepath.Join(config.DefaultMemoryDir(), "code_army")
 	}
 	sessionKey = sanitizeSessionKey(sessionKey)
 	if sessionKey == "" {

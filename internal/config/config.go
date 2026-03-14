@@ -11,7 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigPath = "config.yaml"
 const DefaultLLMProvider = "codex"
 const LLMProviderClaude = "claude"
 const LLMProviderKimi = "kimi"
@@ -94,9 +93,9 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("runtime_http_token", "")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
 	v.SetDefault("thinking_message", "正在思考中...")
-	v.SetDefault("workspace_dir", ".")
-	v.SetDefault("memory_dir", ".memory")
-	v.SetDefault("prompt_dir", "prompts")
+	v.SetDefault("workspace_dir", DefaultWorkspaceDir())
+	v.SetDefault("memory_dir", DefaultMemoryDir())
+	v.SetDefault("prompt_dir", DefaultPromptDir())
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
 	v.SetDefault("automation_task_timeout_secs", 600)
@@ -183,13 +182,13 @@ func LoadFromFile(path string) (Config, error) {
 		cfg.RuntimeHTTPAddr = "127.0.0.1:7331"
 	}
 	if cfg.WorkspaceDir == "" {
-		cfg.WorkspaceDir = "."
+		cfg.WorkspaceDir = DefaultWorkspaceDir()
 	}
 	if cfg.MemoryDir == "" {
-		cfg.MemoryDir = ".memory"
+		cfg.MemoryDir = DefaultMemoryDir()
 	}
 	if cfg.PromptDir == "" {
-		cfg.PromptDir = "prompts"
+		cfg.PromptDir = DefaultPromptDir()
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"

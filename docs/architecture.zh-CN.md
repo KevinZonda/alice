@@ -115,7 +115,7 @@ memory 和定时任务能力现在以外置 skill 的形式暴露，而不是只
 仓库自带 skill 脚本解析运行时二进制的顺序是：
 
 1. `ALICE_RUNTIME_BIN`
-2. `<repo>/bin/alice-connector`
+2. `${ALICE_HOME:-$HOME/.alice}/bin/alice-connector`
 3. `PATH` 里的 `alice-connector`
 
 ## MCP 策略

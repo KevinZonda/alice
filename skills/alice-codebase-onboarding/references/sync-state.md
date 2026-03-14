@@ -2,7 +2,7 @@
 
 Runtime self-update snapshots are written by default to:
 
-- `${CODEX_HOME:-$HOME/.codex}/state/alice/sync-state.md`
+- `${CODEX_HOME:-${ALICE_HOME:-$HOME/.alice}/.codex}/state/alice/sync-state.md`
 
 Use this path to inspect latest pull/build/restart status after running:
 
@@ -17,7 +17,10 @@ Current snapshot fields are written by the updater script and include:
 - `before_commit`
 - `after_commit`
 - `last_commit_subject`
+- `install_bin`
+- `pid_file`
 - `service_name`
+- `service_present`
 - `service_active`
 - `service_enabled`
 - `skip_pull`

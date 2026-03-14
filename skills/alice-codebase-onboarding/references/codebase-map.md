@@ -10,9 +10,9 @@ Purpose: Feishu bot connector that forwards user messages to Codex and sends rep
 - Minimal process entry that delegates to the Cobra root command.
 
 2. `cmd/connector/root.go`
-- Parse `-c/--config` path.
+- Parse `-c/--config` path (default `${ALICE_HOME:-$HOME/.alice}/config.yaml`) and optional `--pid-file`.
 - Load YAML config via `internal/config`.
-- Auto-link bundled repo skills into `$CODEX_HOME/skills`.
+- Materialize embedded bundled skills into `$CODEX_HOME/skills` (default `${ALICE_HOME:-$HOME/.alice}/.codex/skills`).
 - Build runtime via `internal/bootstrap/connector_runtime.go`.
 - Start long-connection app loop.
 
@@ -57,10 +57,10 @@ Purpose: Feishu bot connector that forwards user messages to Codex and sends rep
 - Connector/business prompts now come from template files rather than code literals.
 
 5. Runtime/memory persistence:
-- Runtime queue/session metadata in `.memory/runtime_state.json`.
-- Session thread metadata in `.memory/session_state.json`.
-- Long-term memory in `.memory/MEMORY.md`.
-- Daily memory in `.memory/daily/YYYY-MM-DD.md`.
+- Runtime queue/session metadata in `${ALICE_HOME:-$HOME/.alice}/memory/runtime_state.json`.
+- Session thread metadata in `${ALICE_HOME:-$HOME/.alice}/memory/session_state.json`.
+- Long-term memory in `${ALICE_HOME:-$HOME/.alice}/memory/MEMORY.md`.
+- Daily memory in `${ALICE_HOME:-$HOME/.alice}/memory/daily/YYYY-MM-DD.md`.
 
 ## Operationally important files
 

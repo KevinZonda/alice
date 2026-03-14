@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/oklog/run"
@@ -31,31 +32,48 @@ type ConnectorRuntime struct {
 }
 
 func buildFactoryConfig(cfg config.Config, prompts *prompting.Loader) llm.FactoryConfig {
+	defaultEnv := applyLLMProcessEnvDefaults(cfg.CodexEnv)
 	return llm.FactoryConfig{
 		Provider: cfg.LLMProvider,
 		Prompts:  prompts,
 		Codex: llm.CodexConfig{
 			Command:      cfg.CodexCommand,
 			Timeout:      cfg.CodexTimeout,
-			Env:          cfg.CodexEnv,
+			Env:          defaultEnv,
 			PromptPrefix: cfg.CodexPromptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 		Claude: llm.ClaudeConfig{
 			Command:      cfg.ClaudeCommand,
 			Timeout:      cfg.ClaudeTimeout,
-			Env:          cfg.CodexEnv,
+			Env:          defaultEnv,
 			PromptPrefix: cfg.ClaudePromptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 		Kimi: llm.KimiConfig{
 			Command:      cfg.KimiCommand,
 			Timeout:      cfg.KimiTimeout,
-			Env:          cfg.CodexEnv,
+			Env:          defaultEnv,
 			PromptPrefix: cfg.KimiPromptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 	}
+}
+
+func applyLLMProcessEnvDefaults(raw map[string]string) map[string]string {
+	out := make(map[string]string, len(raw)+1)
+	for key, value := range raw {
+		trimmedKey := strings.TrimSpace(key)
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		out[trimmedKey] = trimmedValue
+	}
+	if strings.TrimSpace(out[config.EnvCodexHome]) == "" {
+		out[config.EnvCodexHome] = config.DefaultCodexHome()
+	}
+	return out
 }
 
 func NewLLMProvider(cfg config.Config) (llm.Provider, error) {

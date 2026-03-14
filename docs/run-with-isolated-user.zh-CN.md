@@ -32,8 +32,8 @@ sudo passwd -l codexbot
 ## 2. 在新用户 home 内创建工作目录
 
 ```bash
-sudo -u codexbot -H mkdir -p /home/codexbot/.codex
-sudo chmod 700 /home/codexbot /home/codexbot/.codex
+sudo -u codexbot -H mkdir -p /home/codexbot/.alice/.codex
+sudo chmod 700 /home/codexbot /home/codexbot/.alice /home/codexbot/.alice/.codex
 ```
 
 可选（建议）：
@@ -49,8 +49,8 @@ chmod 700 /home/<your-user>
 sudo -u codexbot -H bash -lc '
   cd /home/codexbot
   git clone https://github.com/Alice-space/alice.git alice
-  cd alice
-  cp config.example.yaml config.yaml
+  mkdir -p ~/.alice
+  cp alice/config.example.yaml ~/.alice/config.yaml
 '
 ```
 
@@ -63,7 +63,7 @@ sudo -u codexbot -H bash -lc '
 sudo -u codexbot -H bash -lc '
   cd /home/codexbot/alice
   go mod tidy
-  go build -o bin/alice-connector ./cmd/connector
+  go build -o /home/codexbot/.alice/bin/alice-connector ./cmd/connector
 '
 ```
 
@@ -85,32 +85,32 @@ sudo -u codexbot -H bash -lc 'cd /home/codexbot/alice && go test ./...'
 ## 5. 以 codexbot 完成 Codex 登录（一次性）
 
 ```bash
-sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.codex codex login
-sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.codex codex login status
+sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.alice/.codex codex login
+sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.alice/.codex codex login status
 ```
 
-## 6. 调整项目配置（`config.yaml`）
+## 6. 调整项目配置（`~/.alice/config.yaml`）
 
 建议至少确认：
 
 ```yaml
 llm_provider: "codex"
 codex_command: "/usr/local/bin/codex"
-workspace_dir: "/home/codexbot/alice"
-memory_dir: "/home/codexbot/alice/.memory"
+workspace_dir: "/home/codexbot/.alice/workspace"
+memory_dir: "/home/codexbot/.alice/memory"
 ```
 
 并确保目录归属：
 
 ```bash
-sudo install -d -m 700 -o codexbot -g codexbot /home/codexbot/alice/.memory
+sudo install -d -m 700 -o codexbot -g codexbot /home/codexbot/.alice/memory
 ```
 
 ## 7. 先手动验证一次
 
 ```bash
-sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.codex \
-  bash -lc 'cd /home/codexbot/alice && ./bin/alice-connector -c config.yaml'
+sudo -u codexbot -H env HOME=/home/codexbot CODEX_HOME=/home/codexbot/.alice/.codex \
+  bash -lc '/home/codexbot/.alice/bin/alice-connector -c /home/codexbot/.alice/config.yaml'
 ```
 
 说明：
@@ -139,10 +139,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/alice
+WorkingDirectory=%h
+Environment=ALICE_HOME=%h/.alice
 Environment=HOME=%h
-Environment=CODEX_HOME=%h/.codex
-ExecStart=%h/alice/bin/alice-connector -c %h/alice/config.yaml
+Environment=CODEX_HOME=%h/.alice/.codex
+ExecStart=%h/.alice/bin/alice-connector -c %h/.alice/config.yaml
 Restart=always
 RestartSec=3
 NoNewPrivileges=yes

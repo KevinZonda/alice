@@ -1,7 +1,8 @@
 # Alice Deploy And Self-Update Runbook
 
 Repository default: `${ALICE_REPO:-$HOME/alice}`  
-Recommended service model: user-level systemd service.
+Default runtime home: `${ALICE_HOME:-$HOME/.alice}`  
+Recommended runtime model: direct binary run (systemd optional).
 
 ## Canonical commands
 
@@ -27,21 +28,24 @@ The wrapper should only dispatch to the repo script. The repo script is the sour
 - equivalent wrapper: `$CODEX_HOME/skills/alice-codebase-onboarding/scripts/update-self-and-sync-skill.sh`
 
 3. Then inspect the sync snapshot.
-- `${CODEX_HOME:-$HOME/.codex}/state/alice/sync-state.md`
+- `${CODEX_HOME:-${ALICE_HOME:-$HOME/.alice}/.codex}/state/alice/sync-state.md`
 
 ## What the updater actually does
 
 `scripts/update-self-and-sync-skill.sh` handles:
 
 - `git pull --ff-only` unless `--skip-pull`
-- `go build -o bin/alice-connector ./cmd/connector`
-- user service restart via `systemctl --user restart --no-block <service>` unless `--skip-restart`
+- `go build -o ${ALICE_HOME:-$HOME/.alice}/bin/alice-connector ./cmd/connector`
+- restart attempt (priority: `--restart-cmd` > systemd service > pid file stop/manual start) unless `--skip-restart`
 - sync snapshot write before/after restart attempt
 
 Supported flags:
 
 - `--repo PATH`
 - `--service NAME`
+- `--install-bin PATH`
+- `--pid-file PATH`
+- `--restart-cmd CMD`
 - `--sync-state-file PATH`
 - `--skip-pull`
 - `--skip-restart`
@@ -52,15 +56,14 @@ For self-update to succeed on the target host, expect:
 
 - `git`
 - `go`
-- `systemctl --user` for managed restart
 - valid repo checkout at `$ALICE_REPO`
 
-If `go` is missing, the updater cannot rebuild `bin/alice-connector`; report that as a hard blocker.
+If `go` is missing, the updater cannot rebuild the runtime binary; report that as a hard blocker.
 
 Runtime skill execution is a different path:
 
 - bundled skills first honor `ALICE_RUNTIME_BIN`
-- then fall back to `<repo>/bin/alice-connector`
+- then fall back to `${ALICE_HOME:-$HOME/.alice}/bin/alice-connector`
 - then `alice-connector` from `PATH`
 
 That means normal runtime skill usage does not imply a Go toolchain is present.
@@ -71,10 +74,11 @@ That means normal runtime skill usage does not imply a Go toolchain is present.
 - `go version`
 - `codex` CLI installed
 - login state valid for the runtime user:
-  - `HOME=$HOME CODEX_HOME=${CODEX_HOME:-$HOME/.codex} codex login status`
+  - `HOME=$HOME CODEX_HOME=${CODEX_HOME:-${ALICE_HOME:-$HOME/.alice}/.codex} codex login status`
 
 2. Config
-- `cp config.example.yaml config.yaml`
+- `mkdir -p "${ALICE_HOME:-$HOME/.alice}"`
+- `cp config.example.yaml "${ALICE_HOME:-$HOME/.alice}/config.yaml"`
 - verify key fields:
   - `feishu_app_id`
   - `feishu_app_secret`
@@ -85,10 +89,10 @@ That means normal runtime skill usage does not imply a Go toolchain is present.
 
 3. Build and test
 - `go test ./...`
-- `go build -o bin/alice-connector ./cmd/connector`
+- `go build -o "${ALICE_HOME:-$HOME/.alice}/bin/alice-connector" ./cmd/connector`
 
 4. Foreground run
-- `./bin/alice-connector -c config.yaml`
+- `./bin/alice-connector`
 
 ## User-level systemd deployment
 
@@ -98,10 +102,11 @@ Create service file:
 
 Core fields:
 
-- `WorkingDirectory=%h/alice`
+- `WorkingDirectory=%h`
+- `Environment=ALICE_HOME=%h/.alice`
 - `Environment=HOME=%h`
-- `Environment=CODEX_HOME=%h/.codex`
-- `ExecStart=%h/alice/bin/alice-connector -c %h/alice/config.yaml`
+- `Environment=CODEX_HOME=%h/.alice/.codex`
+- `ExecStart=%h/.alice/bin/alice-connector -c %h/.alice/config.yaml`
 - `Restart=always`
 
 Enable and start:
@@ -123,12 +128,12 @@ Restart after code/config update:
 ## Quick troubleshooting matrix
 
 1. Service inactive
-- `ls -l "$ALICE_REPO/bin/alice-connector"`
+- `ls -l "${ALICE_HOME:-$HOME/.alice}/bin/alice-connector"`
 - verify `ExecStart` path and working directory.
 
 2. Codex call fails
-- `HOME=$HOME CODEX_HOME=${CODEX_HOME:-$HOME/.codex} codex login status`
-- verify `codex_command` in `config.yaml`.
+- `HOME=$HOME CODEX_HOME=${CODEX_HOME:-${ALICE_HOME:-$HOME/.alice}/.codex} codex login status`
+- verify `codex_command` in `${ALICE_HOME:-$HOME/.alice}/config.yaml`.
 
 3. Feishu events not received
 - re-check app credentials and event subscription.
@@ -136,8 +141,8 @@ Restart after code/config update:
 
 4. Memory/state not updating
 - check `memory_dir` path and permissions.
-- verify `.memory/session_state.json` and `.memory/runtime_state.json` write access.
+- verify `${ALICE_HOME:-$HOME/.alice}/memory/session_state.json` and `${ALICE_HOME:-$HOME/.alice}/memory/runtime_state.json` write access.
 
 5. Skill/repo drift or uncertain rollout state
 - run `$ALICE_REPO/scripts/update-self-and-sync-skill.sh`
-- inspect `${CODEX_HOME:-$HOME/.codex}/state/alice/sync-state.md`
+- inspect `${CODEX_HOME:-${ALICE_HOME:-$HOME/.alice}/.codex}/state/alice/sync-state.md`

@@ -28,13 +28,19 @@ kimi_command: "kimi"
 kimi_timeout_secs: 120
 runtime_http_addr: "127.0.0.1:7331"
 runtime_http_token: ""
-workspace_dir: "."
+# Runtime directories (leave empty to use defaults under ALICE_HOME, default: ~/.alice)
+# workspace_dir default: $ALICE_HOME/workspace
+# memory_dir default: $ALICE_HOME/memory
+# prompt_dir default: $ALICE_HOME/prompts
+workspace_dir: ""
 # Optional: environment variables passed to LLM process (proxy, etc.)
+# CODEX_HOME defaults to $ALICE_HOME/.codex when omitted.
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
   ALL_PROXY: "socks5://127.0.0.1:7891"
 # Memory directory (long-term MEMORY.md + short-term YYYY-MM-DD.md)
-memory_dir: ".memory"
+memory_dir: ""
+prompt_dir: ""
 
 # Prompt and fallback
 # Optional, default is empty. Set this only if you want a global instruction prefix.

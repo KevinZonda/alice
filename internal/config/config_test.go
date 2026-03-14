@@ -78,8 +78,14 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.GroupContextWindowTTL != 5*time.Minute {
 		t.Fatalf("unexpected group_context_window_ttl: %s", cfg.GroupContextWindowTTL)
 	}
-	if cfg.MemoryDir != ".memory" {
+	if cfg.WorkspaceDir != DefaultWorkspaceDir() {
+		t.Fatalf("unexpected workspace_dir: %s", cfg.WorkspaceDir)
+	}
+	if cfg.MemoryDir != DefaultMemoryDir() {
 		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
+	}
+	if cfg.PromptDir != DefaultPromptDir() {
+		t.Fatalf("unexpected prompt_dir: %s", cfg.PromptDir)
 	}
 	if cfg.CodexPromptPrefix != "" {
 		t.Fatalf("unexpected codex_prompt_prefix: %q", cfg.CodexPromptPrefix)

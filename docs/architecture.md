@@ -115,7 +115,7 @@ These skills rely on:
 Bundled runtime skill scripts resolve the runtime binary in this order:
 
 1. `ALICE_RUNTIME_BIN`
-2. `<repo>/bin/alice-connector`
+2. `${ALICE_HOME:-$HOME/.alice}/bin/alice-connector`
 3. `alice-connector` from `PATH`
 
 ## MCP strategy

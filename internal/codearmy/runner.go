@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Alice-space/alice/internal/automation"
+	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/prompting"
@@ -580,7 +581,7 @@ func (r *Runner) nowUTC() time.Time {
 func (r *Runner) stateFilePath(sessionKey, stateKey string) string {
 	root := strings.TrimSpace(r.stateDir)
 	if root == "" {
-		root = filepath.Join(".memory", "code_army")
+		root = filepath.Join(config.DefaultMemoryDir(), "code_army")
 	}
 	stateKey = sanitizeStateKey(stateKey)
 	if stateKey == "" {

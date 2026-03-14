@@ -56,7 +56,7 @@ make fmt
 
 ## 5. 配置变更规则
 
-- 本项目使用 YAML 配置文件（`-c config.yaml`），不使用环境变量作为主配置入口。
+- 本项目使用 YAML 配置文件（默认 `${ALICE_HOME:-~/.alice}/config.yaml`），不使用环境变量作为主配置入口。
 - 若新增配置项，必须同时更新：
   - `config.example.yaml`
   - `internal/config/config.go` 中默认值与校验逻辑
@@ -76,7 +76,7 @@ make fmt
 - 关键路径可运行（至少验证一次启动命令）：
 
 ```bash
-go run ./cmd/connector -c config.yaml
+go run ./cmd/connector
 ```
 
 - 文档与示例命令已同步更新。

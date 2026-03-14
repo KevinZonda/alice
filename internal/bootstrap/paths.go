@@ -5,13 +5,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/runtimeapi"
 )
 
 func ResolveMemoryDir(workspaceDir, memoryDir string) string {
 	dir := strings.TrimSpace(memoryDir)
 	if dir == "" {
-		dir = ".memory"
+		return config.DefaultMemoryDir()
 	}
 	if filepath.IsAbs(dir) {
 		return dir
@@ -19,7 +20,7 @@ func ResolveMemoryDir(workspaceDir, memoryDir string) string {
 
 	base := strings.TrimSpace(workspaceDir)
 	if base == "" {
-		base = "."
+		base = config.DefaultWorkspaceDir()
 	}
 	return filepath.Join(base, dir)
 }
@@ -27,7 +28,7 @@ func ResolveMemoryDir(workspaceDir, memoryDir string) string {
 func ResolvePromptDir(workspaceDir, promptDir string) string {
 	dir := strings.TrimSpace(promptDir)
 	if dir == "" {
-		dir = "prompts"
+		return config.DefaultPromptDir()
 	}
 	if filepath.IsAbs(dir) {
 		return dir
@@ -35,7 +36,7 @@ func ResolvePromptDir(workspaceDir, promptDir string) string {
 
 	base := strings.TrimSpace(workspaceDir)
 	if base == "" {
-		base = "."
+		base = config.DefaultWorkspaceDir()
 	}
 	return filepath.Join(base, dir)
 }
@@ -43,7 +44,7 @@ func ResolvePromptDir(workspaceDir, promptDir string) string {
 func ResolveConfigPath(configPath string) string {
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
-		return "config.yaml"
+		return config.DefaultConfigPath()
 	}
 	abs, err := filepath.Abs(configPath)
 	if err != nil {
@@ -59,9 +60,14 @@ func ResolveRuntimeBinary(workspaceDir string) string {
 	if executablePath, err := os.Executable(); err == nil && strings.TrimSpace(executablePath) != "" {
 		return executablePath
 	}
+	if defaultBinary := config.DefaultRuntimeBinaryPath(); strings.TrimSpace(defaultBinary) != "" {
+		if stat, err := os.Stat(defaultBinary); err == nil && !stat.IsDir() {
+			return defaultBinary
+		}
+	}
 	base := strings.TrimSpace(workspaceDir)
 	if base == "" {
-		base = "."
+		base = config.DefaultWorkspaceDir()
 	}
 	candidate := filepath.Join(base, "bin", "alice-connector")
 	if stat, err := os.Stat(candidate); err == nil && !stat.IsDir() {
