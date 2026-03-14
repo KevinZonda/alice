@@ -15,6 +15,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/cespare/xxhash/v2"
+	securejoin "github.com/cyphar/filepath-securejoin"
 
 	aliceassets "github.com/Alice-space/alice"
 )
@@ -133,18 +134,11 @@ func (l *Loader) resolvePath(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve prompt root failed: %w", err)
 	}
-	pathAbs, err := filepath.Abs(filepath.Join(rootAbs, filepath.FromSlash(name)))
+	pathAbs, err := securejoin.SecureJoin(rootAbs, filepath.FromSlash(name))
 	if err != nil {
 		return "", fmt.Errorf("resolve prompt template %q failed: %w", name, err)
 	}
-	rel, err := filepath.Rel(rootAbs, pathAbs)
-	if err != nil {
-		return "", fmt.Errorf("resolve prompt template %q failed: %w", name, err)
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("prompt template %q escapes root %q", name, rootAbs)
-	}
-	return pathAbs, nil
+	return filepath.Clean(pathAbs), nil
 }
 
 func normalizeTemplateName(name string) (string, error) {

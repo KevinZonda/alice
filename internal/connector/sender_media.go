@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
@@ -28,14 +29,20 @@ func (s *LarkSender) SendImage(ctx context.Context, receiveIDType, receiveID, im
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Message.Create(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	return nil
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		return nil
+	})
 }
 
 func (s *LarkSender) ReplyImage(ctx context.Context, sourceMessageID, imageKey string) (string, error) {
@@ -67,14 +74,20 @@ func (s *LarkSender) SendFile(ctx context.Context, receiveIDType, receiveID, fil
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Message.Create(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	return nil
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		return nil
+	})
 }
 
 func (s *LarkSender) ReplyFile(ctx context.Context, sourceMessageID, fileKey string) (string, error) {
@@ -113,19 +126,30 @@ func (s *LarkSender) UploadImage(ctx context.Context, localPath string) (string,
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Image.Create(ctx, req)
+	var imageKey string
+	err = s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Image.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.Data == nil || resp.Data.ImageKey == nil {
+			return errors.New("upload image success but image key is empty")
+		}
+		imageKey = strings.TrimSpace(*resp.Data.ImageKey)
+		if imageKey == "" {
+			return errors.New("upload image success but image key is blank")
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
-	}
-	if !resp.Success() {
-		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	if resp.Data == nil || resp.Data.ImageKey == nil {
-		return "", errors.New("upload image success but image key is empty")
-	}
-	imageKey := strings.TrimSpace(*resp.Data.ImageKey)
-	if imageKey == "" {
-		return "", errors.New("upload image success but image key is blank")
 	}
 	return imageKey, nil
 }
@@ -158,19 +182,30 @@ func (s *LarkSender) UploadFile(ctx context.Context, localPath, fileName string)
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.File.Create(ctx, req)
+	var fileKey string
+	err = s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.File.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.Data == nil || resp.Data.FileKey == nil {
+			return errors.New("upload file success but file key is empty")
+		}
+		fileKey = strings.TrimSpace(*resp.Data.FileKey)
+		if fileKey == "" {
+			return errors.New("upload file success but file key is blank")
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
-	}
-	if !resp.Success() {
-		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	if resp.Data == nil || resp.Data.FileKey == nil {
-		return "", errors.New("upload file success but file key is empty")
-	}
-	fileKey := strings.TrimSpace(*resp.Data.FileKey)
-	if fileKey == "" {
-		return "", errors.New("upload file success but file key is blank")
 	}
 	return fileKey, nil
 }
@@ -213,15 +248,19 @@ func (s *LarkSender) validateUploadPath(resolvedPath string) error {
 	}
 	rootAbs = filepath.Clean(rootAbs)
 
+	resolvedPath = filepath.Clean(resolvedPath)
 	rel, err := filepath.Rel(rootAbs, resolvedPath)
 	if err != nil {
 		return err
 	}
-	rel = filepath.Clean(rel)
 	if rel == "." {
 		return nil
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	safePath, err := securejoin.SecureJoin(rootAbs, rel)
+	if err != nil {
+		return fmt.Errorf("upload path out of allowed root: %s", rootAbs)
+	}
+	if filepath.Clean(safePath) != resolvedPath {
 		return fmt.Errorf("upload path out of allowed root: %s", rootAbs)
 	}
 	return nil

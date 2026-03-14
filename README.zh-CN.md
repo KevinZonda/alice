@@ -1,6 +1,9 @@
 # 飞书 -> LLM 连接器（Codex / Claude / Kimi，Go，长连接）
 
 [English](./README.md)
+[![Dev CI](https://github.com/Alice-space/alice/actions/workflows/ci.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/ci.yml)
+[![Main Release](https://github.com/Alice-space/alice/actions/workflows/main-release.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/main-release.yml)
+[![Release On Tag](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml)
 
 一个最小可用连接器，流程如下：
 
@@ -65,6 +68,12 @@ curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alic
 curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
 ```
 
+显式安装 dev 预发布（默认始终安装 stable release）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --channel dev
+```
+
 卸载（删除服务、二进制、`~/.alice`）：
 
 ```bash
@@ -79,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alic
 
 脚本会自动完成：
 
-- 下载最新 GitHub Release 并安装到 `${ALICE_HOME:-~/.alice}/bin/alice`
+- 默认下载 stable GitHub Release 并安装到 `${ALICE_HOME:-~/.alice}/bin/alice`（仅在显式 `--channel dev` 时安装 dev 预发布）
 - 若 release 提供 `SHA256SUMS`，会先校验校验和再解压安装
 - 初始化 `${ALICE_HOME:-~/.alice}` 目录和默认 `config.yaml`（若不存在）
 - 检测并复制已有 Codex 登录凭证 `auth.json` 到 `${ALICE_HOME}/.codex/`
@@ -137,6 +146,15 @@ make precommit-install
 ## 贡献规则
 
 贡献规范见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+## 分支与 CI 策略
+
+- 日常开发统一提交到 `dev`。
+- 指向 `main` 的 PR 仅允许 `dev -> main`（workflow 强制校验）。
+- `main` 的 push 必须是来自 `dev` 的 merge commit（workflow 校验）。
+- `dev` 合并到 `main` 后，自动执行质量门禁、计算下一个 `vX.Y.Z`、打 tag 并发布 GitHub Release。
+- 手动 push `v*` tag 仍保留支持（`release-on-tag.yml`）。
+- 建议在 GitHub 仓库设置里给 `main` 开启 branch protection，并禁用 direct push，做强约束。
 
 ## 架构文档
 

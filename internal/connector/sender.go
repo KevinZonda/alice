@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
@@ -48,14 +49,20 @@ func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, tex
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Message.Create(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	return nil
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		return nil
+	})
 }
 
 func (s *LarkSender) AddReaction(ctx context.Context, messageID, emojiType string) error {
@@ -75,18 +82,20 @@ func (s *LarkSender) AddReaction(ctx context.Context, messageID, emojiType strin
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.MessageReaction.Create(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return &feishuAPIError{
-			Code:      resp.Code,
-			Msg:       resp.Msg,
-			RequestID: resp.RequestId(),
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.MessageReaction.Create(ctx, req)
+		if err != nil {
+			return err
 		}
-	}
-	return nil
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		return nil
+	})
 }
 
 func (s *LarkSender) SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error {
@@ -99,14 +108,20 @@ func (s *LarkSender) SendCard(ctx context.Context, receiveIDType, receiveID, car
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Message.Create(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.Success() {
-		return fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	return nil
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Create(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		return nil
+	})
 }
 
 func (s *LarkSender) ReplyText(ctx context.Context, sourceMessageID, text string) (string, error) {
@@ -180,21 +195,32 @@ func (s *LarkSender) replyMessage(
 			Build()).
 		Build()
 
-	resp, err := s.client.Im.V1.Message.Reply(ctx, req)
+	var messageID string
+	err := s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Reply(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.Data == nil || resp.Data.MessageId == nil {
+			return errors.New(emptyMessageIDErr)
+		}
+		messageID = strings.TrimSpace(*resp.Data.MessageId)
+		if messageID == "" {
+			return errors.New(emptyMessageIDErr)
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	if !resp.Success() {
-		return "", &feishuAPIError{
-			Code:      resp.Code,
-			Msg:       resp.Msg,
-			RequestID: resp.RequestId(),
-		}
-	}
-	if resp.Data == nil || resp.Data.MessageId == nil {
-		return "", errors.New(emptyMessageIDErr)
-	}
-	return strings.TrimSpace(*resp.Data.MessageId), nil
+	return messageID, nil
 }
 
 type feishuAPIError struct {
@@ -210,6 +236,40 @@ func (e *feishuAPIError) Error() string {
 	return fmt.Sprintf("feishu api error code=%d msg=%s request_id=%s", e.Code, e.Msg, e.RequestID)
 }
 
+func (s *LarkSender) withFeishuRetry(ctx context.Context, run func() error) error {
+	if run == nil {
+		return errors.New("feishu operation is nil")
+	}
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 200 * time.Millisecond
+	bo.MaxInterval = 1 * time.Second
+	bo.MaxElapsedTime = 3 * time.Second
+	bo.Multiplier = 2
+	bo.RandomizationFactor = 0.1
+	boCtx := backoff.WithContext(bo, ctx)
+	return backoff.Retry(func() error {
+		err := run()
+		if err == nil {
+			return nil
+		}
+		if !isRetryableFeishuError(err) {
+			return backoff.Permanent(err)
+		}
+		return err
+	}, boCtx)
+}
+
+func isRetryableFeishuError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var apiErr *feishuAPIError
+	return !errors.As(err, &apiErr)
+}
+
 func (s *LarkSender) GetMessageText(ctx context.Context, messageID string) (string, error) {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
@@ -219,26 +279,37 @@ func (s *LarkSender) GetMessageText(ctx context.Context, messageID string) (stri
 	req := larkim.NewGetMessageReqBuilder().
 		MessageId(messageID).
 		Build()
-	resp, err := s.client.Im.V1.Message.Get(ctx, req)
+	var msgType string
+	var content string
+	err := s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Get(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.Data == nil || len(resp.Data.Items) == 0 || resp.Data.Items[0] == nil {
+			return errors.New("get message success but items is empty")
+		}
+		item := resp.Data.Items[0]
+		msgType = strings.ToLower(strings.TrimSpace(deref(item.MsgType)))
+		content = ""
+		if item.Body != nil {
+			content = deref(item.Body.Content)
+		}
+		content = strings.TrimSpace(content)
+		if content == "" {
+			return errors.New("get message success but content is empty")
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
-	}
-	if !resp.Success() {
-		return "", fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	if resp.Data == nil || len(resp.Data.Items) == 0 || resp.Data.Items[0] == nil {
-		return "", errors.New("get message success but items is empty")
-	}
-
-	item := resp.Data.Items[0]
-	msgType := strings.ToLower(strings.TrimSpace(deref(item.MsgType)))
-	content := ""
-	if item.Body != nil {
-		content = deref(item.Body.Content)
-	}
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return "", errors.New("get message success but content is empty")
 	}
 
 	switch msgType {
@@ -353,17 +424,31 @@ func (s *LarkSender) downloadImage(ctx context.Context, imageKey string) (string
 	req := larkim.NewGetImageReqBuilder().
 		ImageKey(imageKey).
 		Build()
-	resp, err := s.client.Im.V1.Image.Get(ctx, req)
+	var fileName string
+	var fileReader io.Reader
+	err := s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Image.Get(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.File == nil {
+			return errors.New("download image success but file body is empty")
+		}
+		fileName = strings.TrimSpace(resp.FileName)
+		fileReader = resp.File
+		return nil
+	})
 	if err != nil {
 		return "", nil, err
 	}
-	if !resp.Success() {
-		return "", nil, fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	if resp.File == nil {
-		return "", nil, errors.New("download image success but file body is empty")
-	}
-	return strings.TrimSpace(resp.FileName), resp.File, nil
+	return fileName, fileReader, nil
 }
 
 func (s *LarkSender) downloadMessageResource(ctx context.Context, messageID, resourceKey, resourceType string) (string, io.Reader, error) {
@@ -372,17 +457,31 @@ func (s *LarkSender) downloadMessageResource(ctx context.Context, messageID, res
 		FileKey(resourceKey).
 		Type(resourceType).
 		Build()
-	resp, err := s.client.Im.V1.MessageResource.Get(ctx, req)
+	var fileName string
+	var fileReader io.Reader
+	err := s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.MessageResource.Get(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{
+				Code:      resp.Code,
+				Msg:       resp.Msg,
+				RequestID: resp.RequestId(),
+			}
+		}
+		if resp.File == nil {
+			return errors.New("download message resource success but file body is empty")
+		}
+		fileName = strings.TrimSpace(resp.FileName)
+		fileReader = resp.File
+		return nil
+	})
 	if err != nil {
 		return "", nil, err
 	}
-	if !resp.Success() {
-		return "", nil, fmt.Errorf("feishu api error code=%d msg=%s request_id=%s", resp.Code, resp.Msg, resp.RequestId())
-	}
-	if resp.File == nil {
-		return "", nil, errors.New("download message resource success but file body is empty")
-	}
-	return strings.TrimSpace(resp.FileName), resp.File, nil
+	return fileName, fileReader, nil
 }
 
 func (s *LarkSender) writeAttachmentFile(

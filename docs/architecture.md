@@ -156,12 +156,16 @@ Actively used:
 - `github.com/Masterminds/sprig/v3`
 - `github.com/cespare/xxhash/v2`
 - `github.com/evanphx/json-patch/v5`
+- `github.com/go-co-op/gocron/v2`
+- `github.com/go-playground/validator/v10`
 - `github.com/gin-gonic/gin`
 - `github.com/go-resty/resty/v2`
 - `github.com/oklog/run`
 - `github.com/oklog/ulid/v2`
 - `github.com/rs/zerolog`
 - `github.com/spf13/cobra`
+- `github.com/cenkalti/backoff/v4`
+- `github.com/cyphar/filepath-securejoin`
 - `go.etcd.io/bbolt`
 - `gopkg.in/natefinch/lumberjack.v2`
 - `gopkg.in/yaml.v3`

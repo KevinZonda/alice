@@ -1,5 +1,7 @@
 # Alice Connector
 
+[![Dev CI](https://github.com/Alice-space/alice/actions/workflows/ci.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/ci.yml)
+[![Main Release](https://github.com/Alice-space/alice/actions/workflows/main-release.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/main-release.yml)
 [![Release On Tag](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml)
 
 A Feishu long-connection connector for Codex / Claude / Kimi.
@@ -15,7 +17,7 @@ A Feishu long-connection connector for Codex / Claude / Kimi.
 - Embedded prompts + skills: prompts are bundled in binary; bundled skills are synced on startup
 - Isolated runtime home: defaults to `${ALICE_HOME:-~/.alice}`
 - Isolated Codex home: defaults to `${ALICE_HOME}/.codex`
-- Tag-based release pipeline: test + cross-build + GitHub Release
+- Dev/Main branch release pipeline with automatic tagging on main merge
 
 ## Runtime Layout
 
@@ -72,6 +74,12 @@ Install/update to a pinned version:
 curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
 ```
 
+Install dev prerelease explicitly (default is stable release):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --channel dev
+```
+
 Uninstall (remove service + binary + `~/.alice`):
 
 ```bash
@@ -86,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alic
 
 What the installer does:
 
-- Downloads the latest GitHub Release asset and installs `${ALICE_HOME:-~/.alice}/bin/alice`
+- Downloads stable GitHub Release assets by default (dev builds only when `--channel dev` is provided)
 - Verifies release checksum against `SHA256SUMS` when available
 - Initializes `${ALICE_HOME:-~/.alice}` directories and default `config.yaml` (if missing)
 - Copies existing Codex auth (`auth.json`) into `${ALICE_HOME}/.codex/` when available
@@ -125,6 +133,15 @@ Default process env behavior:
 
 See [config.example.yaml](./config.example.yaml) for full schema.
 
+## Branch And CI Policy
+
+- Day-to-day commits go to `dev`.
+- Pull requests into `main` are limited to `dev -> main` by workflow policy.
+- Push to `main` must be a merge commit from `dev`; workflow enforces this.
+- When `dev` is merged to `main`, CI runs quality gate, computes next `vX.Y.Z`, pushes tag, and creates GitHub Release.
+- Manual `v*` tag pushes are still supported through [release-on-tag.yml](./.github/workflows/release-on-tag.yml).
+- In GitHub settings, enable branch protection for `main` and disallow direct pushes for hard enforcement.
+
 ## Bundled Skills
 
 Bundled skills are embedded into the binary (`skills/**`) and extracted to `${CODEX_HOME}/skills` on startup.
@@ -140,15 +157,19 @@ Included skills:
 
 ## Release Pipeline
 
-Tag push to GitHub triggers:
+Current release paths:
 
-1. `go test ./...`
-2. Cross-platform builds
-3. GitHub Release creation with uploaded artifacts
+1. `dev` push: quality gate + dev binary build + update prerelease tag `dev-latest`.
+2. `dev` merged into `main`: quality gate + auto semver tag + cross-build + GitHub Release.
+3. Manual `v*` tag push: test + cross-build + GitHub Release.
 
-Workflow file: [release-on-tag.yml](./.github/workflows/release-on-tag.yml)
+Workflow files:
 
-Release example:
+- [ci.yml](./.github/workflows/ci.yml)
+- [main-release.yml](./.github/workflows/main-release.yml)
+- [release-on-tag.yml](./.github/workflows/release-on-tag.yml)
+
+Manual release tag example:
 
 ```bash
 git tag v1.2.3

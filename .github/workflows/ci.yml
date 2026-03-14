@@ -1,17 +1,19 @@
-name: CI
+name: Dev CI
 
 on:
   push:
     branches:
-      - main
+      - dev
   pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: read
 
 jobs:
   check:
-    name: Check And Build
+    name: Quality Gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,5 +32,80 @@ jobs:
       - name: Run Quality Gate
         run: make check
 
-      - name: Build Binary
-        run: go build -trimpath -o bin/alice ./cmd/connector
+  build-dev:
+    name: Build Dev (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Dev Binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          DIST_DIR="dist"
+          mkdir -p "$DIST_DIR"
+
+          FILE_BASE="alice_dev_${GOOS}_${GOARCH}"
+          BIN_FILE="${FILE_BASE}"
+          OUT_PATH="${DIST_DIR}/${BIN_FILE}"
+
+          CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+            go build -trimpath -ldflags "-s -w" -o "${OUT_PATH}" ./cmd/connector
+
+          tar -C "${DIST_DIR}" -czf "${DIST_DIR}/${FILE_BASE}.tar.gz" "${BIN_FILE}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alice-dev-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+
+  publish-dev:
+    name: Publish Dev Prerelease
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: build-dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: alice-dev-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum * > SHA256SUMS
+
+      - name: Publish Dev Latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-latest
+          name: Dev Latest
+          prerelease: true
+          make_latest: false
+          target_commitish: dev
+          generate_release_notes: false
+          files: release-assets/*
+          fail_on_unmatched_files: true
