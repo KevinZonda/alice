@@ -1,3 +1,4 @@
+{{- /* Stage: Raw inbound message normalization; used by Processor.buildCurrentUserInput before reply-context and memory wrapping. */ -}}
 {{- if .UserMappings -}}
 {{- range .UserMappings }}
 用户{{ .Name }}的id是{{ .ID }}
