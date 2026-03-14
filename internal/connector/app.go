@@ -19,6 +19,8 @@ import (
 
 type App struct {
 	cfg       config.Config
+	cfgMu     sync.RWMutex
+	runtime   appRuntimeConfig
 	queue     chan Job
 	processor *Processor
 	workerWG  sync.WaitGroup
@@ -28,6 +30,15 @@ type App struct {
 	automationMu     sync.Mutex
 	automationRunner AutomationRunner
 	prompts          *prompting.Loader
+}
+
+type appRuntimeConfig struct {
+	triggerMode           string
+	triggerPrefix         string
+	feishuBotOpenID       string
+	feishuBotUserID       string
+	groupContextWindowTTL time.Duration
+	idleSummaryIdle       time.Duration
 }
 
 const (
@@ -40,12 +51,50 @@ const (
 func NewApp(cfg config.Config, processor *Processor) *App {
 	return &App{
 		cfg:       cfg,
+		runtime:   newAppRuntimeConfig(cfg),
 		queue:     make(chan Job, cfg.QueueCapacity),
 		processor: processor,
 		state:     newRuntimeStore(),
 		now:       time.Now,
 		prompts:   prompting.DefaultLoader(),
 	}
+}
+
+func newAppRuntimeConfig(cfg config.Config) appRuntimeConfig {
+	return appRuntimeConfig{
+		triggerMode:           cfg.TriggerMode,
+		triggerPrefix:         cfg.TriggerPrefix,
+		feishuBotOpenID:       cfg.FeishuBotOpenID,
+		feishuBotUserID:       cfg.FeishuBotUserID,
+		groupContextWindowTTL: cfg.GroupContextWindowTTL,
+		idleSummaryIdle:       cfg.IdleSummaryIdle,
+	}
+}
+
+func (a *App) runtimeConfig() appRuntimeConfig {
+	if a == nil {
+		return appRuntimeConfig{}
+	}
+	a.cfgMu.RLock()
+	defer a.cfgMu.RUnlock()
+	return a.runtime
+}
+
+func (a *App) UpdateRuntimeConfig(cfg config.Config) {
+	if a == nil {
+		return
+	}
+	a.cfgMu.Lock()
+	a.runtime = newAppRuntimeConfig(cfg)
+	a.cfgMu.Unlock()
+}
+
+func (a *App) IdleSummaryIdle() time.Duration {
+	cfg := a.runtimeConfig()
+	if cfg.idleSummaryIdle <= 0 {
+		return 8 * time.Hour
+	}
+	return cfg.idleSummaryIdle
 }
 
 func (a *App) SetPromptLoader(loader *prompting.Loader) {
@@ -120,7 +169,7 @@ func (a *App) idleSummaryLoop(ctx context.Context) {
 			if a.processor == nil {
 				continue
 			}
-			a.processor.RunIdleSummaryScan(ctx, a.cfg.IdleSummaryIdle)
+			a.processor.RunIdleSummaryScan(ctx, a.IdleSummaryIdle())
 		}
 	}
 }
@@ -257,19 +306,20 @@ func (a *App) workerLoop(ctx context.Context, idx int) {
 
 func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 	logIncomingEventDebug(event)
+	runtimeCfg := a.runtimeConfig()
 	accepted := shouldProcessIncomingMessage(
 		event,
-		a.cfg.TriggerMode,
-		a.cfg.TriggerPrefix,
-		a.cfg.FeishuBotOpenID,
-		a.cfg.FeishuBotUserID,
+		runtimeCfg.triggerMode,
+		runtimeCfg.triggerPrefix,
+		runtimeCfg.feishuBotOpenID,
+		runtimeCfg.feishuBotUserID,
 	)
 	a.cacheGroupContextWindow(ctx, event, accepted)
 	if !accepted {
 		logging.Debugf(
 			"incoming message ignored source=feishu_im event_id=%s reason=group_trigger_unmatched trigger_mode=%s chat_type=%s",
 			eventID(event),
-			normalizedTriggerMode(a.cfg.TriggerMode),
+			normalizedTriggerMode(runtimeCfg.triggerMode),
 			strings.TrimSpace(deref(event.Event.Message.ChatType)),
 		)
 		return nil
@@ -293,13 +343,13 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 		logging.Debugf("incoming message rejected source=feishu_im event_id=%s err=%v", eventID(event), err)
 		return nil
 	}
-	normalizeIncomingGroupJobTextForTriggerMode(job, a.cfg.TriggerMode, a.cfg.TriggerPrefix)
+	normalizeIncomingGroupJobTextForTriggerMode(job, runtimeCfg.triggerMode, runtimeCfg.triggerPrefix)
 	if event != nil && event.Event != nil {
 		a.resolveJobSessionKey(job, event.Event.Message)
 	}
 	a.mergeRecentGroupContextWindow(job)
-	job.BotOpenID = strings.TrimSpace(a.cfg.FeishuBotOpenID)
-	job.BotUserID = strings.TrimSpace(a.cfg.FeishuBotUserID)
+	job.BotOpenID = strings.TrimSpace(runtimeCfg.feishuBotOpenID)
+	job.BotUserID = strings.TrimSpace(runtimeCfg.feishuBotUserID)
 
 	queued, cancelActive, canceledEventID := a.enqueueJob(job)
 	if !queued {

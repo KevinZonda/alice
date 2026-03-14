@@ -23,8 +23,9 @@ type mediaWindowEntry struct {
 }
 
 func (a *App) groupContextWindowTTL() time.Duration {
-	if a.cfg.GroupContextWindowTTL > 0 {
-		return a.cfg.GroupContextWindowTTL
+	cfg := a.runtimeConfig()
+	if cfg.groupContextWindowTTL > 0 {
+		return cfg.groupContextWindowTTL
 	}
 	return defaultGroupContextWindow
 }
@@ -33,7 +34,8 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return
 	}
-	triggerMode := normalizedTriggerMode(a.cfg.TriggerMode)
+	cfg := a.runtimeConfig()
+	triggerMode := normalizedTriggerMode(cfg.triggerMode)
 	if !shouldApplyGroupContextWindow(triggerMode) {
 		return
 	}
@@ -45,8 +47,8 @@ func (a *App) cacheGroupContextWindow(ctx context.Context, event *larkim.P2Messa
 		return
 	}
 	if triggerMode == config.TriggerModeAt &&
-		strings.TrimSpace(a.cfg.FeishuBotOpenID) == "" &&
-		strings.TrimSpace(a.cfg.FeishuBotUserID) == "" {
+		strings.TrimSpace(cfg.feishuBotOpenID) == "" &&
+		strings.TrimSpace(cfg.feishuBotUserID) == "" {
 		return
 	}
 	if !isSupportedIncomingMessageType(deref(message.MessageType)) {
@@ -110,7 +112,8 @@ func (a *App) mergeRecentGroupContextWindow(job *Job) {
 	if job == nil {
 		return
 	}
-	if !shouldApplyGroupContextWindow(normalizedTriggerMode(a.cfg.TriggerMode)) {
+	cfg := a.runtimeConfig()
+	if !shouldApplyGroupContextWindow(normalizedTriggerMode(cfg.triggerMode)) {
 		return
 	}
 	if !isGroupChatType(job.ChatType) {

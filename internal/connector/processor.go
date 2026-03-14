@@ -26,6 +26,7 @@ type Processor struct {
 	thinkingMessage string
 	feedbackMode    string
 	feedbackEmoji   string
+	runtimeMu       sync.RWMutex
 	mu              sync.Mutex
 	sessions        map[string]sessionState
 	stateFilePath   string
@@ -100,6 +101,8 @@ func (p *Processor) SetImmediateFeedback(mode, emojiType string) {
 	if p == nil {
 		return
 	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
 	p.feedbackMode = normalizeImmediateFeedbackMode(mode)
 	p.feedbackEmoji = normalizeImmediateFeedbackEmoji(emojiType)
 }
@@ -108,9 +111,59 @@ func (p *Processor) SetRuntimeAPI(baseURL, token, runtimeBin string) {
 	if p == nil {
 		return
 	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
 	p.runtimeAPIBase = strings.TrimSpace(baseURL)
 	p.runtimeAPIToken = strings.TrimSpace(token)
 	p.runtimeAPIBin = strings.TrimSpace(runtimeBin)
+}
+
+func (p *Processor) SetLLMBackend(backend llm.Backend) {
+	if p == nil || backend == nil {
+		return
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.llm = backend
+}
+
+func (p *Processor) SetReplyMessages(failureMessage, thinkingMessage string) {
+	if p == nil {
+		return
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.failureMessage = strings.TrimSpace(failureMessage)
+	p.thinkingMessage = strings.TrimSpace(thinkingMessage)
+}
+
+func (p *Processor) runtimeSnapshot() processorRuntimeSnapshot {
+	if p == nil {
+		return processorRuntimeSnapshot{}
+	}
+	p.runtimeMu.RLock()
+	defer p.runtimeMu.RUnlock()
+	return processorRuntimeSnapshot{
+		llm:             p.llm,
+		failureMessage:  p.failureMessage,
+		thinkingMessage: p.thinkingMessage,
+		feedbackMode:    p.feedbackMode,
+		feedbackEmoji:   p.feedbackEmoji,
+		runtimeAPIBase:  p.runtimeAPIBase,
+		runtimeAPIToken: p.runtimeAPIToken,
+		runtimeAPIBin:   p.runtimeAPIBin,
+	}
+}
+
+type processorRuntimeSnapshot struct {
+	llm             llm.Backend
+	failureMessage  string
+	thinkingMessage string
+	feedbackMode    string
+	feedbackEmoji   string
+	runtimeAPIBase  string
+	runtimeAPIToken string
+	runtimeAPIBin   string
 }
 
 func (p *Processor) ProcessJob(ctx context.Context, job Job) bool {
@@ -180,7 +233,7 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 	failed := err != nil
 	if err != nil {
 		logging.Errorf("llm failed event_id=%s: %v", job.EventID, err)
-		reply = p.failureMessage
+		reply = p.runtimeSnapshot().failureMessage
 	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), reply, failed)
 
@@ -286,7 +339,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	failed := runErr != nil
 	if failed {
 		logging.Errorf("llm failed event_id=%s: %v", job.EventID, runErr)
-		finalReply = p.failureMessage
+		finalReply = p.runtimeSnapshot().failureMessage
 	}
 	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
 	if strings.TrimSpace(finalReply) != "" &&
@@ -302,11 +355,18 @@ func (p *Processor) sendImmediateFeedback(ctx context.Context, job Job) bool {
 	if p == nil {
 		return false
 	}
-	if p.feedbackMode == immediateFeedbackModeReaction && strings.TrimSpace(job.SourceMessageID) != "" {
-		if err := p.sender.AddReaction(ctx, job.SourceMessageID, p.feedbackEmoji); err == nil {
+	snapshot := p.runtimeSnapshot()
+	if snapshot.feedbackMode == immediateFeedbackModeReaction && strings.TrimSpace(job.SourceMessageID) != "" {
+		if err := p.sender.AddReaction(ctx, job.SourceMessageID, snapshot.feedbackEmoji); err == nil {
 			return true
 		} else {
-			logging.Warnf("send ack reaction failed event_id=%s message_id=%s emoji=%s: %v", job.EventID, job.SourceMessageID, p.feedbackEmoji, err)
+			logging.Warnf(
+				"send ack reaction failed event_id=%s message_id=%s emoji=%s: %v",
+				job.EventID,
+				job.SourceMessageID,
+				snapshot.feedbackEmoji,
+				err,
+			)
 		}
 	}
 

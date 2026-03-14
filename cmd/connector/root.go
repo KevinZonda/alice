@@ -4,8 +4,13 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 
 	"github.com/Alice-space/alice/internal/bootstrap"
@@ -83,6 +88,9 @@ func runConnector(configPath string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if err := startConfigHotReload(ctx, configPath, runtime); err != nil {
+		logging.Warnf("config hot reload disabled: %v", err)
+	}
 
 	logging.Infof("feishu-codex connector started (long connection mode)")
 	logging.Infof("memory module enabled dir=%s", runtime.MemoryDir)
@@ -96,4 +104,97 @@ func runConnector(configPath string) error {
 
 	logging.Infof("connector stopped")
 	return nil
+}
+
+func startConfigHotReload(ctx context.Context, configPath string, runtime *bootstrap.ConnectorRuntime) error {
+	if runtime == nil {
+		return nil
+	}
+	absConfigPath, err := filepath.Abs(strings.TrimSpace(configPath))
+	if err != nil {
+		return err
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	configDir := filepath.Dir(absConfigPath)
+	if err := watcher.Add(configDir); err != nil {
+		_ = watcher.Close()
+		return err
+	}
+	logging.Infof("config hot reload enabled path=%s", absConfigPath)
+
+	go func() {
+		defer watcher.Close()
+		var timerMu sync.Mutex
+		var timer *time.Timer
+		scheduleReload := func() {
+			timerMu.Lock()
+			defer timerMu.Unlock()
+			if timer != nil {
+				timer.Stop()
+			}
+			timer = time.AfterFunc(300*time.Millisecond, func() {
+				reloadConfigFromDisk(absConfigPath, runtime)
+			})
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case err := <-watcher.Errors:
+				if err != nil {
+					logging.Warnf("config watcher error: %v", err)
+				}
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if !isConfigFileEvent(event, absConfigPath) {
+					continue
+				}
+				logging.Infof("config change detected path=%s op=%s", absConfigPath, event.Op.String())
+				scheduleReload()
+			}
+		}
+	}()
+	return nil
+}
+
+func isConfigFileEvent(event fsnotify.Event, configPath string) bool {
+	changedPath := filepath.Clean(strings.TrimSpace(event.Name))
+	targetPath := filepath.Clean(strings.TrimSpace(configPath))
+	if changedPath != targetPath {
+		return false
+	}
+	const interestingOps = fsnotify.Write | fsnotify.Create | fsnotify.Rename | fsnotify.Remove | fsnotify.Chmod
+	return event.Op&interestingOps != 0
+}
+
+func reloadConfigFromDisk(configPath string, runtime *bootstrap.ConnectorRuntime) {
+	cfg, err := config.LoadFromFile(configPath)
+	if err != nil {
+		logging.Warnf("config hot reload skipped: reload config failed path=%s err=%v", configPath, err)
+		return
+	}
+	report, err := runtime.ApplyConfigReload(cfg)
+	if err != nil {
+		logging.Warnf("config hot reload failed path=%s err=%v", configPath, err)
+		return
+	}
+	if len(report.AppliedFields) > 0 {
+		logging.Infof(
+			"config hot reload applied path=%s fields=%s",
+			configPath,
+			strings.Join(report.AppliedFields, ","),
+		)
+	}
+	if len(report.RestartRequiredFields) > 0 {
+		logging.Warnf(
+			"config hot reload requires restart path=%s fields=%s",
+			configPath,
+			strings.Join(report.RestartRequiredFields, ","),
+		)
+	}
 }

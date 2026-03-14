@@ -39,11 +39,12 @@ type connectorRuntimeBuilder struct {
 	processor *connector.Processor
 	app       *connector.App
 
-	memoryManager   *memory.Manager
-	automationStore *automation.Store
-	promptLoader    *prompting.Loader
-	apiServer       *runtimeapi.Server
-	apiToken        string
+	memoryManager    *memory.Manager
+	automationStore  *automation.Store
+	automationEngine *automation.Engine
+	promptLoader     *prompting.Loader
+	apiServer        *runtimeapi.Server
+	apiToken         string
 }
 
 func newConnectorRuntimeBuilder(cfg config.Config, provider llm.Provider) (*connectorRuntimeBuilder, error) {
@@ -98,11 +99,16 @@ func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 
 	return &ConnectorRuntime{
 		App:                 b.app,
+		Processor:           b.processor,
+		AutomationEngine:    b.automationEngine,
 		RuntimeAPI:          b.apiServer,
 		RuntimeAPIBaseURL:   runtimeapi.BaseURL(b.cfg.RuntimeHTTPAddr),
 		RuntimeAPIToken:     b.apiToken,
 		MemoryDir:           b.paths.memoryDir,
 		AutomationStatePath: b.paths.automationStatePath,
+		CodeArmyStateDir:    b.paths.codeArmyStateDir,
+		PromptLoader:        b.promptLoader,
+		Config:              b.cfg,
 	}, nil
 }
 
@@ -176,7 +182,7 @@ func (b *connectorRuntimeBuilder) buildAutomationEngine() error {
 	})
 
 	if err := automationEngine.RegisterSystemTask("system.idle_summary_scan", 60*time.Second, func(runCtx context.Context) {
-		b.processor.RunIdleSummaryScan(runCtx, b.cfg.IdleSummaryIdle)
+		b.processor.RunIdleSummaryScan(runCtx, b.app.IdleSummaryIdle())
 	}); err != nil {
 		return err
 	}
@@ -192,6 +198,7 @@ func (b *connectorRuntimeBuilder) buildAutomationEngine() error {
 	}
 
 	b.app.SetAutomationRunner(automationEngine)
+	b.automationEngine = automationEngine
 	return nil
 }
 

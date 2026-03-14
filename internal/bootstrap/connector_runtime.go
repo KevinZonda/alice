@@ -3,9 +3,11 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/oklog/run"
 
+	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/llm"
@@ -15,11 +17,17 @@ import (
 
 type ConnectorRuntime struct {
 	App                 *connector.App
+	Processor           *connector.Processor
+	AutomationEngine    *automation.Engine
 	RuntimeAPI          *runtimeapi.Server
 	RuntimeAPIBaseURL   string
 	RuntimeAPIToken     string
 	MemoryDir           string
 	AutomationStatePath string
+	CodeArmyStateDir    string
+	PromptLoader        *prompting.Loader
+	Config              config.Config
+	mu                  sync.Mutex
 }
 
 func buildFactoryConfig(cfg config.Config, prompts *prompting.Loader) llm.FactoryConfig {

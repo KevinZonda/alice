@@ -39,10 +39,11 @@ func (p *Processor) runLLM(
 	env map[string]string,
 	onAgentMessage func(message string),
 ) (string, string, error) {
-	if p.llm == nil {
+	snapshot := p.runtimeSnapshot()
+	if snapshot.llm == nil {
 		return "", strings.TrimSpace(threadID), fmt.Errorf("llm backend is nil")
 	}
-	result, err := p.llm.Run(ctx, llm.RunRequest{
+	result, err := snapshot.llm.Run(ctx, llm.RunRequest{
 		ThreadID:   strings.TrimSpace(threadID),
 		AgentName:  "assistant",
 		UserText:   userText,
@@ -194,14 +195,15 @@ func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 		return nil
 	}
 	env := sessionContext.ToEnv()
-	if strings.TrimSpace(p.runtimeAPIBase) != "" {
-		env[runtimeapi.EnvBaseURL] = strings.TrimSpace(p.runtimeAPIBase)
+	runtimeCfg := p.runtimeSnapshot()
+	if strings.TrimSpace(runtimeCfg.runtimeAPIBase) != "" {
+		env[runtimeapi.EnvBaseURL] = strings.TrimSpace(runtimeCfg.runtimeAPIBase)
 	}
-	if strings.TrimSpace(p.runtimeAPIToken) != "" {
-		env[runtimeapi.EnvToken] = strings.TrimSpace(p.runtimeAPIToken)
+	if strings.TrimSpace(runtimeCfg.runtimeAPIToken) != "" {
+		env[runtimeapi.EnvToken] = strings.TrimSpace(runtimeCfg.runtimeAPIToken)
 	}
-	if strings.TrimSpace(p.runtimeAPIBin) != "" {
-		env[runtimeapi.EnvBin] = strings.TrimSpace(p.runtimeAPIBin)
+	if strings.TrimSpace(runtimeCfg.runtimeAPIBin) != "" {
+		env[runtimeapi.EnvBin] = strings.TrimSpace(runtimeCfg.runtimeAPIBin)
 	}
 	return env
 }

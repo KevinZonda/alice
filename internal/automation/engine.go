@@ -35,6 +35,7 @@ const defaultUserTaskTimeout = 10 * time.Minute
 type Engine struct {
 	store           *Store
 	sender          TextSender
+	runtimeMu       sync.RWMutex
 	llmRunner       LLMRunner
 	workflowRunner  WorkflowRunner
 	runEnv          map[string]string
@@ -77,6 +78,8 @@ func (e *Engine) SetLLMRunner(runner LLMRunner) {
 	if e == nil {
 		return
 	}
+	e.runtimeMu.Lock()
+	defer e.runtimeMu.Unlock()
 	e.llmRunner = runner
 }
 
@@ -84,6 +87,8 @@ func (e *Engine) SetWorkflowRunner(runner WorkflowRunner) {
 	if e == nil {
 		return
 	}
+	e.runtimeMu.Lock()
+	defer e.runtimeMu.Unlock()
 	e.workflowRunner = runner
 }
 
@@ -91,6 +96,8 @@ func (e *Engine) SetRunEnv(env map[string]string) {
 	if e == nil {
 		return
 	}
+	e.runtimeMu.Lock()
+	defer e.runtimeMu.Unlock()
 	if len(env) == 0 {
 		e.runEnv = nil
 		return
@@ -110,6 +117,8 @@ func (e *Engine) SetUserTaskTimeout(timeout time.Duration) {
 	if e == nil {
 		return
 	}
+	e.runtimeMu.Lock()
+	defer e.runtimeMu.Unlock()
 	if timeout <= 0 {
 		e.userTaskTimeout = defaultUserTaskTimeout
 		return
@@ -249,7 +258,12 @@ func (e *Engine) userTaskContext(ctx context.Context, task Task) (context.Contex
 }
 
 func (e *Engine) userTaskTimeoutDuration() time.Duration {
-	if e == nil || e.userTaskTimeout <= 0 {
+	if e == nil {
+		return defaultUserTaskTimeout
+	}
+	e.runtimeMu.RLock()
+	defer e.runtimeMu.RUnlock()
+	if e.userTaskTimeout <= 0 {
 		return defaultUserTaskTimeout
 	}
 	return e.userTaskTimeout
@@ -293,14 +307,15 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		}
 		return taskDispatch{text: text}, nil
 	case ActionTypeRunLLM:
-		if e.llmRunner == nil {
+		runner := e.llmRunnerValue()
+		if runner == nil {
 			return taskDispatch{}, errors.New("automation llm runner is nil")
 		}
 		prompt := renderActionTemplate(task.Action.Prompt, runAt)
 		if prompt == "" {
 			return taskDispatch{}, errors.New("action prompt is empty for run_llm")
 		}
-		result, err := e.llmRunner.Run(ctx, llm.RunRequest{
+		result, err := runner.Run(ctx, llm.RunRequest{
 			AgentName: "scheduler",
 			UserText:  prompt,
 			Model:     task.Action.Model,
@@ -329,14 +344,15 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 		}
 		return taskDispatch{text: text}, nil
 	case ActionTypeRunWorkflow:
-		if e.workflowRunner == nil {
+		runner := e.workflowRunnerValue()
+		if runner == nil {
 			return taskDispatch{}, errors.New("automation workflow runner is nil")
 		}
 		prompt := renderActionTemplate(task.Action.Prompt, runAt)
 		if prompt == "" {
 			return taskDispatch{}, errors.New("action prompt is empty for run_workflow")
 		}
-		result, err := e.workflowRunner.Run(ctx, WorkflowRunRequest{
+		result, err := runner.Run(ctx, WorkflowRunRequest{
 			Workflow: task.Action.Workflow,
 			TaskID:   task.ID,
 			StateKey: task.Action.StateKey,
@@ -439,13 +455,47 @@ func (e *Engine) buildTaskRunEnv(task Task) map[string]string {
 		return nil
 	}
 	env := ctx.ToEnv()
-	for key, value := range e.runEnv {
+	for key, value := range e.runEnvSnapshot() {
 		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
 			continue
 		}
 		env[key] = value
 	}
 	return env
+}
+
+func (e *Engine) llmRunnerValue() LLMRunner {
+	if e == nil {
+		return nil
+	}
+	e.runtimeMu.RLock()
+	defer e.runtimeMu.RUnlock()
+	return e.llmRunner
+}
+
+func (e *Engine) workflowRunnerValue() WorkflowRunner {
+	if e == nil {
+		return nil
+	}
+	e.runtimeMu.RLock()
+	defer e.runtimeMu.RUnlock()
+	return e.workflowRunner
+}
+
+func (e *Engine) runEnvSnapshot() map[string]string {
+	if e == nil {
+		return nil
+	}
+	e.runtimeMu.RLock()
+	defer e.runtimeMu.RUnlock()
+	if len(e.runEnv) == 0 {
+		return nil
+	}
+	copied := make(map[string]string, len(e.runEnv))
+	for key, value := range e.runEnv {
+		copied[key] = value
+	}
+	return copied
 }
 
 func buildMarkdownCardContent(markdown string) string {
