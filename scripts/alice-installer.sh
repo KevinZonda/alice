@@ -9,7 +9,8 @@ if [[ $# -gt 0 && "$1" != -* ]]; then
 fi
 
 REPO="${ALICE_REPO:-$REPO_DEFAULT}"
-ALICE_HOME="${ALICE_HOME:-$HOME/.alice}"
+ALICE_HOME="${ALICE_HOME:-}"
+CHANNEL="release"
 SERVICE_NAME="alice.service"
 SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 SERVICE_FILE=""
@@ -21,12 +22,13 @@ VERSION=""
 usage() {
   cat <<USAGE
 Usage:
-  alice-installer.sh install [--version vX.Y.Z] [--home PATH] [--repo OWNER/REPO] [--service NAME]
-  alice-installer.sh update  [--version vX.Y.Z] [--home PATH] [--repo OWNER/REPO] [--service NAME]
+  alice-installer.sh install [--version vX.Y.Z] [--channel release|dev] [--home PATH] [--repo OWNER/REPO] [--service NAME]
+  alice-installer.sh update  [--version vX.Y.Z] [--channel release|dev] [--home PATH] [--repo OWNER/REPO] [--service NAME]
   alice-installer.sh uninstall [--home PATH] [--service NAME] [--keep-data]
 
 Examples:
   alice-installer.sh install
+  alice-installer.sh install --channel dev
   alice-installer.sh update --version vX.Y.Z
   alice-installer.sh uninstall --keep-data
 USAGE
@@ -99,6 +101,11 @@ parse_args() {
       --version)
         [[ $# -ge 2 ]] || die "--version requires a value"
         VERSION="$2"
+        shift 2
+        ;;
+      --channel)
+        [[ $# -ge 2 ]] || die "--channel requires a value"
+        CHANNEL="$2"
         shift 2
         ;;
       --keep-data)
@@ -194,11 +201,24 @@ verify_asset_checksum() {
 }
 
 download_and_install_binary() {
-  local version os arch asset url tmpdir src
+  local version channel os arch asset url tmpdir src src_name
   version="$1"
+  channel="$2"
   os="$(detect_os)"
   arch="$(detect_arch)"
-  asset="alice_${version}_${os}_${arch}.tar.gz"
+  case "$channel" in
+    release)
+      asset="alice_${version}_${os}_${arch}.tar.gz"
+      src_name="alice_${version}_${os}_${arch}"
+      ;;
+    dev)
+      asset="alice_dev_${os}_${arch}.tar.gz"
+      src_name="alice_dev_${os}_${arch}"
+      ;;
+    *)
+      die "unsupported channel: $channel"
+      ;;
+  esac
   url="https://github.com/$REPO/releases/download/${version}/${asset}"
 
   tmpdir="$(mktemp -d)"
@@ -209,7 +229,7 @@ download_and_install_binary() {
   verify_asset_checksum "$version" "$asset" "$tmpdir/$asset" "$tmpdir"
   tar -xzf "$tmpdir/$asset" -C "$tmpdir"
 
-  src="$tmpdir/alice_${version}_${os}_${arch}"
+  src="$tmpdir/$src_name"
   [[ -f "$src" ]] || die "downloaded archive does not contain expected binary: $(basename "$src")"
 
   mkdir -p "$(dirname "$BIN_PATH")"
@@ -356,11 +376,16 @@ install_or_update() {
   local version
   version="$VERSION"
   if [[ -z "$version" ]]; then
-    version="$(fetch_latest_version)"
+    if [[ "$CHANNEL" == "dev" ]]; then
+      version="dev-latest"
+    else
+      version="$(fetch_latest_version)"
+    fi
   fi
+  log "target channel: $CHANNEL"
   log "target version: $version"
 
-  download_and_install_binary "$version"
+  download_and_install_binary "$version" "$CHANNEL"
   create_default_config_if_missing
   copy_codex_auth_if_exists
   write_systemd_unit
@@ -438,6 +463,20 @@ main() {
   esac
 
   parse_args "$@"
+  CHANNEL="$(trim "$CHANNEL")"
+  case "$CHANNEL" in
+    release|dev) ;;
+    *)
+      die "unsupported channel: $CHANNEL"
+      ;;
+  esac
+  if [[ -z "$(trim "$ALICE_HOME")" ]]; then
+    if [[ "$CHANNEL" == "dev" ]]; then
+      ALICE_HOME="$HOME/.alice-dev"
+    else
+      ALICE_HOME="$HOME/.alice"
+    fi
+  fi
   normalize_alice_paths
 
   case "$ACTION" in

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/gin-gonic/gin"
 
@@ -825,7 +826,11 @@ func validatePathUnderRoot(path string, root string) error {
 	if rel == "." {
 		return nil
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	resolvedPath, err := securejoin.SecureJoin(rootAbs, rel)
+	if err != nil {
+		return fmt.Errorf("path out of allowed root: %s", rootAbs)
+	}
+	if filepath.Clean(resolvedPath) != pathAbs {
 		return fmt.Errorf("path out of allowed root: %s", rootAbs)
 	}
 	return nil

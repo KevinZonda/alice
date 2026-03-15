@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
@@ -18,6 +19,8 @@ const TriggerModePrefix = "prefix"
 const ImmediateFeedbackModeReply = "reply"
 const ImmediateFeedbackModeReaction = "reaction"
 const DefaultImmediateFeedbackReaction = "SMILE"
+
+var configValidator = validator.New()
 
 type Config struct {
 	FeishuAppID               string `mapstructure:"feishu_app_id"`
@@ -145,11 +148,8 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.LogLevel = strings.ToLower(strings.TrimSpace(cfg.LogLevel))
 	cfg.LogFile = strings.TrimSpace(cfg.LogFile)
 
-	if cfg.FeishuAppID == "" {
-		return Config{}, errors.New("feishu_app_id is required")
-	}
-	if cfg.FeishuAppSecret == "" {
-		return Config{}, errors.New("feishu_app_secret is required")
+	if err := validateBaseConfig(cfg); err != nil {
+		return Config{}, err
 	}
 	if cfg.FeishuBaseURL == "" {
 		cfg.FeishuBaseURL = "https://open.feishu.cn"
@@ -249,21 +249,6 @@ func LoadFromFile(path string) (Config, error) {
 			return Config{}, fmt.Errorf("env key %q must not contain '='", key)
 		}
 	}
-	if cfg.QueueCapacity <= 0 {
-		return Config{}, errors.New("queue_capacity must be > 0")
-	}
-	if cfg.WorkerConcurrency <= 0 {
-		return Config{}, errors.New("worker_concurrency must be > 0")
-	}
-	if cfg.AutomationTaskTimeoutSecs <= 0 {
-		return Config{}, errors.New("automation_task_timeout_secs must be > 0")
-	}
-	if cfg.IdleSummaryHours <= 0 {
-		return Config{}, errors.New("idle_summary_hours must be > 0")
-	}
-	if cfg.GroupContextWindowMinutes <= 0 {
-		return Config{}, errors.New("group_context_window_minutes must be > 0")
-	}
 	if cfg.LogMaxSizeMB <= 0 {
 		cfg.LogMaxSizeMB = 20
 	}
@@ -294,4 +279,52 @@ func normalizeEnvMap(in map[string]string) map[string]string {
 		out[normalizedKey] = strings.TrimSpace(value)
 	}
 	return out
+}
+
+type baseConfigValidation struct {
+	FeishuAppID               string `validate:"required"`
+	FeishuAppSecret           string `validate:"required"`
+	QueueCapacity             int    `validate:"gt=0"`
+	WorkerConcurrency         int    `validate:"gt=0"`
+	AutomationTaskTimeoutSecs int    `validate:"gt=0"`
+	IdleSummaryHours          int    `validate:"gt=0"`
+	GroupContextWindowMinutes int    `validate:"gt=0"`
+}
+
+func validateBaseConfig(cfg Config) error {
+	base := baseConfigValidation{
+		FeishuAppID:               cfg.FeishuAppID,
+		FeishuAppSecret:           cfg.FeishuAppSecret,
+		QueueCapacity:             cfg.QueueCapacity,
+		WorkerConcurrency:         cfg.WorkerConcurrency,
+		AutomationTaskTimeoutSecs: cfg.AutomationTaskTimeoutSecs,
+		IdleSummaryHours:          cfg.IdleSummaryHours,
+		GroupContextWindowMinutes: cfg.GroupContextWindowMinutes,
+	}
+	if err := configValidator.Struct(base); err != nil {
+		var validationErrs validator.ValidationErrors
+		if !errors.As(err, &validationErrs) {
+			return fmt.Errorf("validate config failed: %w", err)
+		}
+		for _, validationErr := range validationErrs {
+			switch validationErr.Field() {
+			case "FeishuAppID":
+				return errors.New("feishu_app_id is required")
+			case "FeishuAppSecret":
+				return errors.New("feishu_app_secret is required")
+			case "QueueCapacity":
+				return errors.New("queue_capacity must be > 0")
+			case "WorkerConcurrency":
+				return errors.New("worker_concurrency must be > 0")
+			case "AutomationTaskTimeoutSecs":
+				return errors.New("automation_task_timeout_secs must be > 0")
+			case "IdleSummaryHours":
+				return errors.New("idle_summary_hours must be > 0")
+			case "GroupContextWindowMinutes":
+				return errors.New("group_context_window_minutes must be > 0")
+			}
+		}
+		return err
+	}
+	return nil
 }

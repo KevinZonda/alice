@@ -1,0 +1,23 @@
+name: Main PR Policy
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  enforce-dev-source:
+    name: Enforce Dev To Main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Source Branch
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.head_ref }}" != "dev" ]]; then
+            echo "main only accepts pull requests from branch 'dev'." >&2
+            echo "current head branch: ${{ github.head_ref }}" >&2
+            exit 1
+          fi

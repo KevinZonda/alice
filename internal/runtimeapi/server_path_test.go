@@ -1,6 +1,7 @@
 package runtimeapi
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,10 @@ func TestValidatePathUnderRoot(t *testing.T) {
 	root := t.TempDir()
 	inside := filepath.Join(root, "sub", "file.txt")
 	outside := filepath.Join(filepath.Dir(root), "outside.txt")
+	escapedViaLink := filepath.Join(root, "link-outside", "outside.txt")
+	if err := os.Symlink(filepath.Dir(root), filepath.Join(root, "link-outside")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -50,6 +55,12 @@ func TestValidatePathUnderRoot(t *testing.T) {
 		{
 			name:    "outside root",
 			path:    outside,
+			root:    root,
+			wantErr: "path out of allowed root",
+		},
+		{
+			name:    "outside root via symlink",
+			path:    escapedViaLink,
 			root:    root,
 			wantErr: "path out of allowed root",
 		},
