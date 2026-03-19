@@ -16,6 +16,7 @@ import (
 type sessionState struct {
 	MemoryScopeKey        string    `json:"memory_scope_key"`
 	ThreadID              string    `json:"thread_id"`
+	Aliases               []string  `json:"aliases,omitempty"`
 	LastMessageAt         time.Time `json:"last_message_at"`
 	LastIdleSummaryAnchor time.Time `json:"last_idle_summary_anchor"`
 	SummaryRunning        bool      `json:"-"`
@@ -24,6 +25,8 @@ type sessionState struct {
 type sessionStateSnapshot struct {
 	Sessions map[string]sessionState `json:"sessions"`
 }
+
+const maxSessionAliases = 32
 
 func (p *Processor) getThreadID(sessionKey string) string {
 	sessionKey = strings.TrimSpace(sessionKey)
@@ -40,6 +43,59 @@ func (p *Processor) getThreadID(sessionKey string) string {
 	return strings.TrimSpace(state.ThreadID)
 }
 
+func (p *Processor) resolveCanonicalSessionKey(sessionKey string) string {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return ""
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.resolveCanonicalSessionKeyLocked(sessionKey)
+}
+
+func (p *Processor) rememberSessionAliases(sessionKey string, aliases ...string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || len(aliases) == 0 {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
+	if canonicalKey == "" {
+		canonicalKey = sessionKey
+	}
+	state, ok := p.sessions[canonicalKey]
+	if !ok {
+		state = sessionState{}
+	}
+
+	changed := false
+	for _, rawAlias := range aliases {
+		alias := strings.TrimSpace(rawAlias)
+		if alias == "" || alias == canonicalKey {
+			continue
+		}
+		existingKey := p.resolveCanonicalSessionKeyLocked(alias)
+		if existingKey != "" && existingKey != canonicalKey {
+			continue
+		}
+		if containsSessionAlias(state.Aliases, alias) {
+			continue
+		}
+		state.Aliases = appendSessionAlias(state.Aliases, alias)
+		changed = true
+	}
+	if !changed {
+		return
+	}
+
+	p.sessions[canonicalKey] = state
+	p.markStateChangedLocked()
+}
+
 func (p *Processor) setThreadID(sessionKey string, threadID string) {
 	sessionKey = strings.TrimSpace(sessionKey)
 	threadID = strings.TrimSpace(threadID)
@@ -49,7 +105,11 @@ func (p *Processor) setThreadID(sessionKey string, threadID string) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	state, ok := p.sessions[sessionKey]
+	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
+	if canonicalKey == "" {
+		canonicalKey = sessionKey
+	}
+	state, ok := p.sessions[canonicalKey]
 	if !ok {
 		state = sessionState{}
 	}
@@ -57,7 +117,7 @@ func (p *Processor) setThreadID(sessionKey string, threadID string) {
 		return
 	}
 	state.ThreadID = threadID
-	p.sessions[sessionKey] = state
+	p.sessions[canonicalKey] = state
 	p.markStateChangedLocked()
 }
 
@@ -71,7 +131,11 @@ func (p *Processor) rememberSessionScope(sessionKey, memoryScopeKey string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	state, ok := p.sessions[sessionKey]
+	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
+	if canonicalKey == "" {
+		canonicalKey = sessionKey
+	}
+	state, ok := p.sessions[canonicalKey]
 	if !ok {
 		state = sessionState{}
 	}
@@ -79,7 +143,7 @@ func (p *Processor) rememberSessionScope(sessionKey, memoryScopeKey string) {
 		return
 	}
 	state.MemoryScopeKey = memoryScopeKey
-	p.sessions[sessionKey] = state
+	p.sessions[canonicalKey] = state
 	p.markStateChangedLocked()
 }
 
@@ -92,7 +156,11 @@ func (p *Processor) touchSessionMessage(sessionKey string, at time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	state, ok := p.sessions[sessionKey]
+	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
+	if canonicalKey == "" {
+		canonicalKey = sessionKey
+	}
+	state, ok := p.sessions[canonicalKey]
 	if !ok {
 		state = sessionState{}
 	}
@@ -100,7 +168,7 @@ func (p *Processor) touchSessionMessage(sessionKey string, at time.Time) {
 		return
 	}
 	state.LastMessageAt = at
-	p.sessions[sessionKey] = state
+	p.sessions[canonicalKey] = state
 	p.markStateChangedLocked()
 }
 
@@ -140,6 +208,7 @@ func (p *Processor) LoadSessionState(path string) error {
 		}
 		state.MemoryScopeKey = strings.TrimSpace(state.MemoryScopeKey)
 		state.ThreadID = strings.TrimSpace(state.ThreadID)
+		state.Aliases = normalizeSessionAliases(state.Aliases, key)
 		state.SummaryRunning = false
 		loaded[key] = state
 	}
@@ -152,6 +221,63 @@ func (p *Processor) LoadSessionState(path string) error {
 
 	logging.Debugf("session state loaded file=%s sessions=%d", path, len(loaded))
 	return nil
+}
+
+func (p *Processor) resolveCanonicalSessionKeyLocked(sessionKey string) string {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return ""
+	}
+	if _, ok := p.sessions[sessionKey]; ok {
+		return sessionKey
+	}
+	for canonicalKey, state := range p.sessions {
+		if containsSessionAlias(state.Aliases, sessionKey) {
+			return canonicalKey
+		}
+	}
+	return ""
+}
+
+func normalizeSessionAliases(aliases []string, canonicalKey string) []string {
+	normalized := make([]string, 0, len(aliases))
+	for _, rawAlias := range aliases {
+		alias := strings.TrimSpace(rawAlias)
+		if alias == "" || alias == strings.TrimSpace(canonicalKey) || containsSessionAlias(normalized, alias) {
+			continue
+		}
+		normalized = append(normalized, alias)
+		if len(normalized) >= maxSessionAliases {
+			break
+		}
+	}
+	return normalized
+}
+
+func appendSessionAlias(aliases []string, alias string) []string {
+	aliases = normalizeSessionAliases(aliases, "")
+	alias = strings.TrimSpace(alias)
+	if alias == "" || containsSessionAlias(aliases, alias) {
+		return aliases
+	}
+	aliases = append(aliases, alias)
+	if len(aliases) <= maxSessionAliases {
+		return aliases
+	}
+	return append([]string(nil), aliases[len(aliases)-maxSessionAliases:]...)
+}
+
+func containsSessionAlias(aliases []string, alias string) bool {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return false
+	}
+	for _, existing := range aliases {
+		if strings.TrimSpace(existing) == alias {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Processor) FlushSessionState() error {

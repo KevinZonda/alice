@@ -465,9 +465,14 @@ func buildSessionKeyCandidatesForMessage(receiveIDType, receiveID string, messag
 	}
 
 	candidates := make([]string, 0, 4)
+	isGroupMessage := message != nil && isGroupChatType(deref(message.ChatType))
+	if !isGroupMessage {
+		appendSessionKeyCandidate(&candidates, base)
+	}
 	if message != nil {
 		threadID := strings.TrimSpace(deref(message.ThreadId))
 		rootID := strings.TrimSpace(deref(message.RootId))
+		parentID := strings.TrimSpace(deref(message.ParentId))
 		sourceMessageID := strings.TrimSpace(deref(message.MessageId))
 
 		if threadID != "" {
@@ -475,7 +480,15 @@ func buildSessionKeyCandidatesForMessage(receiveIDType, receiveID string, messag
 		} else if rootID != "" {
 			appendSessionKeyCandidate(&candidates, base+"|thread:"+rootID)
 		}
-		if sourceMessageID != "" {
+		if threadID != "" || rootID != "" {
+			if parentID != "" {
+				appendSessionKeyCandidate(&candidates, base+"|message:"+parentID)
+			}
+			if rootID != "" {
+				appendSessionKeyCandidate(&candidates, base+"|message:"+rootID)
+			}
+		}
+		if isGroupMessage && sourceMessageID != "" {
 			appendSessionKeyCandidate(&candidates, base+"|message:"+sourceMessageID)
 		}
 	}

@@ -18,6 +18,7 @@ func TestBuildJob_TextMessage(t *testing.T) {
 				MessageType: strPtr("text"),
 				Content:     strPtr(`{"text":"<at user_id=\"ou_x\">Tom</at> 你好"}`),
 				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
 			},
 		},
 	}
@@ -41,7 +42,7 @@ func TestBuildJob_TextMessage(t *testing.T) {
 	if job.EventID != "evt_1" {
 		t.Fatalf("unexpected event id: %s", job.EventID)
 	}
-	if job.SessionKey != "chat_id:oc_chat|message:om_123" {
+	if job.SessionKey != "chat_id:oc_chat" {
 		t.Fatalf("unexpected session key: %s", job.SessionKey)
 	}
 }
@@ -157,6 +158,7 @@ func TestBuildJob_SessionKeyPrefersThreadID(t *testing.T) {
 				MessageType: strPtr("text"),
 				Content:     strPtr(`{"text":"hi"}`),
 				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
 			},
 		},
 	}
@@ -179,6 +181,7 @@ func TestBuildJob_SessionKeyFallsBackToRootID(t *testing.T) {
 				MessageType: strPtr("text"),
 				Content:     strPtr(`{"text":"hi"}`),
 				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
 			},
 		},
 	}

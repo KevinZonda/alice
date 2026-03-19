@@ -294,9 +294,10 @@ log_compress: false
 - 连接器会把队列中/执行中的任务持久化到 `memory_dir/runtime_state.json`，重启后会继续回复未完成或未回复的消息。
 - 自动化任务会通过 `bbolt` 持久化到 `memory_dir/automation.db`。
 - 每次调用 Codex 前，只会注入长期记忆；分日期记忆只提供目录位置，让 Codex 按需检索。
-- 会话复用改为“按话题优先”：
-  - 同一飞书话题线程（`thread_id`，没有则回退 `root_id`）内的消息复用同一个 Codex 线程。
-  - 不属于任何话题线程的消息，每条消息都会新建一个 Codex session。
+- 会话复用规则：
+  - 单聊（`p2p`）默认按 chat 级别复用同一个 Codex session；后续消息会在原 session 上继续 resume。
+  - 群聊/话题群中，不属于任何话题线程的顶层消息会按消息维度新建一个 Codex session。
+  - 群聊/话题群一旦进入某个飞书话题线程，后续同一 thread 的消息会继续复用该 session；若 `root_id`/`parent_id` 指向机器人自己的回复，也会自动回到原 session。
 - 若某聊天连续空闲达到 `idle_summary_hours`（默认 8 小时），后台会异步 resume 该线程并将“空闲摘要”追加到 `daily/YYYY-MM-DD.md`，同一段空闲期仅写一次。
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 在“引用回复”链路里，机器人会优先使用“话题回复”（`reply_in_thread=true`）发送收到/进度/结果；若飞书拒绝话题模式，则自动回退普通引用回复。
