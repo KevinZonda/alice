@@ -248,10 +248,12 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 				}
 			}
 		} else {
-			if _, sendErr := p.replies.reply(ctx, job, job.SourceMessageID, normalized); sendErr != nil {
+			messageID, sendErr := p.replies.reply(ctx, job, job.SourceMessageID, normalized)
+			if sendErr != nil {
 				logging.Errorf("send agent message failed event_id=%s: %v", job.EventID, sendErr)
 				return
 			}
+			p.rememberReplySessionMessage(job, messageID)
 		}
 		lastSentAgentMessage = normalized
 	}
@@ -271,11 +273,16 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		if wasInterruptedByNewMessage(ctx) {
 			notifyCtx := context.WithoutCancel(ctx)
 			if ackDelivered {
-				if _, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+				messageID, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage)
+				if replyErr != nil {
 					logging.Warnf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+				} else {
+					p.rememberReplySessionMessage(job, messageID)
 				}
-			} else if _, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+			} else if messageID, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 				logging.Warnf("fallback interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+			} else {
+				p.rememberReplySessionMessage(job, messageID)
 			}
 			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 			return JobProcessRetryAfterRestart
@@ -291,11 +298,16 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		}
 		notifyCtx := context.WithoutCancel(ctx)
 		if ackDelivered {
-			if _, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+			messageID, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage)
+			if replyErr != nil {
 				logging.Warnf("send interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+			} else {
+				p.rememberReplySessionMessage(job, messageID)
 			}
-		} else if _, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
+		} else if messageID, replyErr := p.replies.reply(notifyCtx, job, job.SourceMessageID, interruptedReplyMessage); replyErr != nil {
 			logging.Warnf("fallback interrupted reply failed event_id=%s: %v", job.EventID, replyErr)
+		} else {
+			p.rememberReplySessionMessage(job, messageID)
 		}
 		logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 		return JobProcessRetryAfterRestart
@@ -308,8 +320,11 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
 	if strings.TrimSpace(finalReply) != "" &&
 		strings.TrimSpace(finalReply) != lastSentAgentMessage {
-		if _, replyErr := p.replies.reply(ctx, job, job.SourceMessageID, finalReply); replyErr != nil {
+		messageID, replyErr := p.replies.reply(ctx, job, job.SourceMessageID, finalReply)
+		if replyErr != nil {
 			logging.Errorf("send final reply failed event_id=%s: %v", job.EventID, replyErr)
+		} else {
+			p.rememberReplySessionMessage(job, messageID)
 		}
 	}
 	return JobProcessCompleted
@@ -334,10 +349,12 @@ func (p *Processor) sendImmediateFeedback(ctx context.Context, job Job) bool {
 		}
 	}
 
-	if _, err := p.replies.reply(ctx, job, job.SourceMessageID, immediateFeedbackReplyText); err != nil {
+	messageID, err := p.replies.reply(ctx, job, job.SourceMessageID, immediateFeedbackReplyText)
+	if err != nil {
 		logging.Warnf("send ack reply failed event_id=%s: %v", job.EventID, err)
 		return false
 	}
+	p.rememberReplySessionMessage(job, messageID)
 	return true
 }
 
@@ -381,4 +398,20 @@ func fileChangeReplyTargets(job Job) []string {
 		targets = append(targets, normalized)
 	}
 	return targets
+}
+
+func (p *Processor) rememberReplySessionMessage(job Job, messageID string) {
+	if p == nil {
+		return
+	}
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return
+	}
+	baseKey := buildSessionKey(job.ReceiveIDType, job.ReceiveID)
+	sessionKey := sessionKeyForJob(job)
+	if baseKey == "" || sessionKey == "" {
+		return
+	}
+	p.rememberSessionAliases(sessionKey, baseKey+"|message:"+messageID)
 }

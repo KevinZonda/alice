@@ -258,6 +258,95 @@ func TestApp_WorkerLoopInterruptsSameSessionAndResumesLatest(t *testing.T) {
 	}
 }
 
+func TestApp_WorkerLoopInterruptsGroupThreadReplyMappedBackToRootSession(t *testing.T) {
+	cfg := configForTest()
+	cfg.FeishuBotOpenID = "ou_bot"
+
+	interruptibleCodex := newInterruptibleResumableCodexStub()
+	sender := &senderStub{}
+	processor := NewProcessor(
+		interruptibleCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+	)
+	app := NewApp(cfg, processor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go app.workerLoop(ctx, 0)
+
+	firstEvent := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_group_root"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_group_root"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> first"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := app.onMessageReceive(context.Background(), firstEvent); err != nil {
+		t.Fatalf("unexpected first event error: %v", err)
+	}
+	interruptibleCodex.WaitForCall(t, 1)
+
+	secondEvent := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_group_thread_reply"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_group_reply"),
+				ParentId:    strPtr("om_reply_card"),
+				RootId:      strPtr("om_reply_card"),
+				ThreadId:    strPtr("omt_group_thread"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> second"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_bot"),
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := app.onMessageReceive(context.Background(), secondEvent); err != nil {
+		t.Fatalf("unexpected second event error: %v", err)
+	}
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return interruptibleCodex.CallCount() == 2
+	}, "expected group thread reply to interrupt and trigger a resumed second call")
+	waitForCondition(t, 2*time.Second, func() bool {
+		app.state.mu.Lock()
+		defer app.state.mu.Unlock()
+		return len(app.state.pending) == 0
+	}, "expected group thread interrupt flow to clear pending state")
+
+	threadIDs := interruptibleCodex.ThreadIDs()
+	if len(threadIDs) != 2 {
+		t.Fatalf("expected 2 codex calls, got %#v", threadIDs)
+	}
+	if threadIDs[0] != "" {
+		t.Fatalf("expected first call to start a new thread, got %q", threadIDs[0])
+	}
+	if threadIDs[1] != "thread_after_interrupt" {
+		t.Fatalf("expected second call to resume interrupted thread, got %q", threadIDs[1])
+	}
+}
+
 func TestApp_WorkerLoopAllowsParallelDifferentSessions(t *testing.T) {
 	cfg := configForTest()
 	cfg.WorkerConcurrency = 2
