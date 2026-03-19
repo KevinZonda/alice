@@ -25,7 +25,7 @@ This document describes the current target architecture after the runtime/skills
 - `internal/memory`
   Scoped memory storage and prompt assembly, plus HTTP-friendly snapshot/update helpers.
 - `internal/automation`
-  Task persistence/execution for `send_text`, `run_llm`, and `run_workflow`.
+  Task persistence/execution for `send_text` and `run_llm`.
 - `internal/runtimeapi`
   Local authenticated HTTP server and client used by skills.
 - `skills/`
@@ -44,16 +44,12 @@ Prompts are no longer embedded as large string literals in code paths.
   - `prompts/connector/runtime_skill_hint.md.tmpl`
   - `prompts/connector/idle_summary.md.tmpl`
   - `prompts/connector/synthetic_mention.md.tmpl`
-- Code Army phase templates:
-  - `prompts/code_army/manager.md.tmpl`
-  - `prompts/code_army/worker.md.tmpl`
-  - `prompts/code_army/reviewer.md.tmpl`
 
 `internal/prompting` loads templates from disk, caches compiled templates with `xxhash`, and exposes `sprig` helpers.
 
 Current behavior:
 
-- `App`, `Processor`, LLM runners, and `code_army.Runner` accept an injected loader when bootstrap provides one.
+- `App`, `Processor`, and LLM runners accept an injected loader when bootstrap provides one.
 - If no loader is injected, they fall back to `internal/prompting.DefaultLoader()`, which searches upward for the repo `prompts/` directory.
 - Non-test business prompts now live in template files only; string-literal fallbacks have been removed.
 
@@ -82,8 +78,6 @@ Current API groups:
   Inspect memory context, rewrite long-term memory, append daily summaries.
 - `/api/v1/automation/*`
   Create/list/get/patch/delete scheduled tasks.
-- `/api/v1/workflows/code-army/status`
-  Inspect `code_army` workflow state for the current conversation.
 
 Configuration:
 
@@ -101,9 +95,9 @@ Operational modules are now exposed as skills instead of being reachable only th
 - `skills/alice-message`
   Send image/file attachments through `alice runtime message ...`; plain text is forwarded by the main reply pipeline.
 - `skills/alice-scheduler`
-  Manage automation tasks and workflow status through `alice runtime automation ...` and `workflow ...`.
+  Manage automation tasks through `alice runtime automation ...`.
 - `skills/alice-code-army`
-  Now composes with `alice-scheduler` instead of invoking MCP automation tools directly.
+  Acts as the long-running optimization orchestration skill, using GitLab issue / MR, cluster execution, Feishu control, and reviewer models to run multi-trial loops.
 
 These skills rely on:
 
@@ -124,7 +118,7 @@ Alice no longer exposes business operations through MCP.
 
 Current posture:
 
-- Skills + runtime HTTP are the primary path for memory/scheduling/workflow/message operations.
+- Skills + runtime HTTP are the primary path for memory/scheduling/message operations.
 - Bundled skills call the same `alice` binary with `runtime ...` arguments.
 - The remaining `mcp` naming is limited to session-context env keys such as `ALICE_MCP_RECEIVE_ID`, which are still used as stable runtime context variables.
 
@@ -146,7 +140,6 @@ This applies to:
 
 - normal assistant runs
 - scheduler-triggered `run_llm`
-- `code_army` phase agents (`manager`, `worker`, `reviewer`)
 - backend adapters that can surface tool activity (`codex`, `kimi`, and partial `claude`)
 
 ## Library adoption in this refactor

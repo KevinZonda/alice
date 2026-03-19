@@ -101,14 +101,6 @@ func (c *Client) DeleteTask(ctx context.Context, session mcpbridge.SessionContex
 	return c.delete(ctx, session, "/api/v1/automation/tasks/"+taskID, nil)
 }
 
-func (c *Client) CodeArmyStatus(ctx context.Context, session mcpbridge.SessionContext, stateKey string) (map[string]any, error) {
-	query := map[string]string{}
-	if stateKey = strings.TrimSpace(stateKey); stateKey != "" {
-		query["state_key"] = stateKey
-	}
-	return c.get(ctx, session, "/api/v1/workflows/code-army/status", query)
-}
-
 func (c *Client) get(
 	ctx context.Context,
 	session mcpbridge.SessionContext,

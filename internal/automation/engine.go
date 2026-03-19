@@ -2,7 +2,6 @@ package automation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -21,10 +20,6 @@ type TextSender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
 }
 
-type cardSender interface {
-	SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error
-}
-
 type LLMRunner interface {
 	Run(ctx context.Context, req llm.RunRequest) (llm.RunResult, error)
 }
@@ -38,7 +33,6 @@ type Engine struct {
 	sender          TextSender
 	runtimeMu       sync.RWMutex
 	llmRunner       LLMRunner
-	workflowRunner  WorkflowRunner
 	runEnv          map[string]string
 	userTaskTimeout time.Duration
 	tick            time.Duration
@@ -59,11 +53,6 @@ type systemTaskRuntime struct {
 
 var actionTemplateRenderer = prompting.NewLoader(".")
 
-type taskDispatch struct {
-	text        string
-	cardContent string
-}
-
 func NewEngine(store *Store, sender TextSender) *Engine {
 	return &Engine{
 		store:           store,
@@ -83,15 +72,6 @@ func (e *Engine) SetLLMRunner(runner LLMRunner) {
 	e.runtimeMu.Lock()
 	defer e.runtimeMu.Unlock()
 	e.llmRunner = runner
-}
-
-func (e *Engine) SetWorkflowRunner(runner WorkflowRunner) {
-	if e == nil {
-		return
-	}
-	e.runtimeMu.Lock()
-	defer e.runtimeMu.Unlock()
-	e.workflowRunner = runner
 }
 
 func (e *Engine) SetRunEnv(env map[string]string) {
@@ -311,10 +291,6 @@ func (e *Engine) runUserTask(ctx context.Context, task Task) {
 }
 
 func (e *Engine) userTaskContext(ctx context.Context, task Task) (context.Context, context.CancelFunc) {
-	task = NormalizeTask(task)
-	if task.Action.Type == ActionTypeRunWorkflow {
-		return ctx, func() {}
-	}
 	return context.WithTimeout(ctx, e.userTaskTimeoutDuration())
 }
 
@@ -342,24 +318,17 @@ func (e *Engine) executeUserTask(ctx context.Context, task Task) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(dispatch.cardContent) != "" {
-		if sender, ok := e.sender.(cardSender); ok {
-			if err := sender.SendCard(ctx, task.Route.ReceiveIDType, task.Route.ReceiveID, dispatch.cardContent); err == nil {
-				return nil
-			}
-		}
-	}
-	return e.sender.SendText(ctx, task.Route.ReceiveIDType, task.Route.ReceiveID, dispatch.text)
+	return e.sender.SendText(ctx, task.Route.ReceiveIDType, task.Route.ReceiveID, dispatch)
 }
 
-func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch, error) {
+func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (string, error) {
 	task = NormalizeTask(task)
 	runAt := e.nowTime()
 	switch task.Action.Type {
 	case ActionTypeSendText:
 		rendered, err := renderActionTemplate(task.Action.Text, runAt)
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
 		text, err := BuildDispatchText(Action{
 			Type:           ActionTypeSendText,
@@ -367,20 +336,20 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			MentionUserIDs: task.Action.MentionUserIDs,
 		})
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
-		return taskDispatch{text: text}, nil
+		return text, nil
 	case ActionTypeRunLLM:
 		runner := e.llmRunnerValue()
 		if runner == nil {
-			return taskDispatch{}, errors.New("automation llm runner is nil")
+			return "", errors.New("automation llm runner is nil")
 		}
 		prompt, err := renderActionTemplate(task.Action.Prompt, runAt)
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
 		if prompt == "" {
-			return taskDispatch{}, errors.New("action prompt is empty for run_llm")
+			return "", errors.New("action prompt is empty for run_llm")
 		}
 		result, err := runner.Run(ctx, llm.RunRequest{
 			AgentName: "scheduler",
@@ -390,15 +359,15 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			Env:       e.buildTaskRunEnv(task),
 		})
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
 		reply := strings.TrimSpace(result.Reply)
 		if reply == "" {
-			return taskDispatch{}, errors.New("llm reply is empty")
+			return "", errors.New("llm reply is empty")
 		}
 		prefix, err := renderActionTemplate(task.Action.Text, runAt)
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
 		message := reply
 		if prefix != "" {
@@ -410,60 +379,11 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			MentionUserIDs: task.Action.MentionUserIDs,
 		})
 		if err != nil {
-			return taskDispatch{}, err
+			return "", err
 		}
-		return taskDispatch{text: text}, nil
-	case ActionTypeRunWorkflow:
-		runner := e.workflowRunnerValue()
-		if runner == nil {
-			return taskDispatch{}, errors.New("automation workflow runner is nil")
-		}
-		prompt, err := renderActionTemplate(task.Action.Prompt, runAt)
-		if err != nil {
-			return taskDispatch{}, err
-		}
-		if prompt == "" {
-			return taskDispatch{}, errors.New("action prompt is empty for run_workflow")
-		}
-		result, err := runner.Run(ctx, WorkflowRunRequest{
-			Workflow: task.Action.Workflow,
-			TaskID:   task.ID,
-			StateKey: task.Action.StateKey,
-			Prompt:   prompt,
-			Model:    task.Action.Model,
-			Profile:  task.Action.Profile,
-			Env:      e.buildTaskRunEnv(task),
-		})
-		if err != nil {
-			return taskDispatch{}, err
-		}
-		reply := strings.TrimSpace(result.Message)
-		if reply == "" {
-			return taskDispatch{}, errors.New("workflow reply is empty")
-		}
-		prefix, err := renderActionTemplate(task.Action.Text, runAt)
-		if err != nil {
-			return taskDispatch{}, err
-		}
-		message := reply
-		if prefix != "" {
-			message = prefix + "\n\n" + reply
-		}
-		text, err := BuildDispatchText(Action{
-			Type:           ActionTypeSendText,
-			Text:           message,
-			MentionUserIDs: task.Action.MentionUserIDs,
-		})
-		if err != nil {
-			return taskDispatch{}, err
-		}
-		dispatch := taskDispatch{text: text}
-		if task.Action.Workflow == WorkflowCodeArmy && len(task.Action.MentionUserIDs) == 0 {
-			dispatch.cardContent = buildMarkdownCardContent(message)
-		}
-		return dispatch, nil
+		return text, nil
 	default:
-		return taskDispatch{}, fmt.Errorf("unsupported action type %q", task.Action.Type)
+		return "", fmt.Errorf("unsupported action type %q", task.Action.Type)
 	}
 }
 
@@ -519,7 +439,7 @@ func (e *Engine) buildTaskRunEnv(task Task) map[string]string {
 		ReceiveID:     task.Route.ReceiveID,
 		ActorUserID:   task.Creator.UserID,
 		ActorOpenID:   task.Creator.OpenID,
-		SessionKey:    task.Action.SessionKey,
+		SessionKey:    taskSessionKey(task),
 	}
 	switch task.Scope.Kind {
 	case ScopeKindChat:
@@ -549,15 +469,6 @@ func (e *Engine) llmRunnerValue() LLMRunner {
 	return e.llmRunner
 }
 
-func (e *Engine) workflowRunnerValue() WorkflowRunner {
-	if e == nil {
-		return nil
-	}
-	e.runtimeMu.RLock()
-	defer e.runtimeMu.RUnlock()
-	return e.workflowRunner
-}
-
 func (e *Engine) runEnvSnapshot() map[string]string {
 	if e == nil {
 		return nil
@@ -574,26 +485,10 @@ func (e *Engine) runEnvSnapshot() map[string]string {
 	return copied
 }
 
-func buildMarkdownCardContent(markdown string) string {
-	content := strings.TrimSpace(markdown)
-	if content == "" {
-		content = " "
+func taskSessionKey(task Task) string {
+	task = NormalizeTask(task)
+	if strings.TrimSpace(task.Route.ReceiveIDType) == "" || strings.TrimSpace(task.Route.ReceiveID) == "" {
+		return ""
 	}
-	card := map[string]any{
-		"schema": "2.0",
-		"config": map[string]any{
-			"enable_forward": true,
-			"update_multi":   true,
-		},
-		"body": map[string]any{
-			"elements": []any{
-				map[string]any{
-					"tag":     "markdown",
-					"content": content,
-				},
-			},
-		},
-	}
-	raw, _ := json.Marshal(card)
-	return string(raw)
+	return strings.TrimSpace(task.Route.ReceiveIDType) + ":" + strings.TrimSpace(task.Route.ReceiveID)
 }

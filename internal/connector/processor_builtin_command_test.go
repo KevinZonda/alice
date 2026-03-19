@@ -4,10 +4,21 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/Alice-space/alice/internal/llm"
 )
 
+type llmCallCountingStub struct {
+	calls int
+}
+
+func (s *llmCallCountingStub) Run(_ context.Context, _ llm.RunRequest) (llm.RunResult, error) {
+	s.calls++
+	return llm.RunResult{Reply: "unexpected"}, nil
+}
+
 func TestProcessor_HelpCommand_ListsBuiltinCommands(t *testing.T) {
-	llmStub := &codexCallCountingStub{}
+	llmStub := &llmCallCountingStub{}
 	sender := &senderStub{}
 	processor := NewProcessor(llmStub, sender, "failed", "thinking")
 
@@ -33,7 +44,6 @@ func TestProcessor_HelpCommand_ListsBuiltinCommands(t *testing.T) {
 	for _, want := range []string{
 		"## Alice 内建命令",
 		"`/help`",
-		"`/codearmy status [state_key]`",
 	} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("expected reply to contain %q, got %q", want, reply)

@@ -31,9 +31,8 @@ const (
 type ActionType string
 
 const (
-	ActionTypeSendText    ActionType = "send_text"
-	ActionTypeRunLLM      ActionType = "run_llm"
-	ActionTypeRunWorkflow ActionType = "run_workflow"
+	ActionTypeSendText ActionType = "send_text"
+	ActionTypeRunLLM   ActionType = "run_llm"
 )
 
 type TaskStatus string
@@ -79,9 +78,6 @@ type Action struct {
 	Prompt         string     `json:"prompt,omitempty"`
 	Model          string     `json:"model,omitempty"`
 	Profile        string     `json:"profile,omitempty"`
-	Workflow       string     `json:"workflow,omitempty"`
-	StateKey       string     `json:"state_key,omitempty"`
-	SessionKey     string     `json:"session_key,omitempty"`
 	MentionUserIDs []string   `json:"mention_user_ids,omitempty"`
 }
 
@@ -130,9 +126,6 @@ func NormalizeTask(task Task) Task {
 	task.Action.Prompt = strings.TrimSpace(task.Action.Prompt)
 	task.Action.Model = strings.TrimSpace(task.Action.Model)
 	task.Action.Profile = strings.TrimSpace(task.Action.Profile)
-	task.Action.Workflow = strings.ToLower(strings.TrimSpace(task.Action.Workflow))
-	task.Action.StateKey = strings.TrimSpace(task.Action.StateKey)
-	task.Action.SessionKey = strings.TrimSpace(task.Action.SessionKey)
 	task.Action.MentionUserIDs = uniqueNonEmptyStrings(task.Action.MentionUserIDs)
 	task.Status = TaskStatus(strings.ToLower(strings.TrimSpace(string(task.Status))))
 	task.LastResult = strings.TrimSpace(task.LastResult)
@@ -195,16 +188,6 @@ func ValidateTask(task Task) error {
 	case ActionTypeRunLLM:
 		if strings.TrimSpace(task.Action.Prompt) == "" {
 			return errors.New("action prompt is empty for run_llm")
-		}
-		if _, err := buildMentionParts(task.Action.MentionUserIDs); err != nil {
-			return err
-		}
-	case ActionTypeRunWorkflow:
-		if task.Action.Workflow != WorkflowCodeArmy {
-			return fmt.Errorf("unsupported workflow %q", task.Action.Workflow)
-		}
-		if strings.TrimSpace(task.Action.Prompt) == "" {
-			return errors.New("action prompt is empty for run_workflow")
 		}
 		if _, err := buildMentionParts(task.Action.MentionUserIDs); err != nil {
 			return err

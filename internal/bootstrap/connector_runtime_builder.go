@@ -11,7 +11,6 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/Alice-space/alice/internal/automation"
-	"github.com/Alice-space/alice/internal/codearmy"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/llm"
@@ -25,7 +24,6 @@ type connectorRuntimePaths struct {
 	memoryDir           string
 	promptDir           string
 	resourceDir         string
-	codeArmyStateDir    string
 	automationStatePath string
 	sessionStatePath    string
 	runtimeStatePath    string
@@ -70,7 +68,6 @@ func newConnectorRuntimePaths(cfg config.Config) connectorRuntimePaths {
 		memoryDir:           memoryDir,
 		promptDir:           ResolvePromptDir(cfg.WorkspaceDir, cfg.PromptDir),
 		resourceDir:         filepath.Join(memoryDir, "resources"),
-		codeArmyStateDir:    filepath.Join(memoryDir, "code_army"),
 		automationStatePath: filepath.Join(memoryDir, "automation.db"),
 		sessionStatePath:    filepath.Join(memoryDir, "session_state.json"),
 		runtimeStatePath:    filepath.Join(memoryDir, "runtime_state.json"),
@@ -106,7 +103,6 @@ func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 		RuntimeAPIToken:     b.apiToken,
 		MemoryDir:           b.paths.memoryDir,
 		AutomationStatePath: b.paths.automationStatePath,
-		CodeArmyStateDir:    b.paths.codeArmyStateDir,
 		PromptLoader:        b.promptLoader,
 		Config:              b.cfg,
 	}, nil
@@ -143,7 +139,6 @@ func (b *connectorRuntimeBuilder) buildProcessor() error {
 		b.memoryManager,
 	)
 	processor.SetPromptLoader(b.promptLoader)
-	processor.SetCodeArmyCommandDependencies(codearmy.NewInspector(b.paths.codeArmyStateDir), b.automationStore)
 	processor.SetImmediateFeedback(b.cfg.ImmediateFeedbackMode, b.cfg.ImmediateFeedbackReaction)
 	processor.SetRuntimeAPI(
 		runtimeapi.BaseURL(b.cfg.RuntimeHTTPAddr),
@@ -170,7 +165,6 @@ func (b *connectorRuntimeBuilder) buildAutomationEngine() error {
 	automationEngine := automation.NewEngine(b.automationStore, b.sender)
 	automationEngine.SetUserTaskTimeout(b.cfg.AutomationTaskTimeout)
 	automationEngine.SetLLMRunner(b.backend)
-	automationEngine.SetWorkflowRunner(codearmy.NewRunner(b.paths.codeArmyStateDir, b.backend, b.promptLoader))
 	automationEngine.SetRunEnv(map[string]string{
 		runtimeapi.EnvBaseURL: runtimeapi.BaseURL(b.cfg.RuntimeHTTPAddr),
 		runtimeapi.EnvToken:   b.resolveRuntimeAPIToken(),
@@ -205,7 +199,6 @@ func (b *connectorRuntimeBuilder) buildRuntimeAPI() {
 		b.sender,
 		b.memoryManager,
 		b.automationStore,
-		codearmy.NewInspector(b.paths.codeArmyStateDir),
 	)
 }
 

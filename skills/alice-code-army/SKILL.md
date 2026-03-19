@@ -1,114 +1,112 @@
 ---
 name: alice-code-army
-description: 通过 Alice 本地调度 API 操作内置 `code_army` 工作流。适用于在当前飞书会话中启动、续跑、查看、暂停、恢复、删除或测试 `code_army`。
+description: 用 GitLab issue / branch / MR、Alice 调度、集群执行和多模型 reviewer 组织多 trial 优化闭环。适用于在当前会话中启动、推进、暂停、取消、改向、比较和收敛代码或模型优化实验，并维护共享实验记录避免重复踩坑。
 ---
 
 # Alice 代码军队
 
-通过 `alice-scheduler` 驱动 `code_army`，不要重复扫描整个仓库。所有操作都限定在当前会话，由 Alice 自动路由回复。
+`alice-code-army` 是一套长期优化任务的编排约定：
 
-## 默认约定
+- `GitLab` 做记录面：目标、trial、MR、review、CI、结论都优先落在 issue / MR。
+- `Cluster` 做执行面：本地 GPU、IHEP、IHEPAI 等资源负责跑任务、查状态、取日志。
+- `Alice` 做编排面：提出假设、开 trial、汇报进度、收集 reviewer 意见、推动收敛。
+- `Kimi` / `DeepSeek` / 其他模型做 reviewer：负责讨论、审核、挑错、补建议。
 
-- 启动任务：`../alice-scheduler/scripts/alice-scheduler.sh create`
-- 管理任务：`../alice-scheduler/scripts/alice-scheduler.sh list|get|patch|delete`
-- 查看工作流状态：`../alice-scheduler/scripts/alice-scheduler.sh code-army-status`
-- `action.type` 必须为 `run_workflow`，`workflow` 必须为 `code_army`
-- 一次性测试推荐 `every_seconds: 60` 且 `max_runs: 1`
-- `code_army` 没有“立即执行”接口，首次执行发生在 `next_run_at`，回复用户时必须写明时间
-- 同一会话中并行多条工作流时，使用明确 `state_key`
-- 复用同一个 `state_key` 会延续旧状态与目标，不应在后续 prompt 里重置目标
-- 单次执行应走完当前阶段循环：`manager -> worker -> reviewer -> gate`，并停在下一轮稳定阶段
-- `model` / `profile` 仅在用户明确要求或已有流程依赖时设置
+## 何时使用
 
-## 启动一次性运行
+- 用户要做长期优化、并行多 trial、性能调优、代码试验、实验收敛。
+- 用户提到 issue、MR、branch、pipeline、review、merge、reject、共享实验记录、踩坑复用。
+- 用户希望能在 Feishu 或 GitLab 里打断、暂停、取消、改方向。
+- 用户希望把别的模型拉进来一起讨论、审核和提建议。
 
-1. 把用户需求整理成具体的工作流目标。
-2. 若后续要可追踪/可续跑，先选一个短 `state_key`。
-3. 创建一次性任务：`schedule.type: "interval"`、`schedule.every_seconds: 60`、`action.type: "run_workflow"`、`action.workflow: "code_army"`、`max_runs: 1`。
-4. 创建后反馈 `task.id`、`next_run_at`、`state_key`。
+## 核心流程
 
-示例：
+1. 找到或创建目标 `issue`，写清 baseline、目标、硬门槛、当前计划。
+2. 把每个 `trial` 映射到一个 `branch`，通常再配一个 `MR`。
+3. 用本地或集群资源执行 trial，并把结果回写到 `MR` / `issue`。
+4. 把同一批上下文交给 reviewer 模型，让它们审代码、审实验设计、审结果解释。
+5. 汇总结果，给出 `merge` / `reject` / `hold` / `needs-more-evidence` 结论。
+6. 追加共享实验记录，避免后续重复踩同一个坑。
 
-```sh
-../alice-scheduler/scripts/alice-scheduler.sh create <<'JSON'
-{
-  "title": "code_army: rust calculator",
-  "schedule": { "type": "interval", "every_seconds": 60 },
-  "action": {
-    "type": "run_workflow",
-    "workflow": "code_army",
-    "state_key": "rust-cli-calculator",
-    "prompt": "制作一个使用 Rust 编写的终端计算器，支持加减乘除即可。按 code_army 工作流推进一轮，并在回复中给出当前阶段进展。"
-  },
-  "max_runs": 1
-}
-JSON
+## 控制通道
+
+- `Feishu`：即时控制，优先用于“马上停掉”“先别继续开新 trial”这类动作。
+- `issue` / `MR` 评论：持久控制，适合留痕与协作。
+- 初版优先使用明确命令，减少歧义，例如：
+  `/alice hold`
+  `/alice cancel trial-2`
+  `/alice steer primary_metric=decode_latency accuracy_budget=0.1%`
+  `/alice accept trial-1`
+- 用户在 Feishu 给出关键指令后，如果 repo / issue 已知，应把决定同步回 GitLab 评论留痕。
+
+建议语义：
+
+- `hold`：不再启动新任务，已在跑的允许先跑完。
+- `cancel trial-x`：终止指定 trial，对应 job 取消，MR 标记为 `aborted`。
+- `steer ...`：修改目标、预算或方向；根据策略决定是否立即停掉正在跑的任务。
+- `accept trial-x`：把某个 trial 提升为当前候选赢家，进入复验或合并判断。
+
+## 评价规则
+
+- 先设硬门槛，再比较谁更好。
+- 硬门槛通常包括：
+  速度或主目标必须提升。
+  质量下降不能超过预算。
+  显存、资源或复杂度不能越界。
+  结果要可复现。
+  reviewer 不能有未解决的阻塞意见。
+- 只有通过硬门槛的 trial 才进入比较。
+- 比较顺序通常是：主目标 -> 副目标 -> 工程风险 / 维护成本。
+
+## 结论规则
+
+- `merge`
+  通过全部硬门槛；在同批 trial 中最优或最稳；至少有一次确认复验；没有未解决的 blocking review。
+- `reject`
+  未过硬门槛；明显差于 sibling trial；重复已知坑且没有新前提；或用户明确取消。
+- `needs-more-evidence`
+  有潜力但证据不足，保留 MR，不立即合并或拒绝。
+- `hold`
+  方向暂不清晰、资源受限、等待人工决策或外部依赖。
+
+## 共享实验记录
+
+- 不要只依赖聊天记忆或零散评论。
+- 保留一层轻量结构化记录，既可放在 GitLab issue 总结表，也可放在仓库文件，例如：
+  `experiments/index.yaml`
+  `experiments/pitfalls.md`
+- 每个 trial 至少记录：
+  issue、branch、MR、假设、资源、结果、结论、原因、标签。
+- 新开 trial 前，先读最近相关的失败记录；若只是重复旧坑且没有新证据，应先提醒用户，而不是直接重跑。
+
+## 工具优先级
+
+- 调度：`../alice-scheduler/scripts/alice-scheduler.sh`
+- GitLab：若环境里有 `ihep-gitlab`，优先用它操作 issue / MR / CI。
+- 集群：若环境里有 `ihep-main-cluster` / `ihep-ai-cluster`，优先用它们提交、查询、取消和取日志。
+- 附件：只有发图片或文件时才使用 `alice-message`；纯文本继续走主回复链路。
+- reviewer：主执行模型和 reviewer 模型不必相同。
+
+## 简例
+
+同一个优化 issue 下，可以并行开 3 个 trial，并在 issue 中维护总表：
+
+```text
+trial     branch                 MR      resource        status
+trial-1   opt/128-fuse-kernel    !201    IHEPAI-5090-1   running
+trial-2   opt/128-kv-cache       !202    IHEPAI-5090-2   running
+trial-3   opt/128-int8           !203    local/V100      queued
 ```
 
-## 继续推进
+如果用户评论 `/alice cancel trial-3`，应：
 
-要延续已有状态，复用同一个 `state_key`。常用做法是再次创建一次性任务：
-
-```sh
-../alice-scheduler/scripts/alice-scheduler.sh create <<'JSON'
-{
-  "title": "code_army: continue rust calculator",
-  "schedule": { "type": "interval", "every_seconds": 60 },
-  "action": {
-    "type": "run_workflow",
-    "workflow": "code_army",
-    "state_key": "rust-cli-calculator",
-    "prompt": "继续推进 rust-cli-calculator 这一条 code_army 工作流。"
-  },
-  "max_runs": 1
-}
-JSON
-```
-
-如果用户希望持续运行而不是手动触发，改为周期任务（更大 interval 或 cron）。
-
-## 查看状态
-
-执行 `../alice-scheduler/scripts/alice-scheduler.sh code-army-status`（可带或不带 `state_key`）。
-
-- 不带 `state_key`：列出当前会话全部 `code_army` 状态
-- 带 `state_key`：读取指定工作流快照
-- 优先阅读字段：`phase`、`iteration`、`last_decision`、`updated_at`、`history`
-
-阶段含义：
-
-- `manager`：规划本轮工作
-- `worker`：产出实现结果
-- `reviewer`：审查产物
-- `gate`：决定进入下一迭代或退回返工
-
-状态解释：
-
-- `last_decision: "pass"`：下一次 gate 会推进到下一迭代
-- `last_decision: "fail"`：下一次 gate 会打回给 worker 返工
-- `history`：最快速的变更摘要来源
-
-## 管理任务
-
-- 不确定任务 ID 时，先 `list` 再编辑/删除。
-- 暂停/恢复：
-  `../alice-scheduler/scripts/alice-scheduler.sh patch <task_id> '{"status":"paused"}'`
-  或
-  `../alice-scheduler/scripts/alice-scheduler.sh patch <task_id> '{"status":"active"}'`
-- 节奏调整使用 `patch`。
-- 删除不再需要的任务：
-  `../alice-scheduler/scripts/alice-scheduler.sh delete <task_id>`
-
-## Cron 说明
-
-Alice 自动化当前仅接受标准 5 段 cron。`cron_expr` 中不要写 `CRON_TZ=...`。调度基于运行机器的操作系统时区（`time.Local`），回复时应明确写出“按当前机器时区执行”。
+- 取消该 trial 的 job；
+- 在 issue 和 MR 里记录原因；
+- 把 `trial-3` 标记为 `aborted`；
+- 继续比较 `trial-1` 和 `trial-2`。
 
 ## 回复模式
 
-操作该工作流时，回复需包含：
-
-- 本次动作（创建、更新、列出、查看、删除）
-- 相关 `task.id` 与 `state_key`
-- 新建或重排任务的精确 `next_run_at`
-- 一次性还是周期任务
-- 影响预期的限制（尤其“无立即执行”）
+- 始终说明：目标 issue、活跃 trial、当前 winner / no-winner、阻塞项、下一步。
+- 当状态变化时，明确写出是 `hold`、`cancel`、`steer`、`merge`、`reject` 还是 `needs-more-evidence`。
+- 在 `merge` / `reject` / `aborted` 时，追加一条可复用的共享记录摘要。
