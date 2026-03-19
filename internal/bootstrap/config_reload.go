@@ -151,6 +151,8 @@ func applyReloadableFields(dst *config.Config, src config.Config, changed map[st
 	applyStringField(&dst.CodexCommand, src.CodexCommand, "codex_command", changed)
 	applyIntField(&dst.CodexTimeoutSecs, src.CodexTimeoutSecs, "codex_timeout_secs", changed)
 	applyDurationField(&dst.CodexTimeout, src.CodexTimeout, "codex_timeout", changed)
+	applyStringField(&dst.CodexModel, src.CodexModel, "codex_model", changed)
+	applyStringField(&dst.CodexReasoningEffort, src.CodexReasoningEffort, "codex_model_reasoning_effort", changed)
 	if !stringMapEqual(dst.CodexEnv, src.CodexEnv) {
 		dst.CodexEnv = cloneStringMap(src.CodexEnv)
 		changed["env"] = struct{}{}
@@ -186,6 +188,8 @@ func llmRuntimeConfigChanged(current, next config.Config) bool {
 	return current.LLMProvider != next.LLMProvider ||
 		current.CodexCommand != next.CodexCommand ||
 		current.CodexTimeout != next.CodexTimeout ||
+		current.CodexModel != next.CodexModel ||
+		current.CodexReasoningEffort != next.CodexReasoningEffort ||
 		!stringMapEqual(current.CodexEnv, next.CodexEnv) ||
 		current.CodexPromptPrefix != next.CodexPromptPrefix ||
 		current.ClaudeCommand != next.ClaudeCommand ||

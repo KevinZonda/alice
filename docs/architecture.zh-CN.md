@@ -99,7 +99,7 @@ memory 和定时任务能力现在以外置 skill 的形式暴露，而不是只
 - `skills/alice-memory`
   通过 `alice runtime memory ...` 查看和更新当前会话 memory。
 - `skills/alice-message`
-  通过 `alice runtime message ...` 发送文本、图片、文件。
+  通过 `alice runtime message ...` 发送图片、文件等附件；纯文本由主回复链路直接转发。
 - `skills/alice-scheduler`
   通过 `alice runtime automation ...` 和 `workflow ...` 管理 automation task 和 workflow 状态。
 - `skills/alice-code-army`

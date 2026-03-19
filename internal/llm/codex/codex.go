@@ -17,12 +17,14 @@ import (
 )
 
 type Runner struct {
-	Command      string
-	Timeout      time.Duration
-	Env          map[string]string
-	PromptPrefix string
-	WorkspaceDir string
-	Prompts      *prompting.Loader
+	Command                string
+	Timeout                time.Duration
+	DefaultModel           string
+	DefaultReasoningEffort string
+	Env                    map[string]string
+	PromptPrefix           string
+	WorkspaceDir           string
+	Prompts                *prompting.Loader
 }
 
 const fileChangeCallbackPrefix = "[file_change] "
@@ -67,7 +69,11 @@ func (r Runner) RunWithThreadAndProgress(
 	onThinking func(step string),
 ) (string, string, error) {
 	model = strings.TrimSpace(model)
+	if model == "" {
+		model = strings.TrimSpace(r.DefaultModel)
+	}
 	profile = strings.TrimSpace(profile)
+	reasoningEffort := strings.TrimSpace(r.DefaultReasoningEffort)
 	agentName = strings.TrimSpace(agentName)
 	prompt, err := r.renderPrompt(threadID, userText)
 	logging.Debugf(
@@ -88,13 +94,13 @@ func (r Runner) RunWithThreadAndProgress(
 
 	timeout := r.Timeout
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = 172800 * time.Second
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmdArgs := buildExecArgs(threadID, prompt, model, profile)
+	cmdArgs := buildExecArgs(threadID, prompt, model, profile, reasoningEffort)
 	cmd := exec.CommandContext(tctx, r.Command, cmdArgs...)
 	configureInterruptibleCommand(cmd, "codex")
 	if strings.TrimSpace(r.WorkspaceDir) != "" {

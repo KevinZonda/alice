@@ -35,27 +35,29 @@ type Config struct {
 
 	LLMProvider string `mapstructure:"llm_provider"`
 
-	CodexCommand       string            `mapstructure:"codex_command"`
-	CodexTimeout       time.Duration     `mapstructure:"-"`
-	CodexTimeoutSecs   int               `mapstructure:"codex_timeout_secs"`
-	CodexEnv           map[string]string `mapstructure:"env"`
-	CodexPromptPrefix  string            `mapstructure:"codex_prompt_prefix"`
-	ClaudeCommand      string            `mapstructure:"claude_command"`
-	ClaudeTimeout      time.Duration     `mapstructure:"-"`
-	ClaudeTimeoutSecs  int               `mapstructure:"claude_timeout_secs"`
-	ClaudePromptPrefix string            `mapstructure:"claude_prompt_prefix"`
-	KimiCommand        string            `mapstructure:"kimi_command"`
-	KimiTimeout        time.Duration     `mapstructure:"-"`
-	KimiTimeoutSecs    int               `mapstructure:"kimi_timeout_secs"`
-	KimiPromptPrefix   string            `mapstructure:"kimi_prompt_prefix"`
-	RuntimeHTTPAddr    string            `mapstructure:"runtime_http_addr"`
-	RuntimeHTTPToken   string            `mapstructure:"runtime_http_token"`
-	FailureMessage     string            `mapstructure:"failure_message"`
-	ThinkingMessage    string            `mapstructure:"thinking_message"`
-	AliceHome          string            `mapstructure:"alice_home"`
-	WorkspaceDir       string            `mapstructure:"workspace_dir"`
-	MemoryDir          string            `mapstructure:"memory_dir"`
-	PromptDir          string            `mapstructure:"prompt_dir"`
+	CodexCommand         string            `mapstructure:"codex_command"`
+	CodexTimeout         time.Duration     `mapstructure:"-"`
+	CodexTimeoutSecs     int               `mapstructure:"codex_timeout_secs"`
+	CodexModel           string            `mapstructure:"codex_model"`
+	CodexReasoningEffort string            `mapstructure:"codex_model_reasoning_effort"`
+	CodexEnv             map[string]string `mapstructure:"env"`
+	CodexPromptPrefix    string            `mapstructure:"codex_prompt_prefix"`
+	ClaudeCommand        string            `mapstructure:"claude_command"`
+	ClaudeTimeout        time.Duration     `mapstructure:"-"`
+	ClaudeTimeoutSecs    int               `mapstructure:"claude_timeout_secs"`
+	ClaudePromptPrefix   string            `mapstructure:"claude_prompt_prefix"`
+	KimiCommand          string            `mapstructure:"kimi_command"`
+	KimiTimeout          time.Duration     `mapstructure:"-"`
+	KimiTimeoutSecs      int               `mapstructure:"kimi_timeout_secs"`
+	KimiPromptPrefix     string            `mapstructure:"kimi_prompt_prefix"`
+	RuntimeHTTPAddr      string            `mapstructure:"runtime_http_addr"`
+	RuntimeHTTPToken     string            `mapstructure:"runtime_http_token"`
+	FailureMessage       string            `mapstructure:"failure_message"`
+	ThinkingMessage      string            `mapstructure:"thinking_message"`
+	AliceHome            string            `mapstructure:"alice_home"`
+	WorkspaceDir         string            `mapstructure:"workspace_dir"`
+	MemoryDir            string            `mapstructure:"memory_dir"`
+	PromptDir            string            `mapstructure:"prompt_dir"`
 
 	QueueCapacity             int           `mapstructure:"queue_capacity"`
 	WorkerConcurrency         int           `mapstructure:"worker_concurrency"`
@@ -86,11 +88,13 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("immediate_feedback_reaction", DefaultImmediateFeedbackReaction)
 	v.SetDefault("llm_provider", DefaultLLMProvider)
 	v.SetDefault("codex_command", "codex")
-	v.SetDefault("codex_timeout_secs", 120)
+	v.SetDefault("codex_timeout_secs", 172800)
+	v.SetDefault("codex_model", "")
+	v.SetDefault("codex_model_reasoning_effort", "")
 	v.SetDefault("claude_command", "claude")
-	v.SetDefault("claude_timeout_secs", 120)
+	v.SetDefault("claude_timeout_secs", 172800)
 	v.SetDefault("kimi_command", "kimi")
-	v.SetDefault("kimi_timeout_secs", 120)
+	v.SetDefault("kimi_timeout_secs", 172800)
 	v.SetDefault("runtime_http_addr", "127.0.0.1:7331")
 	v.SetDefault("runtime_http_token", "")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
@@ -101,7 +105,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("prompt_dir", "")
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
-	v.SetDefault("automation_task_timeout_secs", 600)
+	v.SetDefault("automation_task_timeout_secs", 6000)
 	v.SetDefault("idle_summary_hours", 8)
 	v.SetDefault("group_context_window_minutes", 5)
 	v.SetDefault("log_level", "info")
@@ -131,6 +135,8 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.ImmediateFeedbackReaction = strings.ToUpper(strings.TrimSpace(cfg.ImmediateFeedbackReaction))
 	cfg.LLMProvider = strings.ToLower(strings.TrimSpace(cfg.LLMProvider))
 	cfg.CodexCommand = strings.TrimSpace(cfg.CodexCommand)
+	cfg.CodexModel = strings.TrimSpace(cfg.CodexModel)
+	cfg.CodexReasoningEffort = strings.ToLower(strings.TrimSpace(cfg.CodexReasoningEffort))
 	cfg.CodexEnv = normalizeEnvMap(v.GetStringMapString("env"))
 	cfg.CodexPromptPrefix = strings.TrimSpace(cfg.CodexPromptPrefix)
 	cfg.ClaudeCommand = strings.TrimSpace(cfg.ClaudeCommand)
@@ -227,19 +233,19 @@ func LoadFromFile(path string) (Config, error) {
 		if cfg.LLMProvider == DefaultLLMProvider {
 			return Config{}, errors.New("codex_timeout_secs must be > 0")
 		}
-		cfg.CodexTimeoutSecs = 120
+		cfg.CodexTimeoutSecs = 172800
 	}
 	if cfg.ClaudeTimeoutSecs <= 0 {
 		if cfg.LLMProvider == LLMProviderClaude {
 			return Config{}, errors.New("claude_timeout_secs must be > 0")
 		}
-		cfg.ClaudeTimeoutSecs = 120
+		cfg.ClaudeTimeoutSecs = 172800
 	}
 	if cfg.KimiTimeoutSecs <= 0 {
 		if cfg.LLMProvider == LLMProviderKimi {
 			return Config{}, errors.New("kimi_timeout_secs must be > 0")
 		}
-		cfg.KimiTimeoutSecs = 120
+		cfg.KimiTimeoutSecs = 172800
 	}
 	for key := range cfg.CodexEnv {
 		if key == "" {

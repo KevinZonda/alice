@@ -37,11 +37,13 @@ func buildFactoryConfig(cfg config.Config, prompts *prompting.Loader) llm.Factor
 		Provider: cfg.LLMProvider,
 		Prompts:  prompts,
 		Codex: llm.CodexConfig{
-			Command:      cfg.CodexCommand,
-			Timeout:      cfg.CodexTimeout,
-			Env:          defaultEnv,
-			PromptPrefix: cfg.CodexPromptPrefix,
-			WorkspaceDir: cfg.WorkspaceDir,
+			Command:         cfg.CodexCommand,
+			Timeout:         cfg.CodexTimeout,
+			Model:           cfg.CodexModel,
+			ReasoningEffort: cfg.CodexReasoningEffort,
+			Env:             defaultEnv,
+			PromptPrefix:    cfg.CodexPromptPrefix,
+			WorkspaceDir:    cfg.WorkspaceDir,
 		},
 		Claude: llm.ClaudeConfig{
 			Command:      cfg.ClaudeCommand,

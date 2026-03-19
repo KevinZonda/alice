@@ -79,7 +79,7 @@ func (r Runner) RunWithThreadAndProgress(
 
 	timeout := r.Timeout
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = 172800 * time.Second
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, timeout)

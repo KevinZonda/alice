@@ -53,25 +53,25 @@ go run ./cmd/connector
 安装最新版本（重复执行同一命令即更新）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install
 ```
 
 显式更新到最新版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- update
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- update
 ```
 
 安装/更新到指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
 ```
 
 显式安装 dev 预发布（默认始终安装 stable release）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --channel dev
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --channel dev
 ```
 
 使用 `--channel dev` 时，若未显式传 `--home` 且未设置 `ALICE_HOME`，默认目录为 `~/.alice-dev`。
@@ -79,13 +79,13 @@ curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alic
 卸载（删除服务、二进制、`~/.alice`）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall
 ```
 
 卸载但保留运行数据：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
 ```
 
 脚本会自动完成：
@@ -197,11 +197,13 @@ feishu_bot_user_id: ""
 
 llm_provider: "codex"
 codex_command: "codex"
-codex_timeout_secs: 120
+codex_timeout_secs: 172800
+codex_model: ""
+codex_model_reasoning_effort: ""
 claude_command: "claude"
-claude_timeout_secs: 120
+claude_timeout_secs: 172800
 kimi_command: "kimi"
-kimi_timeout_secs: 120
+kimi_timeout_secs: 172800
 runtime_http_addr: "127.0.0.1:7331"
 runtime_http_token: ""
 alice_home: ""
@@ -222,7 +224,7 @@ immediate_feedback_reaction: "SMILE"
 
 queue_capacity: 256
 worker_concurrency: 1
-automation_task_timeout_secs: 600
+automation_task_timeout_secs: 6000
 idle_summary_hours: 8
 group_context_window_minutes: 5
 
@@ -243,6 +245,8 @@ log_compress: false
 
 - `llm_provider`：LLM 后端类型选择。支持 `codex`（默认）、`claude`、`kimi`。
 - `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`、`kimi_command` / `kimi_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
+- `codex_model`：可选，显式指定 Codex CLI 使用的模型；为空时沿用 Codex 自身配置。
+- `codex_model_reasoning_effort`：可选，显式指定 Codex CLI 的思考强度；为空时沿用 Codex 自身配置。Alice 会把它映射到 `codex exec -c model_reasoning_effort=...`。
 - `runtime_http_addr` / `runtime_http_token`：Alice 本地 runtime HTTP API 的监听地址和鉴权 token。若 `runtime_http_token` 为空，Alice 会在每次启动时自动生成一个 token 并注入 agent 环境变量。
 - `alice_home`：运行时根目录（release 默认 `~/.alice`；dev 预发布二进制默认 `~/.alice-dev`）。
 - `workspace_dir` / `memory_dir` / `prompt_dir`：运行时目录。默认在 `alice_home` 下，分别是 `workspace/`、`memory/`、`prompts/`。
@@ -252,7 +256,7 @@ log_compress: false
 - `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
 - `immediate_feedback_reaction`：`immediate_feedback_mode=reaction` 时使用的飞书 reaction 类型，默认 `SMILE`。
 - 自动化 cron 调度使用运行机器的操作系统时区（`time.Local`）。
-- `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `600`。
+- `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `6000`。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
 - `group_context_window_minutes`：群聊未触发消息的缓存窗口（分钟，默认 `5`）。窗口内文本与多媒体会在后续触发时并入上下文（`at`/`prefix` 模式）。
 - `log_file` / `log_max_size_mb` / `log_max_backups` / `log_max_age_days` / `log_compress`：滚动日志配置；`log_file` 为空时默认写入 `alice_home/log/YYYY-MM-DD.log`，底层使用 `zerolog + lumberjack`。
@@ -294,7 +298,7 @@ log_compress: false
 - 若某聊天连续空闲达到 `idle_summary_hours`（默认 8 小时），后台会异步 resume 该线程并将“空闲摘要”追加到 `daily/YYYY-MM-DD.md`，同一段空闲期仅写一次。
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 在“引用回复”链路里，机器人会优先使用“话题回复”（`reply_in_thread=true`）发送收到/进度/结果；若飞书拒绝话题模式，则自动回退普通引用回复。
-- 仓库自带 skill 通过本地 runtime HTTP API 发送文本/图片/文件，发送目标始终由当前会话上下文自动决定：私聊发送到当前私聊；群聊/话题群存在 `source_message_id` 时按该消息引用回复（优先 thread）。
+- 仓库自带 `alice-message` skill 仅用于通过本地 runtime HTTP API 发送图片、文件等附件；纯文本回复由程序主链路直接转发。附件发送目标始终由当前会话上下文自动决定：私聊发送到当前私聊；群聊/话题群存在 `source_message_id` 时按该消息引用回复（优先 thread）。
 - 收到用户消息后，机器人会按 `immediate_feedback_mode` 立即反馈：默认引用回复 `收到！`，也可改成优先给原消息添加 reaction。
 - Codex 执行期间，流式 `agent_message` 会优先以卡片回复；若卡片失败，会依次回退到富文本（`post`）和纯文本回复。
 - 若回复内容中包含可解析的 @提及，连接器会直接发送纯文本消息（不走卡片/富文本），以确保飞书侧正确触发 mention。

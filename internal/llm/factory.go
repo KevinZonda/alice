@@ -21,11 +21,13 @@ type FactoryConfig struct {
 }
 
 type CodexConfig struct {
-	Command      string
-	Timeout      time.Duration
-	Env          map[string]string
-	PromptPrefix string
-	WorkspaceDir string
+	Command         string
+	Timeout         time.Duration
+	Model           string
+	ReasoningEffort string
+	Env             map[string]string
+	PromptPrefix    string
+	WorkspaceDir    string
 }
 
 type ClaudeConfig struct {

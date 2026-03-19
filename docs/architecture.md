@@ -99,7 +99,7 @@ Operational modules are now exposed as skills instead of being reachable only th
 - `skills/alice-memory`
   Inspect/update current chat memory through `alice runtime memory ...`.
 - `skills/alice-message`
-  Send text/image/file through `alice runtime message ...`.
+  Send image/file attachments through `alice runtime message ...`; plain text is forwarded by the main reply pipeline.
 - `skills/alice-scheduler`
   Manage automation tasks and workflow status through `alice runtime automation ...` and `workflow ...`.
 - `skills/alice-code-army`

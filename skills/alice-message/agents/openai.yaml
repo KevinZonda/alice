@@ -1,4 +1,4 @@
 interface:
   display_name: "Alice 消息"
-  short_description: "向当前 Alice 会话发送文本、图片或文件"
-  default_prompt: "使用 $alice-message 向当前 Alice 会话发送文本、图片或文件。"
+  short_description: "向当前 Alice 会话发送图片、文件等附件"
+  default_prompt: "使用 $alice-message 向当前 Alice 会话发送图片、文件等附件；纯文本不要走这个 skill。"

@@ -33,10 +33,6 @@ func (c *Client) IsEnabled() bool {
 	return c != nil && c.http != nil
 }
 
-func (c *Client) SendText(ctx context.Context, session mcpbridge.SessionContext, req TextRequest) (map[string]any, error) {
-	return c.post(ctx, session, "/api/v1/messages/text", req)
-}
-
 func (c *Client) SendImage(ctx context.Context, session mcpbridge.SessionContext, req ImageRequest) (map[string]any, error) {
 	return c.post(ctx, session, "/api/v1/messages/image", req)
 }
