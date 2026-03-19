@@ -245,8 +245,8 @@ log_compress: false
 
 - `llm_provider`：LLM 后端类型选择。支持 `codex`（默认）、`claude`、`kimi`。
 - `codex_command` / `codex_timeout_secs`、`claude_command` / `claude_timeout_secs`、`kimi_command` / `kimi_timeout_secs`：对应后端 CLI 命令路径与超时秒数。
-- `codex_model`：可选，显式指定 Codex CLI 使用的模型；为空时沿用 Codex 自身配置。
-- `codex_model_reasoning_effort`：可选，显式指定 Codex CLI 的思考强度；为空时沿用 Codex 自身配置。Alice 会把它映射到 `codex exec -c model_reasoning_effort=...`。
+- `codex_model`：可选，显式指定 Codex CLI 使用的模型；为空时沿用 Codex 自身配置。当前本机可见模型示例包括 `gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`、`gpt-5.2-codex`、`gpt-5.2`、`gpt-5.1-codex-max`、`gpt-5.1-codex`、`gpt-5.1`、`gpt-5-codex`、`gpt-5`；实际可用集取决于 Codex 版本和账号权限。
+- `codex_model_reasoning_effort`：可选，显式指定 Codex CLI 的思考强度；为空时沿用 Codex 自身配置。常见取值有 `low`、`medium`、`high`、`xhigh`；少数模型还支持 `minimal` 或只支持其中一部分。Alice 会把它映射到 `codex exec -c model_reasoning_effort=...`。
 - `runtime_http_addr` / `runtime_http_token`：Alice 本地 runtime HTTP API 的监听地址和鉴权 token。若 `runtime_http_token` 为空，Alice 会在每次启动时自动生成一个 token 并注入 agent 环境变量。
 - `alice_home`：运行时根目录（release 默认 `~/.alice`；dev 预发布二进制默认 `~/.alice-dev`）。
 - `workspace_dir` / `memory_dir` / `prompt_dir`：运行时目录。默认在 `alice_home` 下，分别是 `workspace/`、`memory/`、`prompts/`。
