@@ -53,25 +53,25 @@ go run ./cmd/connector
 安装最新版本（重复执行同一命令即更新）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install
 ```
 
 显式更新到最新版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- update
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- update
 ```
 
 安装/更新到指定版本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
 ```
 
 显式安装 dev 预发布（默认始终安装 stable release）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- install --channel dev
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --channel dev
 ```
 
 使用 `--channel dev` 时，若未显式传 `--home` 且未设置 `ALICE_HOME`，默认目录为 `~/.alice-dev`。
@@ -79,13 +79,13 @@ curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alic
 卸载（删除服务、二进制、`~/.alice`）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall
 ```
 
 卸载但保留运行数据：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alice-space/alice/main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
 ```
 
 脚本会自动完成：
