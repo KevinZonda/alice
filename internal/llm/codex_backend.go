@@ -15,12 +15,14 @@ type codexBackend struct {
 func newCodexBackend(cfg CodexConfig, prompts *prompting.Loader) *codexBackend {
 	return &codexBackend{
 		runner: corecodex.Runner{
-			Command:      cfg.Command,
-			Timeout:      cfg.Timeout,
-			Env:          cfg.Env,
-			PromptPrefix: cfg.PromptPrefix,
-			WorkspaceDir: cfg.WorkspaceDir,
-			Prompts:      prompts,
+			Command:                cfg.Command,
+			Timeout:                cfg.Timeout,
+			DefaultModel:           cfg.Model,
+			DefaultReasoningEffort: cfg.ReasoningEffort,
+			Env:                    cfg.Env,
+			PromptPrefix:           cfg.PromptPrefix,
+			WorkspaceDir:           cfg.WorkspaceDir,
+			Prompts:                prompts,
 		},
 	}
 }

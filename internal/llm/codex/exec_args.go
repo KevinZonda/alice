@@ -5,10 +5,11 @@ import (
 	"strings"
 )
 
-func buildExecArgs(threadID string, prompt string, model string, profile string) []string {
+func buildExecArgs(threadID string, prompt string, model string, profile string, reasoningEffort string) []string {
 	threadID = strings.TrimSpace(threadID)
 	model = strings.TrimSpace(model)
 	profile = strings.TrimSpace(profile)
+	reasoningEffort = strings.TrimSpace(reasoningEffort)
 
 	buildFlags := func() []string {
 		args := []string{
@@ -21,6 +22,9 @@ func buildExecArgs(threadID string, prompt string, model string, profile string)
 		}
 		if profile != "" {
 			args = append(args, "-p", profile)
+		}
+		if reasoningEffort != "" {
+			args = append(args, "-c", `model_reasoning_effort="`+reasoningEffort+`"`)
 		}
 		return args
 	}

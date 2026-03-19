@@ -51,20 +51,22 @@ func TestApplyReloadableFields(t *testing.T) {
 		ImmediateFeedbackReaction: "SMILE",
 		LLMProvider:               config.DefaultLLMProvider,
 		CodexCommand:              "codex",
-		CodexTimeoutSecs:          120,
-		CodexTimeout:              120 * time.Second,
+		CodexTimeoutSecs:          172800,
+		CodexTimeout:              172800 * time.Second,
+		CodexModel:                "gpt-5.4",
+		CodexReasoningEffort:      "medium",
 		CodexEnv:                  map[string]string{"HTTPS_PROXY": "http://127.0.0.1:7890"},
 		CodexPromptPrefix:         "old prefix",
 		ClaudeCommand:             "claude",
-		ClaudeTimeoutSecs:         120,
-		ClaudeTimeout:             120 * time.Second,
+		ClaudeTimeoutSecs:         172800,
+		ClaudeTimeout:             172800 * time.Second,
 		ClaudePromptPrefix:        "old claude",
 		KimiCommand:               "kimi",
-		KimiTimeoutSecs:           120,
-		KimiTimeout:               120 * time.Second,
+		KimiTimeoutSecs:           172800,
+		KimiTimeout:               172800 * time.Second,
 		KimiPromptPrefix:          "old kimi",
-		AutomationTaskTimeoutSecs: 600,
-		AutomationTaskTimeout:     10 * time.Minute,
+		AutomationTaskTimeoutSecs: 6000,
+		AutomationTaskTimeout:     100 * time.Minute,
 		IdleSummaryHours:          8,
 		IdleSummaryIdle:           8 * time.Hour,
 		GroupContextWindowMinutes: 5,
@@ -86,6 +88,8 @@ func TestApplyReloadableFields(t *testing.T) {
 	next.CodexCommand = "codex-next"
 	next.CodexTimeoutSecs = 233
 	next.CodexTimeout = 233 * time.Second
+	next.CodexModel = "gpt-5.5"
+	next.CodexReasoningEffort = "high"
 	next.CodexEnv = map[string]string{"HTTPS_PROXY": "http://127.0.0.1:9999", "ALL_PROXY": "socks5://127.0.0.1:1080"}
 	next.LogLevel = "debug"
 	next.AutomationTaskTimeoutSecs = 900
@@ -101,8 +105,8 @@ func TestApplyReloadableFields(t *testing.T) {
 	if current.TriggerMode != config.TriggerModePrefix || current.TriggerPrefix != "!alice" {
 		t.Fatalf("trigger settings should be hot-reloaded, got mode=%q prefix=%q", current.TriggerMode, current.TriggerPrefix)
 	}
-	if current.CodexCommand != "codex-next" || current.CodexTimeout != 233*time.Second {
-		t.Fatalf("codex settings should be hot-reloaded, got command=%q timeout=%s", current.CodexCommand, current.CodexTimeout)
+	if current.CodexCommand != "codex-next" || current.CodexTimeout != 233*time.Second || current.CodexModel != "gpt-5.5" || current.CodexReasoningEffort != "high" {
+		t.Fatalf("codex settings should be hot-reloaded, got command=%q timeout=%s model=%q effort=%q", current.CodexCommand, current.CodexTimeout, current.CodexModel, current.CodexReasoningEffort)
 	}
 	if !stringMapEqual(current.CodexEnv, next.CodexEnv) {
 		t.Fatalf("env should be hot-reloaded, got=%v want=%v", current.CodexEnv, next.CodexEnv)

@@ -118,7 +118,7 @@ func TestIsSuccessfulCommandExecutionCompleted(t *testing.T) {
 }
 
 func TestBuildExecArgs_ResumeThread(t *testing.T) {
-	args := buildExecArgs("thread_123", "hello", "", "")
+	args := buildExecArgs("thread_123", "hello", "", "", "")
 	if !slices.Contains(args, "resume") {
 		t.Fatalf("expected resume args, got: %#v", args)
 	}
@@ -137,7 +137,7 @@ func TestBuildExecArgs_ResumeThread(t *testing.T) {
 }
 
 func TestBuildExecArgs_NewThreadUsesDangerousBypass(t *testing.T) {
-	args := buildExecArgs("", "hello", "", "")
+	args := buildExecArgs("", "hello", "", "", "")
 	if !slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
 		t.Fatalf("new thread args should include dangerous bypass flag, got: %#v", args)
 	}
@@ -150,12 +150,68 @@ func TestBuildExecArgs_NewThreadUsesDangerousBypass(t *testing.T) {
 }
 
 func TestBuildExecArgs_WithModelAndProfile(t *testing.T) {
-	args := buildExecArgs("thread_123", "hello", "gpt-4.1-mini", "worker-cheap")
+	args := buildExecArgs("thread_123", "hello", "gpt-4.1-mini", "worker-cheap", "")
 	if !slices.Contains(args, "-m") || !slices.Contains(args, "gpt-4.1-mini") {
 		t.Fatalf("expected model selector in args, got: %#v", args)
 	}
 	if !slices.Contains(args, "-p") || !slices.Contains(args, "worker-cheap") {
 		t.Fatalf("expected profile selector in args, got: %#v", args)
+	}
+}
+
+func TestBuildExecArgs_WithReasoningEffort(t *testing.T) {
+	args := buildExecArgs("thread_123", "hello", "gpt-5.4", "", "high")
+	if !slices.Contains(args, "-c") || !slices.Contains(args, `model_reasoning_effort="high"`) {
+		t.Fatalf("expected reasoning effort override in args, got: %#v", args)
+	}
+}
+
+func TestRunnerRunWithThreadAndProgress_UsesDefaultModelAndReasoningEffort(t *testing.T) {
+	tempDir := t.TempDir()
+	fakeCodexPath := filepath.Join(tempDir, "fake-codex.sh")
+	argsFile := filepath.Join(tempDir, "args.txt")
+	script := `#!/bin/sh
+printf '%s\n' "$@" > "` + argsFile + `"
+cat <<'EOF'
+{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}
+EOF
+`
+	if err := os.WriteFile(fakeCodexPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake codex script failed: %v", err)
+	}
+
+	runner := Runner{
+		Command:                fakeCodexPath,
+		Timeout:                3 * time.Second,
+		DefaultModel:           "gpt-5.4",
+		DefaultReasoningEffort: "medium",
+	}
+	reply, _, err := runner.RunWithThreadAndProgress(
+		context.Background(),
+		"",
+		"assistant",
+		"hello",
+		"",
+		"",
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if reply != "ok" {
+		t.Fatalf("unexpected reply: %q", reply)
+	}
+	rawArgs, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args failed: %v", err)
+	}
+	args := strings.Split(strings.TrimSpace(string(rawArgs)), "\n")
+	if !slices.Contains(args, "-m") || !slices.Contains(args, "gpt-5.4") {
+		t.Fatalf("expected default model in args, got: %#v", args)
+	}
+	if !slices.Contains(args, "-c") || !slices.Contains(args, `model_reasoning_effort="medium"`) {
+		t.Fatalf("expected default reasoning effort in args, got: %#v", args)
 	}
 }
 

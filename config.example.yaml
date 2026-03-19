@@ -23,10 +23,12 @@ trigger_prefix: ""
 llm_provider: "codex"
 codex_command: "codex"
 codex_timeout_secs: 172800
+codex_model: ""
+codex_model_reasoning_effort: ""
 claude_command: "claude"
-claude_timeout_secs: 120
+claude_timeout_secs: 172800
 kimi_command: "kimi"
-kimi_timeout_secs: 120
+kimi_timeout_secs: 172800
 runtime_http_addr: "127.0.0.1:7331"
 runtime_http_token: ""
 # Optional runtime home (release default: ~/.alice; dev build default: ~/.alice-dev).
@@ -65,7 +67,7 @@ immediate_feedback_reaction: "SMILE"
 queue_capacity: 256
 worker_concurrency: 1
 # Timeout (seconds) for one automation user task execution (run_llm/send_text)
-automation_task_timeout_secs: 600
+automation_task_timeout_secs: 6000
 idle_summary_hours: 8
 # Group context cache window (minutes) for non-@ group messages.
 # On @ trigger, text + media from this window are merged into context.

@@ -42,13 +42,19 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.CodexCommand != "codex" {
 		t.Fatalf("unexpected codex_command: %s", cfg.CodexCommand)
 	}
-	if cfg.CodexTimeout != 120*time.Second {
+	if cfg.CodexTimeout != 172800*time.Second {
 		t.Fatalf("unexpected codex_timeout: %s", cfg.CodexTimeout)
+	}
+	if cfg.CodexModel != "" {
+		t.Fatalf("unexpected codex_model: %q", cfg.CodexModel)
+	}
+	if cfg.CodexReasoningEffort != "" {
+		t.Fatalf("unexpected codex_model_reasoning_effort: %q", cfg.CodexReasoningEffort)
 	}
 	if cfg.ClaudeCommand != "claude" {
 		t.Fatalf("unexpected claude_command: %s", cfg.ClaudeCommand)
 	}
-	if cfg.ClaudeTimeout != 120*time.Second {
+	if cfg.ClaudeTimeout != 172800*time.Second {
 		t.Fatalf("unexpected claude_timeout: %s", cfg.ClaudeTimeout)
 	}
 	if cfg.ClaudePromptPrefix != "" {
@@ -57,10 +63,10 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.QueueCapacity != 256 {
 		t.Fatalf("unexpected queue_capacity: %d", cfg.QueueCapacity)
 	}
-	if cfg.AutomationTaskTimeoutSecs != 600 {
+	if cfg.AutomationTaskTimeoutSecs != 6000 {
 		t.Fatalf("unexpected automation_task_timeout_secs: %d", cfg.AutomationTaskTimeoutSecs)
 	}
-	if cfg.AutomationTaskTimeout != 10*time.Minute {
+	if cfg.AutomationTaskTimeout != 100*time.Minute {
 		t.Fatalf("unexpected automation_task_timeout: %s", cfg.AutomationTaskTimeout)
 	}
 	if cfg.ThinkingMessage != "正在思考中..." {
@@ -200,6 +206,31 @@ env:
 	}
 	if cfg.CodexEnv["ALL_PROXY"] != "socks5://127.0.0.1:7891" {
 		t.Fatalf("unexpected ALL_PROXY: %q", cfg.CodexEnv["ALL_PROXY"])
+	}
+}
+
+func TestLoadFromFile_CodexModelConfigTrimmed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+feishu_app_id: cli_xxx
+feishu_app_secret: sss
+codex_model: "  gpt-5.4  "
+codex_model_reasoning_effort: "  HIGH  "
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if cfg.CodexModel != "gpt-5.4" {
+		t.Fatalf("unexpected codex_model: %q", cfg.CodexModel)
+	}
+	if cfg.CodexReasoningEffort != "high" {
+		t.Fatalf("unexpected codex_model_reasoning_effort: %q", cfg.CodexReasoningEffort)
 	}
 }
 
@@ -582,7 +613,7 @@ claude_timeout_secs: 60
 	if err != nil {
 		t.Fatalf("load config failed: %v", err)
 	}
-	if cfg.CodexTimeout != 120*time.Second {
+	if cfg.CodexTimeout != 172800*time.Second {
 		t.Fatalf("unexpected codex_timeout fallback: %s", cfg.CodexTimeout)
 	}
 	if cfg.ClaudeTimeout != 60*time.Second {
