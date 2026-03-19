@@ -14,40 +14,14 @@ import (
 func newRuntimeMessageCmd() *cobra.Command {
 	messageCmd := &cobra.Command{
 		Use:   "message",
-		Short: "Send text, images, or files into the current Alice conversation",
+		Short: "Send images or files into the current Alice conversation",
 		Args:  cobra.NoArgs,
 	}
 	messageCmd.AddCommand(
-		newRuntimeMessageTextCmd(),
 		newRuntimeMessageImageCmd(),
 		newRuntimeMessageFileCmd(),
 	)
 	return messageCmd
-}
-
-func newRuntimeMessageTextCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "text [text]",
-		Short: "Send text to the current conversation",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: withRuntimeClient(func(
-			ctx context.Context,
-			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
-			_ *cobra.Command,
-			args []string,
-		) error {
-			text, err := readRuntimeTextArgOrStdin(args)
-			if err != nil {
-				return err
-			}
-			result, err := client.SendText(ctx, session, runtimeapi.TextRequest{Text: text})
-			if err != nil {
-				return err
-			}
-			return printRuntimeJSON(result)
-		}),
-	}
 }
 
 func newRuntimeMessageImageCmd() *cobra.Command {

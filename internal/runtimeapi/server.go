@@ -71,7 +71,6 @@ func NewServer(addr, token string, sender Sender, memoryManager *memory.Manager,
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	api := engine.Group("/api/v1")
-	api.POST("/messages/text", srv.handleSendText)
 	api.POST("/messages/image", srv.handleSendImage)
 	api.POST("/messages/file", srv.handleSendFile)
 	api.GET("/memory/context", srv.handleMemoryContext)
@@ -147,28 +146,6 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-func (s *Server) handleSendText(c *gin.Context) {
-	if s.sender == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sender is unavailable"})
-		return
-	}
-	session, err := sessionContextFromHeaders(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	var req TextRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := s.dispatchText(c.Request.Context(), session, req.Text); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "type": "text"})
 }
 
 func (s *Server) handleSendImage(c *gin.Context) {

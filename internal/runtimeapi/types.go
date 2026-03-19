@@ -22,10 +22,6 @@ const (
 	HeaderSessionKey      = "X-Alice-Session-Key"
 )
 
-type TextRequest struct {
-	Text string `json:"text"`
-}
-
 type ImageRequest struct {
 	ImageKey string `json:"image_key,omitempty"`
 	Path     string `json:"path,omitempty"`

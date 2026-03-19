@@ -818,7 +818,6 @@ backend 返回 `NextThreadID` 后，`Processor` 会把它写回 session state。
 
 当前暴露的主要接口有：
 
-- `/api/v1/messages/text`
 - `/api/v1/messages/image`
 - `/api/v1/messages/file`
 - `/api/v1/memory/*`
