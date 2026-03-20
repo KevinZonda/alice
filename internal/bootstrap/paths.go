@@ -9,20 +9,8 @@ import (
 	"github.com/Alice-space/alice/internal/runtimeapi"
 )
 
-func ResolveMemoryDir(workspaceDir, memoryDir string) string {
-	dir := strings.TrimSpace(memoryDir)
-	if dir == "" {
-		return config.DefaultMemoryDir()
-	}
-	if filepath.IsAbs(dir) {
-		return dir
-	}
-
-	base := strings.TrimSpace(workspaceDir)
-	if base == "" {
-		base = config.DefaultWorkspaceDir()
-	}
-	return filepath.Join(base, dir)
+func ResolveRuntimeStateRoot(aliceHome string) string {
+	return filepath.Join(config.RunDirForAliceHome(aliceHome), "connector")
 }
 
 func ResolvePromptDir(workspaceDir, promptDir string) string {

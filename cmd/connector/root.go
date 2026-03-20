@@ -169,7 +169,6 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool) error {
 	}
 
 	logging.Infof("feishu-codex connector started (long connection mode)")
-	logging.Infof("memory module enabled dir=%s", runtime.MemoryDir)
 	logging.Infof("automation engine enabled state_file=%s", runtime.AutomationStatePath)
 	if runtime.RuntimeAPI != nil {
 		logging.Infof("runtime http api enabled addr=%s", runtime.RuntimeAPIBaseURL)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/llm"
-	"github.com/Alice-space/alice/internal/memory"
 )
 
 type codexStub struct {
@@ -226,117 +225,48 @@ func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool
 	t.Fatal(message)
 }
 
-type memoryStub struct {
-	mu sync.Mutex
-
-	prompt string
-
-	buildCalls     int
-	lastBuildScope string
-	lastBuildInput string
-
-	saveCalls      int
-	lastSaveScope  string
-	lastSaveUser   string
-	lastSaveReply  string
-	lastSaveFailed bool
-
-	dailySummaryCalls  int
-	lastSummaryScope   string
-	lastSummarySession string
-	lastSummaryText    string
-	lastSummaryAt      time.Time
-	appendSummaryErr   error
-}
-
-func (m *memoryStub) BuildPrompt(memoryScopeKey, userText string) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.buildCalls++
-	m.lastBuildScope = memoryScopeKey
-	m.lastBuildInput = userText
-	return m.prompt, nil
-}
-
-func (m *memoryStub) SaveInteraction(memoryScopeKey, userText, assistantText string, failed bool) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.saveCalls++
-	m.lastSaveScope = memoryScopeKey
-	m.lastSaveUser = userText
-	m.lastSaveReply = assistantText
-	m.lastSaveFailed = failed
-	return true, nil
-}
-
-func (m *memoryStub) AppendDailySummary(memoryScopeKey, sessionKey, summary string, at time.Time) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.dailySummaryCalls++
-	m.lastSummaryScope = memoryScopeKey
-	m.lastSummarySession = sessionKey
-	m.lastSummaryText = summary
-	m.lastSummaryAt = at
-	return m.appendSummaryErr
-}
-
-func (m *memoryStub) DailySummaryCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.dailySummaryCalls
-}
-
-func (m *memoryStub) LastSummarySession() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.lastSummarySession
-}
-
-func (m *memoryStub) LastSummaryScope() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.lastSummaryScope
-}
-
 type senderStub struct {
 	mu sync.Mutex
 
-	sendCalls       int
-	lastSendText    string
-	sendImages      []string
-	sendImageCalls  int
-	sendFiles       []string
-	sendFileCalls   int
-	uploadImageErr  error
-	uploadFileErr   error
-	imageKeyByPath  map[string]string
-	fileKeyByPath   map[string]string
-	sendCardCalls   int
-	lastSendCard    string
-	sendCards       []string
-	sendCardErr     error
-	reactionCalls   int
-	reactionErr     error
-	reactionTypes   []string
-	reactionTargets []string
-	replyTextCalls  int
-	lastReplyText   string
-	replyTexts      []string
-	replyTargets    []string
-	replyTextErr    error
-	replyRichCalls  int
-	lastReplyRich   []string
-	replyRichLines  [][]string
+	sendCalls            int
+	lastSendText         string
+	sendImages           []string
+	sendImageCalls       int
+	sendFiles            []string
+	sendFileCalls        int
+	uploadImageErr       error
+	uploadFileErr        error
+	imageKeyByPath       map[string]string
+	fileKeyByPath        map[string]string
+	sendCardCalls        int
+	lastSendCard         string
+	sendCards            []string
+	sendCardErr          error
+	reactionCalls        int
+	reactionErr          error
+	reactionTypes        []string
+	reactionTargets      []string
+	replyTextCalls       int
+	replyTextDirectCalls int
+	lastReplyText        string
+	replyTexts           []string
+	replyTargets         []string
+	replyTextErr         error
+	replyRichCalls       int
+	lastReplyRich        []string
+	replyRichLines       [][]string
 
-	replyRichMarkdownCalls int
-	lastReplyMarkdown      string
-	replyMarkdownTexts     []string
-	replyRichMarkdownErr   error
+	replyRichMarkdownCalls       int
+	replyRichMarkdownDirectCalls int
+	lastReplyMarkdown            string
+	replyMarkdownTexts           []string
+	replyRichMarkdownErr         error
 
-	replyCardCalls int
-	lastReplyCard  string
-	replyCards     []string
-	replyCardErr   error
+	replyCardCalls       int
+	replyCardDirectCalls int
+	lastReplyCard        string
+	replyCards           []string
+	replyCardErr         error
 
 	getMessageTextCalls int
 	getMessageTextErr   error
@@ -415,14 +345,14 @@ func (s *senderStub) UploadFile(_ context.Context, localPath, _ string) (string,
 	return key, nil
 }
 
-func (s *senderStub) ResourceRootForScope(memoryScopeKey string) string {
+func (s *senderStub) ResourceRootForScope(resourceScopeKey string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	root := strings.TrimSpace(s.resourceRoot)
 	if root == "" {
 		return ""
 	}
-	return memory.ResolveScopedResourceRoot(root, memoryScopeKey)
+	return resolveScopedResourceRoot(root, resourceScopeKey)
 }
 
 func (s *senderStub) SendCard(_ context.Context, _, _ string, cardContent string) error {
@@ -456,6 +386,20 @@ func (s *senderStub) ReplyText(_ context.Context, sourceMessageID string, text s
 	return "om_reply_text", nil
 }
 
+func (s *senderStub) ReplyTextDirect(_ context.Context, sourceMessageID string, text string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyTextCalls++
+	s.replyTextDirectCalls++
+	s.lastReplyText = text
+	s.replyTexts = append(s.replyTexts, text)
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyTextErr != nil {
+		return "", s.replyTextErr
+	}
+	return "om_reply_text_direct", nil
+}
+
 func (s *senderStub) ReplyRichText(_ context.Context, sourceMessageID string, lines []string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -480,6 +424,20 @@ func (s *senderStub) ReplyRichTextMarkdown(_ context.Context, sourceMessageID, m
 	return "om_reply_rich_markdown", nil
 }
 
+func (s *senderStub) ReplyRichTextMarkdownDirect(_ context.Context, sourceMessageID, markdown string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyRichMarkdownCalls++
+	s.replyRichMarkdownDirectCalls++
+	s.lastReplyMarkdown = markdown
+	s.replyMarkdownTexts = append(s.replyMarkdownTexts, markdown)
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyRichMarkdownErr != nil {
+		return "", s.replyRichMarkdownErr
+	}
+	return "om_reply_rich_markdown_direct", nil
+}
+
 func (s *senderStub) ReplyCard(_ context.Context, sourceMessageID string, cardContent string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -491,6 +449,20 @@ func (s *senderStub) ReplyCard(_ context.Context, sourceMessageID string, cardCo
 		return "", s.replyCardErr
 	}
 	return "om_reply_card", nil
+}
+
+func (s *senderStub) ReplyCardDirect(_ context.Context, sourceMessageID string, cardContent string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyCardCalls++
+	s.replyCardDirectCalls++
+	s.lastReplyCard = cardContent
+	s.replyCards = append(s.replyCards, cardContent)
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyCardErr != nil {
+		return "", s.replyCardErr
+	}
+	return "om_reply_card_direct", nil
 }
 
 func (s *senderStub) GetMessageText(_ context.Context, messageID string) (string, error) {
@@ -551,11 +523,11 @@ func (s *senderStub) ResolveChatMemberName(_ context.Context, chatID, openID, us
 	return "", nil
 }
 
-func (s *senderStub) DownloadAttachment(_ context.Context, memoryScopeKey, sourceMessageID string, attachment *Attachment) error {
+func (s *senderStub) DownloadAttachment(_ context.Context, resourceScopeKey, sourceMessageID string, attachment *Attachment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.downloadCalls++
-	s.downloadScopeKeys = append(s.downloadScopeKeys, strings.TrimSpace(memoryScopeKey))
+	s.downloadScopeKeys = append(s.downloadScopeKeys, strings.TrimSpace(resourceScopeKey))
 	s.downloadSourceMessageIDs = append(s.downloadSourceMessageIDs, strings.TrimSpace(sourceMessageID))
 	if attachment == nil {
 		return errors.New("attachment is nil")

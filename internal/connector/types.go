@@ -21,19 +21,17 @@ func wasInterruptedByNewMessage(ctx context.Context) bool {
 	return errors.Is(context.Cause(ctx), errSessionInterrupted)
 }
 
-type MemoryManager interface {
-	BuildPrompt(memoryScopeKey, userText string) (string, error)
-	SaveInteraction(memoryScopeKey, userText, assistantText string, failed bool) (changed bool, err error)
-	AppendDailySummary(memoryScopeKey, sessionKey, summary string, at time.Time) error
-}
-
 type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
+	SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error
 	AddReaction(ctx context.Context, messageID, emojiType string) error
 	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
+	ReplyTextDirect(ctx context.Context, sourceMessageID, text string) (string, error)
 	ReplyRichText(ctx context.Context, sourceMessageID string, lines []string) (string, error)
 	ReplyRichTextMarkdown(ctx context.Context, sourceMessageID, markdown string) (string, error)
+	ReplyRichTextMarkdownDirect(ctx context.Context, sourceMessageID, markdown string) (string, error)
 	ReplyCard(ctx context.Context, sourceMessageID, cardContent string) (string, error)
+	ReplyCardDirect(ctx context.Context, sourceMessageID, cardContent string) (string, error)
 }
 
 type ReplyContextProvider interface {
@@ -41,7 +39,7 @@ type ReplyContextProvider interface {
 }
 
 type AttachmentDownloader interface {
-	DownloadAttachment(ctx context.Context, memoryScopeKey, sourceMessageID string, attachment *Attachment) error
+	DownloadAttachment(ctx context.Context, resourceScopeKey, sourceMessageID string, attachment *Attachment) error
 }
 
 type UserNameResolver interface {
@@ -91,11 +89,12 @@ type Job struct {
 	RawContent           string
 	EventID              string
 	ReceivedAt           time.Time
-	MemoryScopeKey       string
+	ResourceScopeKey     string
 	SessionKey           string
 	SessionVersion       uint64
 	Scene                string
 	ResponseMode         string
+	CreateFeishuThread   bool
 	LLMModel             string
 	LLMProfile           string
 	LLMReasoningEffort   string

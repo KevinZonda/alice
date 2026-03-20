@@ -72,12 +72,6 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	if cfg.ThinkingMessage != "正在思考中..." {
 		t.Fatalf("unexpected thinking_message: %s", cfg.ThinkingMessage)
 	}
-	if cfg.IdleSummaryHours != 8 {
-		t.Fatalf("unexpected idle_summary_hours: %d", cfg.IdleSummaryHours)
-	}
-	if cfg.IdleSummaryIdle != 8*time.Hour {
-		t.Fatalf("unexpected idle_summary_idle: %s", cfg.IdleSummaryIdle)
-	}
 	if len(cfg.LLMProfiles) != 0 {
 		t.Fatalf("unexpected llm_profiles: %#v", cfg.LLMProfiles)
 	}
@@ -92,9 +86,6 @@ func TestLoadFromFile_WithDefaults(t *testing.T) {
 	}
 	if cfg.WorkspaceDir != DefaultWorkspaceDir() {
 		t.Fatalf("unexpected workspace_dir: %s", cfg.WorkspaceDir)
-	}
-	if cfg.MemoryDir != DefaultMemoryDir() {
-		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
 	}
 	if cfg.PromptDir != DefaultPromptDir() {
 		t.Fatalf("unexpected prompt_dir: %s", cfg.PromptDir)
@@ -154,9 +145,6 @@ alice_home: "~/.alice-custom"
 	}
 	if cfg.WorkspaceDir != filepath.Join(wantAliceHome, "workspace") {
 		t.Fatalf("unexpected workspace_dir: %s", cfg.WorkspaceDir)
-	}
-	if cfg.MemoryDir != filepath.Join(wantAliceHome, "memory") {
-		t.Fatalf("unexpected memory_dir: %s", cfg.MemoryDir)
 	}
 	if cfg.PromptDir != filepath.Join(wantAliceHome, "prompts") {
 		t.Fatalf("unexpected prompt_dir: %s", cfg.PromptDir)
@@ -297,27 +285,6 @@ log_compress: true
 	}
 	if !cfg.LogCompress {
 		t.Fatal("expected log_compress to be true")
-	}
-}
-
-func TestLoadFromFile_IdleSummaryHoursInvalid(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	content := `
-feishu_app_id: cli_xxx
-feishu_app_secret: sss
-idle_summary_hours: 0
-`
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write config failed: %v", err)
-	}
-
-	_, err := LoadFromFile(path)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "idle_summary_hours must be > 0") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

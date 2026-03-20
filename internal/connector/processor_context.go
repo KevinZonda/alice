@@ -71,7 +71,7 @@ func (p *Processor) runLLM(
 	return result.Reply, nextThreadID, err
 }
 
-func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID string) string {
+func (p *Processor) buildPrompt(ctx context.Context, job Job, threadID string) string {
 	userText := p.buildUserTextWithReplyContext(ctx, job, threadID)
 	if strings.TrimSpace(threadID) != "" {
 		logging.Debugf(
@@ -83,21 +83,8 @@ func (p *Processor) buildPromptWithMemory(ctx context.Context, job Job, threadID
 		return userText
 	}
 	userText = p.appendRuntimeSkillHint(userText, job)
-
-	logging.Debugf("prompt assemble start event_id=%s memory_enabled=%t user_text=%q", job.EventID, p.memory != nil, userText)
-	if p.memory == nil {
-		logging.Debugf("prompt assemble event_id=%s strategy=direct final_prompt=%q", job.EventID, userText)
-		return userText
-	}
-
-	prompt, err := p.memory.BuildPrompt(memoryScopeKeyForJob(job), userText)
-	if err != nil {
-		logging.Warnf("build memory prompt failed event_id=%s: %v", job.EventID, err)
-		logging.Debugf("prompt assemble fallback event_id=%s strategy=direct reason=%v final_prompt=%q", job.EventID, err, userText)
-		return userText
-	}
-	logging.Debugf("prompt assemble event_id=%s strategy=memory final_prompt=%q", job.EventID, prompt)
-	return prompt
+	logging.Debugf("prompt assemble event_id=%s strategy=direct final_prompt=%q", job.EventID, userText)
+	return userText
 }
 
 func (p *Processor) appendRuntimeSkillHint(userText string, job Job) string {
@@ -116,7 +103,7 @@ func (p *Processor) appendRuntimeSkillHint(userText string, job Job) string {
 }
 
 func (p *Processor) buildUserTextWithReplyContext(ctx context.Context, job Job, threadID string) string {
-	currentText := p.buildCurrentUserInput(job)
+	currentText := p.buildCurrentUserInputWithThread(job, threadID)
 	if strings.TrimSpace(threadID) != "" {
 		logging.Debugf(
 			"reply context skipped event_id=%s reason=resume_thread thread_id=%s",
@@ -184,7 +171,7 @@ func sessionKeyForJob(job Job) string {
 }
 
 func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
-	scopeKey := memoryScopeKeyForJob(job)
+	scopeKey := resourceScopeKeyForJob(job)
 	sessionContext := mcpbridge.SessionContext{
 		ReceiveIDType:   strings.TrimSpace(job.ReceiveIDType),
 		ReceiveID:       strings.TrimSpace(job.ReceiveID),
@@ -195,7 +182,7 @@ func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 		SessionKey:      sessionKeyForJob(job),
 	}
 	type resourceRootProvider interface {
-		ResourceRootForScope(memoryScopeKey string) string
+		ResourceRootForScope(resourceScopeKey string) string
 	}
 	if provider, ok := p.sender.(resourceRootProvider); ok {
 		sessionContext.ResourceRoot = strings.TrimSpace(provider.ResourceRootForScope(scopeKey))
@@ -236,7 +223,7 @@ func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
 		}
 		return
 	}
-	scopeKey := memoryScopeKeyForJob(*job)
+	scopeKey := resourceScopeKeyForJob(*job)
 
 	for i := range job.Attachments {
 		attachment := &job.Attachments[i]
@@ -265,6 +252,10 @@ func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
 }
 
 func (p *Processor) buildCurrentUserInput(job Job) string {
+	return p.buildCurrentUserInputWithThread(job, "")
+}
+
+func (p *Processor) buildCurrentUserInputWithThread(job Job, threadID string) string {
 	baseText := strings.TrimSpace(job.Text)
 
 	botOpenID := strings.TrimSpace(job.BotOpenID)
@@ -272,7 +263,13 @@ func (p *Processor) buildCurrentUserInput(job Job) string {
 	senderName := normalizeUserDisplayName(strings.TrimSpace(job.SenderName), "用户")
 	mentionedNames := buildMentionDisplayNames(job.MentionedUsers, botOpenID, botUserID)
 	speakerKnown := strings.TrimSpace(job.SenderName) != ""
-	mappings := buildUserIDMappings(job, senderName, botOpenID, botUserID)
+	mappings := buildUserIDMappings(
+		job,
+		senderName,
+		botOpenID,
+		botUserID,
+		strings.TrimSpace(threadID) == "",
+	)
 	identityContextEnabled := speakerKnown || len(mentionedNames) > 0 || len(mappings) > 0
 
 	speechText := baseText
@@ -305,12 +302,13 @@ func buildUserIDMappings(
 	senderName string,
 	botOpenID string,
 	botUserID string,
+	includeSender bool,
 ) []userMappingPromptData {
 	senderID := preferredID(job.SenderOpenID, job.SenderUserID, job.SenderUnionID)
 	mappings := make([]userMappingPromptData, 0, len(job.MentionedUsers)+1)
 	seen := make(map[string]struct{}, len(job.MentionedUsers)+1)
 
-	if senderID != "" && !isBotIdentity(job.SenderOpenID, job.SenderUserID, senderID, botOpenID, botUserID) {
+	if includeSender && senderID != "" && !isBotIdentity(job.SenderOpenID, job.SenderUserID, senderID, botOpenID, botUserID) {
 		key := senderName + "\x00" + senderID
 		mappings = append(mappings, userMappingPromptData{Name: senderName, ID: senderID})
 		seen[key] = struct{}{}
@@ -413,18 +411,4 @@ func preferredID(openID, userID, unionID string) string {
 		return userID
 	}
 	return strings.TrimSpace(unionID)
-}
-
-func (p *Processor) recordInteraction(job Job, userText, reply string, failed bool) {
-	if p.memory == nil {
-		logging.Debugf("memory update skipped event_id=%s changed=false reason=no_memory_manager", job.EventID)
-		return
-	}
-	changed, err := p.memory.SaveInteraction(memoryScopeKeyForJob(job), strings.TrimSpace(userText), reply, failed)
-	if err != nil {
-		logging.Warnf("save memory failed event_id=%s: %v", job.EventID, err)
-		logging.Debugf("memory update result event_id=%s changed=unknown error=%v", job.EventID, err)
-		return
-	}
-	logging.Debugf("memory update result event_id=%s changed=%t failed=%t", job.EventID, changed, failed)
 }

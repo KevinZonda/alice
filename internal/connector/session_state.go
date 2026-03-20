@@ -1,7 +1,6 @@
 package connector
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,12 +13,9 @@ import (
 )
 
 type sessionState struct {
-	MemoryScopeKey        string    `json:"memory_scope_key"`
-	ThreadID              string    `json:"thread_id"`
-	Aliases               []string  `json:"aliases,omitempty"`
-	LastMessageAt         time.Time `json:"last_message_at"`
-	LastIdleSummaryAnchor time.Time `json:"last_idle_summary_anchor"`
-	SummaryRunning        bool      `json:"-"`
+	ThreadID      string    `json:"thread_id"`
+	Aliases       []string  `json:"aliases,omitempty"`
+	LastMessageAt time.Time `json:"last_message_at"`
 }
 
 type sessionStateSnapshot struct {
@@ -121,32 +117,6 @@ func (p *Processor) setThreadID(sessionKey string, threadID string) {
 	p.markStateChangedLocked()
 }
 
-func (p *Processor) rememberSessionScope(sessionKey, memoryScopeKey string) {
-	sessionKey = strings.TrimSpace(sessionKey)
-	memoryScopeKey = strings.TrimSpace(memoryScopeKey)
-	if sessionKey == "" || memoryScopeKey == "" {
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
-	if canonicalKey == "" {
-		canonicalKey = sessionKey
-	}
-	state, ok := p.sessions[canonicalKey]
-	if !ok {
-		state = sessionState{}
-	}
-	if state.MemoryScopeKey == memoryScopeKey {
-		return
-	}
-	state.MemoryScopeKey = memoryScopeKey
-	p.sessions[canonicalKey] = state
-	p.markStateChangedLocked()
-}
-
 func (p *Processor) touchSessionMessage(sessionKey string, at time.Time) {
 	sessionKey = strings.TrimSpace(sessionKey)
 	if sessionKey == "" {
@@ -206,10 +176,8 @@ func (p *Processor) LoadSessionState(path string) error {
 		if key == "" {
 			continue
 		}
-		state.MemoryScopeKey = strings.TrimSpace(state.MemoryScopeKey)
 		state.ThreadID = strings.TrimSpace(state.ThreadID)
 		state.Aliases = normalizeSessionAliases(state.Aliases, key)
-		state.SummaryRunning = false
 		loaded[key] = state
 	}
 
@@ -306,7 +274,6 @@ func (p *Processor) flushSessionState(force bool) error {
 		Sessions: make(map[string]sessionState, len(p.sessions)),
 	}
 	for key, state := range p.sessions {
-		state.SummaryRunning = false
 		snapshot.Sessions[key] = state
 	}
 	p.mu.Unlock()
@@ -345,132 +312,4 @@ func (p *Processor) flushSessionState(force bool) error {
 	}
 	p.mu.Unlock()
 	return nil
-}
-
-func (p *Processor) RunIdleSummaryScan(ctx context.Context, idleThreshold time.Duration) {
-	if idleThreshold <= 0 {
-		return
-	}
-
-	now := p.now()
-	candidates := make([]idleSummaryCandidate, 0, 8)
-
-	p.mu.Lock()
-	for sessionKey, state := range p.sessions {
-		if state.SummaryRunning {
-			continue
-		}
-		if strings.TrimSpace(state.ThreadID) == "" {
-			continue
-		}
-		if state.LastMessageAt.IsZero() {
-			continue
-		}
-		if now.Sub(state.LastMessageAt) < idleThreshold {
-			continue
-		}
-		if state.LastIdleSummaryAnchor.Equal(state.LastMessageAt) {
-			continue
-		}
-
-		state.SummaryRunning = true
-		p.sessions[sessionKey] = state
-		candidates = append(candidates, idleSummaryCandidate{
-			SessionKey:     sessionKey,
-			MemoryScopeKey: defaultIfEmpty(state.MemoryScopeKey, memoryScopeKeyFromSessionKey(sessionKey)),
-			ThreadID:       state.ThreadID,
-			Anchor:         state.LastMessageAt,
-		})
-	}
-	p.mu.Unlock()
-
-	for _, candidate := range candidates {
-		go p.runIdleSummaryTask(ctx, candidate)
-	}
-}
-
-func (p *Processor) runIdleSummaryTask(ctx context.Context, candidate idleSummaryCandidate) {
-	defer p.clearSummaryRunning(candidate.SessionKey)
-
-	if !p.isSummaryAnchorCurrent(candidate.SessionKey, candidate.Anchor) {
-		return
-	}
-
-	prompt, err := p.renderPromptFile(connectorPromptIdleSummary, nil)
-	if err != nil {
-		logging.Errorf("render idle summary prompt failed session=%s thread_id=%s: %v", candidate.SessionKey, candidate.ThreadID, err)
-		return
-	}
-	reply, nextThreadID, err := p.runLLM(ctx, candidate.ThreadID, prompt, llmRunOptions{}, nil, nil)
-	if err != nil {
-		logging.Errorf("idle summary llm failed session=%s thread_id=%s: %v", candidate.SessionKey, candidate.ThreadID, err)
-		return
-	}
-	if strings.TrimSpace(nextThreadID) != "" {
-		p.setThreadID(candidate.SessionKey, nextThreadID)
-	}
-
-	if !p.isSummaryAnchorCurrent(candidate.SessionKey, candidate.Anchor) {
-		return
-	}
-
-	summary := strings.TrimSpace(reply)
-	if summary == "" {
-		summary = "无重要新增信息"
-	}
-	if p.memory == nil {
-		logging.Debugf("idle summary skipped write session=%s reason=no_memory_manager", candidate.SessionKey)
-		return
-	}
-	if err := p.memory.AppendDailySummary(candidate.MemoryScopeKey, candidate.SessionKey, summary, p.now()); err != nil {
-		logging.Errorf("append daily summary failed session=%s: %v", candidate.SessionKey, err)
-		return
-	}
-
-	p.mu.Lock()
-	state, ok := p.sessions[candidate.SessionKey]
-	if ok && state.LastMessageAt.Equal(candidate.Anchor) {
-		state.LastIdleSummaryAnchor = candidate.Anchor
-		p.sessions[candidate.SessionKey] = state
-		p.markStateChangedLocked()
-	}
-	p.mu.Unlock()
-}
-
-func (p *Processor) clearSummaryRunning(sessionKey string) {
-	sessionKey = strings.TrimSpace(sessionKey)
-	if sessionKey == "" {
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	state, ok := p.sessions[sessionKey]
-	if !ok || !state.SummaryRunning {
-		return
-	}
-	state.SummaryRunning = false
-	p.sessions[sessionKey] = state
-}
-
-func (p *Processor) isSummaryAnchorCurrent(sessionKey string, anchor time.Time) bool {
-	sessionKey = strings.TrimSpace(sessionKey)
-	if sessionKey == "" {
-		return false
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	state, ok := p.sessions[sessionKey]
-	if !ok {
-		return false
-	}
-	return state.LastMessageAt.Equal(anchor)
-}
-
-type idleSummaryCandidate struct {
-	SessionKey     string
-	MemoryScopeKey string
-	ThreadID       string
-	Anchor         time.Time
 }

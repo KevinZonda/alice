@@ -15,7 +15,6 @@ import (
 
 type Processor struct {
 	llm             llm.Backend
-	memory          MemoryManager
 	sender          Sender
 	replies         *replyDispatcher
 	failureMessage  string
@@ -37,10 +36,11 @@ type Processor struct {
 }
 
 type builtinHelpConfig struct {
-	chatEnabled        bool
-	workEnabled        bool
-	workRequireMention bool
-	workTriggerTag     string
+	chatEnabled       bool
+	workEnabled       bool
+	workTriggerTag    string
+	workTriggerMode   string
+	workTriggerPrefix string
 }
 
 const interruptedReplyMessage = "已收到你的新消息，当前回复已中断并切换到最新输入。"
@@ -56,19 +56,8 @@ func NewProcessor(
 	failureMessage string,
 	thinkingMessage string,
 ) *Processor {
-	return NewProcessorWithMemory(backend, sender, failureMessage, thinkingMessage, nil)
-}
-
-func NewProcessorWithMemory(
-	backend llm.Backend,
-	sender Sender,
-	failureMessage string,
-	thinkingMessage string,
-	memoryManager MemoryManager,
-) *Processor {
 	return &Processor{
 		llm:             backend,
-		memory:          memoryManager,
 		sender:          sender,
 		replies:         newReplyDispatcher(sender),
 		failureMessage:  failureMessage,
@@ -99,13 +88,13 @@ func (p *Processor) SetImmediateFeedback(mode, emojiType string) {
 	p.feedbackEmoji = normalizeImmediateFeedbackEmoji(emojiType)
 }
 
-func (p *Processor) SetBuiltinHelpConfig(groupScenes config.GroupScenesConfig) {
+func (p *Processor) SetBuiltinHelpConfig(cfg config.Config) {
 	if p == nil {
 		return
 	}
 	p.runtimeMu.Lock()
 	defer p.runtimeMu.Unlock()
-	p.helpConfig = builtinHelpConfigFromGroupScenes(groupScenes)
+	p.helpConfig = builtinHelpConfigFromConfig(cfg)
 }
 
 func (p *Processor) SetRuntimeAPI(baseURL, token, runtimeBin string) {
@@ -171,19 +160,21 @@ type processorRuntimeSnapshot struct {
 
 func defaultBuiltinHelpConfig() builtinHelpConfig {
 	return builtinHelpConfig{
-		chatEnabled:        true,
-		workEnabled:        true,
-		workRequireMention: true,
-		workTriggerTag:     "#work",
+		chatEnabled:       true,
+		workEnabled:       true,
+		workTriggerTag:    "#work",
+		workTriggerMode:   config.TriggerModeAt,
+		workTriggerPrefix: "",
 	}
 }
 
-func builtinHelpConfigFromGroupScenes(groupScenes config.GroupScenesConfig) builtinHelpConfig {
+func builtinHelpConfigFromConfig(cfg config.Config) builtinHelpConfig {
 	return builtinHelpConfig{
-		chatEnabled:        groupScenes.Chat.Enabled,
-		workEnabled:        groupScenes.Work.Enabled,
-		workRequireMention: groupScenes.Work.RequireMention,
-		workTriggerTag:     strings.TrimSpace(groupScenes.Work.TriggerTag),
+		chatEnabled:       cfg.GroupScenes.Chat.Enabled,
+		workEnabled:       cfg.GroupScenes.Work.Enabled,
+		workTriggerTag:    strings.TrimSpace(cfg.GroupScenes.Work.TriggerTag),
+		workTriggerMode:   strings.TrimSpace(cfg.TriggerMode),
+		workTriggerPrefix: strings.TrimSpace(cfg.TriggerPrefix),
 	}
 }
 
@@ -199,7 +190,6 @@ func (p *Processor) ProcessJobState(ctx context.Context, job Job) JobProcessStat
 	}
 
 	sessionKey := sessionKeyForJob(job)
-	p.rememberSessionScope(sessionKey, memoryScopeKeyForJob(job))
 	p.touchSessionMessage(sessionKey, p.now())
 
 	logging.Debugf(
@@ -222,7 +212,7 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 	sessionKey := sessionKeyForJob(job)
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
-	promptText := p.buildPromptWithMemory(ctx, job, currentThreadID)
+	promptText := p.buildPrompt(ctx, job, currentThreadID)
 	reply, nextThreadID, err := p.runLLM(
 		ctx,
 		currentThreadID,
@@ -235,14 +225,11 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 	if errors.Is(err, context.Canceled) {
 		if wasInterruptedByNewMessage(ctx) {
 			logging.Infof("llm interrupted by newer message event_id=%s", job.EventID)
-			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 			return JobProcessRetryAfterRestart
 		}
 		logging.Infof("llm canceled event_id=%s", job.EventID)
-		logging.Debugf("memory update skipped event_id=%s changed=false reason=llm_canceled", job.EventID)
 		return JobProcessRetryAfterRestart
 	}
-	failed := err != nil
 	if err != nil {
 		logging.Errorf("llm failed event_id=%s: %v", job.EventID, err)
 		reply = p.runtimeSnapshot().failureMessage
@@ -250,7 +237,6 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 	if shouldSuppressReply(job, reply) {
 		reply = ""
 	}
-	p.recordInteraction(job, p.buildCurrentUserInput(job), reply, failed)
 
 	if sendErr := p.replies.send(ctx, job, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
 		logging.Errorf("send message failed event_id=%s: %v", job.EventID, sendErr)
@@ -260,7 +246,6 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 
 func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcessState {
 	sessionKey := sessionKeyForJob(job)
-	p.rememberSessionScope(sessionKey, memoryScopeKeyForJob(job))
 	ackDelivered := false
 	if !job.DisableAck {
 		ackDelivered = p.sendImmediateFeedback(ctx, job)
@@ -309,7 +294,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
-	promptText := p.buildPromptWithMemory(ctx, job, currentThreadID)
+	promptText := p.buildPrompt(ctx, job, currentThreadID)
 	finalReply, nextThreadID, runErr := p.runLLM(
 		ctx,
 		currentThreadID,
@@ -334,7 +319,6 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			} else {
 				p.rememberReplySessionMessage(job, messageID)
 			}
-			logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 			return JobProcessRetryAfterRestart
 		}
 		// Parent context cancellation usually means app shutdown.
@@ -359,18 +343,15 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		} else {
 			p.rememberReplySessionMessage(job, messageID)
 		}
-		logging.Debugf("memory update skipped event_id=%s changed=false reason=job_interrupted", job.EventID)
 		return JobProcessRetryAfterRestart
 	}
-	failed := runErr != nil
-	if failed {
+	if runErr != nil {
 		logging.Errorf("llm failed event_id=%s: %v", job.EventID, runErr)
 		finalReply = p.runtimeSnapshot().failureMessage
 	}
 	if shouldSuppressReply(job, finalReply) {
 		finalReply = ""
 	}
-	p.recordInteraction(job, p.buildCurrentUserInput(job), finalReply, failed)
 	if strings.TrimSpace(finalReply) != "" &&
 		strings.TrimSpace(finalReply) != lastSentAgentMessage {
 		messageID, replyErr := p.replies.reply(ctx, job, job.SourceMessageID, finalReply)

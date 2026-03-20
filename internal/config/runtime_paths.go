@@ -13,7 +13,6 @@ const (
 
 	defaultConfigFileName      = "config.yaml"
 	defaultWorkspaceDirName    = "workspace"
-	defaultMemoryDirName       = "memory"
 	defaultPromptDirName       = "prompts"
 	defaultLogDirName          = "log"
 	defaultRunDirName          = "run"
@@ -66,10 +65,6 @@ func DefaultWorkspaceDir() string {
 	return WorkspaceDirForAliceHome("")
 }
 
-func DefaultMemoryDir() string {
-	return MemoryDirForAliceHome("")
-}
-
 func DefaultPromptDir() string {
 	return PromptDirForAliceHome("")
 }
@@ -104,10 +99,6 @@ func ConfigPathForAliceHome(aliceHome string) string {
 
 func WorkspaceDirForAliceHome(aliceHome string) string {
 	return filepath.Join(ResolveAliceHomeDir(aliceHome), defaultWorkspaceDirName)
-}
-
-func MemoryDirForAliceHome(aliceHome string) string {
-	return filepath.Join(ResolveAliceHomeDir(aliceHome), defaultMemoryDirName)
 }
 
 func PromptDirForAliceHome(aliceHome string) string {

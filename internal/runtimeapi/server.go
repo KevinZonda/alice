@@ -18,7 +18,6 @@ import (
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/campaign"
 	"github.com/Alice-space/alice/internal/mcpbridge"
-	"github.com/Alice-space/alice/internal/memory"
 )
 
 type Sender interface {
@@ -45,7 +44,6 @@ type Server struct {
 	addr       string
 	token      string
 	sender     Sender
-	memory     *memory.Manager
 	automation *automation.Store
 	campaigns  *campaign.Store
 	engine     *gin.Engine
@@ -55,7 +53,6 @@ type Server struct {
 func NewServer(
 	addr, token string,
 	sender Sender,
-	memoryManager *memory.Manager,
 	automationStore *automation.Store,
 	campaignStore *campaign.Store,
 ) *Server {
@@ -67,7 +64,6 @@ func NewServer(
 		addr:       strings.TrimSpace(addr),
 		token:      strings.TrimSpace(token),
 		sender:     sender,
-		memory:     memoryManager,
 		automation: automationStore,
 		campaigns:  campaignStore,
 		engine:     engine,
@@ -79,9 +75,6 @@ func NewServer(
 	api := engine.Group("/api/v1")
 	api.POST("/messages/image", srv.handleSendImage)
 	api.POST("/messages/file", srv.handleSendFile)
-	api.GET("/memory/context", srv.handleMemoryContext)
-	api.PUT("/memory/long-term", srv.handleMemoryWriteLongTerm)
-	api.POST("/memory/daily-summary", srv.handleMemoryDailySummary)
 	api.GET("/automation/tasks", srv.handleAutomationTaskList)
 	api.POST("/automation/tasks", srv.handleAutomationTaskCreate)
 	api.GET("/automation/tasks/:taskID", srv.handleAutomationTaskGet)
@@ -249,78 +242,6 @@ func (s *Server) handleSendFile(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "type": "file", "file_key": fileKey})
-}
-
-func (s *Server) handleMemoryContext(c *gin.Context) {
-	if s.memory == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory manager is unavailable"})
-		return
-	}
-	session, err := sessionContextFromHeaders(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	snapshot, err := s.memory.Snapshot(memoryScopeKey(session), time.Now().Local())
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, snapshot)
-}
-
-func (s *Server) handleMemoryWriteLongTerm(c *gin.Context) {
-	if s.memory == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory manager is unavailable"})
-		return
-	}
-	session, err := sessionContextFromHeaders(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	var req MemoryWriteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	path, err := s.memory.WriteLongTerm(memoryScopeKey(session), req.ScopeType, req.Content)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	snapshot, err := s.memory.Snapshot(memoryScopeKey(session), time.Now().Local())
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "path": path, "memory": snapshot})
-}
-
-func (s *Server) handleMemoryDailySummary(c *gin.Context) {
-	if s.memory == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "memory manager is unavailable"})
-		return
-	}
-	session, err := sessionContextFromHeaders(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	var req DailySummaryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	sessionKey := strings.TrimSpace(req.SessionKey)
-	if sessionKey == "" {
-		sessionKey = defaultSessionKey(session)
-	}
-	if err := s.memory.AppendDailySummary(memoryScopeKey(session), sessionKey, req.Summary, req.At); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (s *Server) handleAutomationTaskList(c *gin.Context) {
@@ -506,16 +427,6 @@ func sessionContextFromHeadersNoError(c *gin.Context) mcpbridge.SessionContext {
 		ChatType:        strings.TrimSpace(c.GetHeader(HeaderChatType)),
 		SessionKey:      strings.TrimSpace(c.GetHeader(HeaderSessionKey)),
 	}
-}
-
-func memoryScopeKey(session mcpbridge.SessionContext) string {
-	if sessionKey := strings.TrimSpace(session.SessionKey); sessionKey != "" {
-		if idx := strings.Index(sessionKey, "|"); idx >= 0 {
-			return strings.TrimSpace(sessionKey[:idx])
-		}
-		return sessionKey
-	}
-	return strings.TrimSpace(session.ReceiveIDType) + ":" + strings.TrimSpace(session.ReceiveID)
 }
 
 func defaultSessionKey(session mcpbridge.SessionContext) string {

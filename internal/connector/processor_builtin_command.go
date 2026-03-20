@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/logging"
 )
 
@@ -31,7 +32,10 @@ func isHelpCommand(text string) bool {
 
 func (p *Processor) processHelpCommand(ctx context.Context, job Job) JobProcessState {
 	reply := buildBuiltinHelpMarkdown(p.runtimeSnapshot().helpConfig)
-	if err := p.replies.respond(ctx, job, reply); err != nil {
+	replyJob := job
+	replyJob.Scene = jobSceneChat
+	replyJob.CreateFeishuThread = false
+	if err := p.replies.respond(ctx, replyJob, reply); err != nil {
 		logging.Errorf("send builtin help reply failed event_id=%s: %v", job.EventID, err)
 	}
 	return JobProcessCompleted
@@ -67,22 +71,26 @@ func buildBuiltinHelpMarkdown(helpCfg builtinHelpConfig) string {
 		lines = append(lines,
 			"- `工作模式`",
 			"  任务协作模式，适合排查问题、改代码，以及直接给出结论 / 计划 / 风险 / 下一步。",
-			fmt.Sprintf("  当前配置：群根消息使用 %s 触发，后续同一 thread 会继续沿用工作上下文。", formatWorkModeTrigger(helpCfg)),
+			fmt.Sprintf("  当前配置：群根消息需要同时满足 %s 才会进入工作模式；进入后，同一 thread 里继续满足触发条件的新消息会沿用工作上下文。", formatWorkModeTrigger(helpCfg)),
 		)
 	}
 	return strings.Join(lines, "\n")
 }
 
 func formatWorkModeTrigger(helpCfg builtinHelpConfig) string {
-	parts := make([]string, 0, 2)
-	if tag := strings.TrimSpace(helpCfg.workTriggerTag); tag != "" {
-		parts = append(parts, "`"+tag+"`")
+	trigger := "`@机器人`"
+	if strings.EqualFold(strings.TrimSpace(helpCfg.workTriggerMode), config.TriggerModePrefix) {
+		prefix := strings.TrimSpace(helpCfg.workTriggerPrefix)
+		if prefix == "" {
+			trigger = "`前缀`"
+		} else {
+			trigger = "`" + prefix + "` 前缀"
+		}
 	}
-	if helpCfg.workRequireMention {
-		parts = append(parts, "`@机器人`")
+
+	tag := strings.TrimSpace(helpCfg.workTriggerTag)
+	if tag == "" {
+		return trigger
 	}
-	if len(parts) == 0 {
-		return "工作模式触发条件"
-	}
-	return strings.Join(parts, " + ")
+	return trigger + " + `" + tag + "`"
 }

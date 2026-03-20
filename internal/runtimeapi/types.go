@@ -2,7 +2,6 @@ package runtimeapi
 
 import (
 	"strings"
-	"time"
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/campaign"
@@ -34,17 +33,6 @@ type FileRequest struct {
 	Path     string `json:"path,omitempty"`
 	FileName string `json:"file_name,omitempty"`
 	Caption  string `json:"caption,omitempty"`
-}
-
-type MemoryWriteRequest struct {
-	ScopeType string `json:"scope_type"`
-	Content   string `json:"content"`
-}
-
-type DailySummaryRequest struct {
-	SessionKey string    `json:"session_key,omitempty"`
-	Summary    string    `json:"summary"`
-	At         time.Time `json:"at,omitempty"`
 }
 
 type CreateTaskRequest struct {

@@ -5,22 +5,17 @@ feishu_app_secret: "xxxxxx"
 # Optional, default is https://open.feishu.cn
 feishu_base_url: "https://open.feishu.cn"
 # Optional but recommended for group chats: strict bot mention filtering
-# If group_scenes.work.require_mention=true, Alice uses these IDs to recognize @bot.
-# If group_scenes is disabled, matching falls back to trigger_mode + trigger_prefix rules.
+# Alice uses these IDs to recognize @bot when trigger_mode=at.
 # Empty means Alice will not use a preconfigured bot identity for mention matching.
 feishu_bot_open_id: ""
 feishu_bot_user_id: ""
-# Legacy group trigger mode used when group_scenes is disabled:
-# - at: only process group/topic-group messages that @bot (default)
-# - active: process all group/topic-group messages, except messages starting with trigger_prefix
-# - prefix: only process group/topic-group messages starting with trigger_prefix
+# Group work-scene trigger mode:
+# - at: only messages that @bot can enter / continue a work session (default)
+# - prefix: only messages starting with trigger_prefix can enter / continue a work session
 trigger_mode: "at"
-# Prefix used by legacy trigger_mode:
-# - active: ignore messages starting with this prefix
-# - prefix: only process messages starting with this prefix, and strip prefix before LLM input
-# Empty means:
-# - active: no prefix-based ignore rule
-# - prefix: invalid config (trigger_prefix is required)
+# Prefix used when trigger_mode=prefix.
+# Matching messages will strip this prefix before LLM input.
+# Empty means invalid config when trigger_mode=prefix.
 trigger_prefix: ""
 
 # LLM runtime (supported providers: codex, claude, kimi)
@@ -63,7 +58,6 @@ runtime_http_token: ""
 alice_home: ""
 # Runtime directories (leave empty to use defaults under alice_home)
 # workspace_dir default: <alice_home>/workspace
-# memory_dir default: <alice_home>/memory
 # prompt_dir default: <alice_home>/prompts
 # Empty means use the default path under alice_home.
 workspace_dir: ""
@@ -73,9 +67,6 @@ workspace_dir: ""
 env:
   HTTPS_PROXY: "http://127.0.0.1:7890"
   ALL_PROXY: "socks5://127.0.0.1:7891"
-# Memory directory (long-term MEMORY.md + short-term YYYY-MM-DD.md)
-# Empty means use <alice_home>/memory.
-memory_dir: ""
 # Empty means use <alice_home>/prompts.
 prompt_dir: ""
 
@@ -92,20 +83,18 @@ thinking_message: "正在思考中..."
 immediate_feedback_mode: "reply"
 # Feishu reaction type when immediate_feedback_mode is reaction.
 immediate_feedback_reaction: "SMILE"
-# Optional scene router for group/topic-group chats. When enabled, it takes priority over
-# trigger_mode / trigger_prefix.
+# Scene router for group/topic-group chats.
+# chat: default group conversation mode, no trigger required.
+# work: starter message must satisfy `trigger_mode`/`trigger_prefix` and contain trigger_tag.
 group_scenes:
   chat:
     enabled: true
-    require_mention: false
-    trigger_tag: ""
     session_scope: "per_chat"
     llm_profile: "chat"
     no_reply_token: "[[NO_REPLY]]"
     create_feishu_thread: false
   work:
     enabled: true
-    require_mention: true
     trigger_tag: "#work"
     session_scope: "per_thread"
     llm_profile: "work"
@@ -117,7 +106,6 @@ queue_capacity: 256
 worker_concurrency: 1
 # Timeout (seconds) for one automation user task execution (run_llm/send_text)
 automation_task_timeout_secs: 6000
-idle_summary_hours: 8
 
 # debug | info | warn | error
 log_level: "info"

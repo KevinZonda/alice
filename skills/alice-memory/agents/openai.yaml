@@ -1,4 +1,0 @@
-interface:
-  display_name: "Alice 记忆"
-  short_description: "查看和更新当前会话的 Alice memory"
-  default_prompt: "使用 $alice-memory 查看或更新当前会话的 Alice 记忆。"

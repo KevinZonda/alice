@@ -30,15 +30,13 @@ func configForGroupScenesTest() config.Config {
 	}
 	cfg.GroupScenes = config.GroupScenesConfig{
 		Chat: config.GroupSceneConfig{
-			Enabled:        true,
-			RequireMention: false,
-			SessionScope:   config.GroupSceneSessionPerChat,
-			LLMProfile:     "chat",
-			NoReplyToken:   "[[NO_REPLY]]",
+			Enabled:      true,
+			SessionScope: config.GroupSceneSessionPerChat,
+			LLMProfile:   "chat",
+			NoReplyToken: "[[NO_REPLY]]",
 		},
 		Work: config.GroupSceneConfig{
 			Enabled:            true,
-			RequireMention:     true,
 			TriggerTag:         "#work",
 			SessionScope:       config.GroupSceneSessionPerThread,
 			LLMProfile:         "work",
@@ -93,7 +91,7 @@ func TestApp_OnMessageReceive_GroupChatSceneSharesSessionAcrossMessages(t *testi
 		if job.Scene != jobSceneChat {
 			t.Fatalf("job %d unexpected scene: %q", idx+1, job.Scene)
 		}
-		if job.ResponseMode != jobResponseModeSend {
+		if job.ResponseMode != jobResponseModeReply {
 			t.Fatalf("job %d unexpected response mode: %q", idx+1, job.ResponseMode)
 		}
 		if !job.DisableAck {
@@ -102,14 +100,17 @@ func TestApp_OnMessageReceive_GroupChatSceneSharesSessionAcrossMessages(t *testi
 		if job.SessionKey != "chat_id:oc_chat|scene:chat" {
 			t.Fatalf("job %d unexpected session key: %q", idx+1, job.SessionKey)
 		}
-		if job.MemoryScopeKey != "chat_id:oc_chat|scene:chat" {
-			t.Fatalf("job %d unexpected memory scope key: %q", idx+1, job.MemoryScopeKey)
+		if job.ResourceScopeKey != "chat_id:oc_chat|scene:chat" {
+			t.Fatalf("job %d unexpected resource scope key: %q", idx+1, job.ResourceScopeKey)
 		}
 		if job.LLMModel != "gpt-5.4-mini" || job.LLMReasoningEffort != "low" || job.LLMPersonality != "friendly" {
 			t.Fatalf("job %d unexpected llm profile: model=%q reasoning=%q personality=%q", idx+1, job.LLMModel, job.LLMReasoningEffort, job.LLMPersonality)
 		}
 		if job.NoReplyToken != "[[NO_REPLY]]" {
 			t.Fatalf("job %d unexpected no-reply token: %q", idx+1, job.NoReplyToken)
+		}
+		if job.CreateFeishuThread {
+			t.Fatalf("job %d chat scene should reply directly instead of creating thread", idx+1)
 		}
 	}
 	if job1.SessionVersion != 1 {
@@ -151,9 +152,14 @@ func TestApp_OnMessageReceive_WorkSceneUsesDedicatedThreadSession(t *testing.T) 
 				RootId:      strPtr("om_work_root"),
 				ParentId:    strPtr("om_work_root"),
 				MessageType: strPtr("text"),
-				Content:     strPtr(`{"text":"继续看看日志"}`),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> 继续看看日志"}`),
 				ChatId:      strPtr("oc_chat"),
 				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{OpenId: strPtr("ou_bot")},
+					},
+				},
 			},
 		},
 	}
@@ -177,17 +183,23 @@ func TestApp_OnMessageReceive_WorkSceneUsesDedicatedThreadSession(t *testing.T) 
 	if job1.ResponseMode != jobResponseModeReply || job2.ResponseMode != jobResponseModeReply {
 		t.Fatalf("unexpected work response modes: %q %q", job1.ResponseMode, job2.ResponseMode)
 	}
+	if job1.DisableAck || job2.DisableAck {
+		t.Fatalf("work scene should keep immediate ack enabled")
+	}
+	if !job1.CreateFeishuThread || !job2.CreateFeishuThread {
+		t.Fatalf("work scene should keep create_feishu_thread enabled")
+	}
 	if job1.SessionKey != "chat_id:oc_chat|scene:work|seed:om_work_root" {
 		t.Fatalf("unexpected work start session key: %q", job1.SessionKey)
 	}
 	if job2.SessionKey != job1.SessionKey {
 		t.Fatalf("work followup should reuse session key, got %q want %q", job2.SessionKey, job1.SessionKey)
 	}
-	if job1.MemoryScopeKey != "chat_id:oc_chat|scene:work|thread:om_work_root" {
-		t.Fatalf("unexpected work start memory scope key: %q", job1.MemoryScopeKey)
+	if job1.ResourceScopeKey != "chat_id:oc_chat|scene:work|thread:om_work_root" {
+		t.Fatalf("unexpected work start resource scope key: %q", job1.ResourceScopeKey)
 	}
-	if job2.MemoryScopeKey != job1.MemoryScopeKey {
-		t.Fatalf("work followup should reuse memory scope key, got %q want %q", job2.MemoryScopeKey, job1.MemoryScopeKey)
+	if job2.ResourceScopeKey != job1.ResourceScopeKey {
+		t.Fatalf("work followup should reuse resource scope key, got %q want %q", job2.ResourceScopeKey, job1.ResourceScopeKey)
 	}
 	if job1.Text != "帮我排查一下" {
 		t.Fatalf("unexpected work start text: %q", job1.Text)

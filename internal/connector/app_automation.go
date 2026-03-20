@@ -27,7 +27,6 @@ func (a *App) startBackgroundAutomation(ctx context.Context) {
 		return
 	}
 	if a.processor != nil {
-		go a.idleSummaryLoop(ctx)
 		go a.sessionStateFlushLoop(ctx)
 	}
 }

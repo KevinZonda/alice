@@ -40,11 +40,9 @@ type appRuntimeConfig struct {
 	groupScenes     config.GroupScenesConfig
 	feishuBotOpenID string
 	feishuBotUserID string
-	idleSummaryIdle time.Duration
 }
 
 const (
-	idleSummaryScanInterval   = 60 * time.Second
 	sessionStateFlushInterval = 1 * time.Second
 )
 
@@ -59,7 +57,7 @@ func NewApp(cfg config.Config, processor *Processor) *App {
 		prompts:   prompting.DefaultLoader(),
 	}
 	if processor != nil {
-		processor.SetBuiltinHelpConfig(cfg.GroupScenes)
+		processor.SetBuiltinHelpConfig(cfg)
 	}
 	return app
 }
@@ -73,7 +71,6 @@ func newAppRuntimeConfig(cfg config.Config) appRuntimeConfig {
 		groupScenes:     cfg.GroupScenes,
 		feishuBotOpenID: cfg.FeishuBotOpenID,
 		feishuBotUserID: cfg.FeishuBotUserID,
-		idleSummaryIdle: cfg.IdleSummaryIdle,
 	}
 }
 
@@ -94,16 +91,8 @@ func (a *App) UpdateRuntimeConfig(cfg config.Config) {
 	a.runtime = newAppRuntimeConfig(cfg)
 	a.cfgMu.Unlock()
 	if a.processor != nil {
-		a.processor.SetBuiltinHelpConfig(cfg.GroupScenes)
+		a.processor.SetBuiltinHelpConfig(cfg)
 	}
-}
-
-func (a *App) IdleSummaryIdle() time.Duration {
-	cfg := a.runtimeConfig()
-	if cfg.idleSummaryIdle <= 0 {
-		return 8 * time.Hour
-	}
-	return cfg.idleSummaryIdle
 }
 
 func cloneLLMProfiles(in map[string]config.LLMProfileConfig) map[string]config.LLMProfileConfig {
@@ -175,23 +164,6 @@ func (a *App) startWorker(ctx context.Context, idx int) {
 
 func (a *App) waitWorkers() {
 	a.workerWG.Wait()
-}
-
-func (a *App) idleSummaryLoop(ctx context.Context) {
-	ticker := time.NewTicker(idleSummaryScanInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if a.processor == nil {
-				continue
-			}
-			a.processor.RunIdleSummaryScan(ctx, a.IdleSummaryIdle())
-		}
-	}
 }
 
 func (a *App) sessionStateFlushLoop(ctx context.Context) {

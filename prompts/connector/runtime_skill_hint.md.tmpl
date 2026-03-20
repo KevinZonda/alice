@@ -1,4 +1,4 @@
 {{- /* Stage: Runtime-skill invocation hint injection; used by Processor.appendRuntimeSkillHint for skill-triggered messages. */ -}}
-当前会话操作说明：只有发图片、文件等附件时才使用 alice-message skill；文本消息由程序直接转发。memory 和定时任务请使用 alice-memory / alice-scheduler / alice-code-army skills。所有这些能力都通过 Alice 本地 HTTP API 自动路由，无需手动传 receive_id 或 source_message_id。
+当前会话操作说明：只有发图片、文件等附件时才使用 alice-message skill；文本消息由程序直接转发。定时任务和实验协作请使用 alice-scheduler / alice-code-army skills。所有这些能力都通过 Alice 本地 HTTP API 自动路由，无需手动传 receive_id 或 source_message_id。
 
 {{ .UserText }}

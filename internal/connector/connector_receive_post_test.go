@@ -39,7 +39,7 @@ func TestApp_OnMessageReceive_GroupChatSceneQueuesPostWithoutMention(t *testing.
 	if job.Scene != jobSceneChat {
 		t.Fatalf("unexpected scene: %q", job.Scene)
 	}
-	if job.ResponseMode != jobResponseModeSend {
+	if job.ResponseMode != jobResponseModeReply {
 		t.Fatalf("unexpected response mode: %q", job.ResponseMode)
 	}
 	if len(job.Attachments) != 1 {
@@ -51,8 +51,8 @@ func TestApp_OnMessageReceive_GroupChatSceneQueuesPostWithoutMention(t *testing.
 	if job.SessionKey != "chat_id:oc_chat|scene:chat" {
 		t.Fatalf("unexpected session key: %q", job.SessionKey)
 	}
-	if job.MemoryScopeKey != "chat_id:oc_chat|scene:chat" {
-		t.Fatalf("unexpected memory scope key: %q", job.MemoryScopeKey)
+	if job.ResourceScopeKey != "chat_id:oc_chat|scene:chat" {
+		t.Fatalf("unexpected resource scope key: %q", job.ResourceScopeKey)
 	}
 	if job.LLMModel != "gpt-5.4-mini" {
 		t.Fatalf("unexpected llm model: %q", job.LLMModel)
@@ -62,5 +62,8 @@ func TestApp_OnMessageReceive_GroupChatSceneQueuesPostWithoutMention(t *testing.
 	}
 	if job.LLMPersonality != "friendly" {
 		t.Fatalf("unexpected llm personality: %q", job.LLMPersonality)
+	}
+	if job.CreateFeishuThread {
+		t.Fatalf("chat scene post reply should not create thread")
 	}
 }

@@ -109,8 +109,8 @@ func (a *App) enqueueJob(job *Job) (queued bool, cancelActive context.CancelFunc
 	if strings.TrimSpace(job.SessionKey) == "" {
 		job.SessionKey = buildSessionKey(job.ReceiveIDType, job.ReceiveID)
 	}
-	if strings.TrimSpace(job.MemoryScopeKey) == "" {
-		job.MemoryScopeKey = memoryScopeKeyForJob(*job)
+	if strings.TrimSpace(job.ResourceScopeKey) == "" {
+		job.ResourceScopeKey = resourceScopeKeyForJob(*job)
 	}
 	job.WorkflowPhase = normalizeJobWorkflowPhase(job.WorkflowPhase)
 

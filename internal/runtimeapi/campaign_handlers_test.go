@@ -11,7 +11,7 @@ import (
 
 func TestCampaignHandlers_CreateListAndMutate(t *testing.T) {
 	store := campaign.NewStore(filepath.Join(t.TempDir(), "campaigns.db"))
-	server := NewServer("", "", nil, nil, nil, store)
+	server := NewServer("", "", nil, nil, store)
 	httpServer := httptest.NewServer(server.engine)
 	defer httpServer.Close()
 

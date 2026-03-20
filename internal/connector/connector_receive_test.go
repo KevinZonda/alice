@@ -98,60 +98,6 @@ func TestApp_OnMessageReceive_GroupMentionWithoutBotIDConfigNotQueued(t *testing
 	}
 }
 
-func TestApp_OnMessageReceive_GroupActiveModeWithoutMentionQueued(t *testing.T) {
-	cfg := configForTest()
-	cfg.TriggerMode = "active"
-	cfg.TriggerPrefix = "/silent"
-	app := NewApp(cfg, nil)
-
-	event := &larkim.P2MessageReceiveV1{
-		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_active_ok"}},
-		Event: &larkim.P2MessageReceiveV1Data{
-			Message: &larkim.EventMessage{
-				MessageId:   strPtr("om_active_ok"),
-				MessageType: strPtr("text"),
-				Content:     strPtr(`{"text":"今天开会安排一下"}`),
-				ChatId:      strPtr("oc_chat"),
-				ChatType:    strPtr("group"),
-			},
-		},
-	}
-
-	if err := app.onMessageReceive(context.Background(), event); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := len(app.queue); got != 1 {
-		t.Fatalf("expected queue len 1, got %d", got)
-	}
-}
-
-func TestApp_OnMessageReceive_GroupActiveModePrefixIgnored(t *testing.T) {
-	cfg := configForTest()
-	cfg.TriggerMode = "active"
-	cfg.TriggerPrefix = "/silent"
-	app := NewApp(cfg, nil)
-
-	event := &larkim.P2MessageReceiveV1{
-		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_active_ignored"}},
-		Event: &larkim.P2MessageReceiveV1Data{
-			Message: &larkim.EventMessage{
-				MessageId:   strPtr("om_active_ignored"),
-				MessageType: strPtr("text"),
-				Content:     strPtr(`{"text":"/silent 这条不用回复"}`),
-				ChatId:      strPtr("oc_chat"),
-				ChatType:    strPtr("group"),
-			},
-		},
-	}
-
-	if err := app.onMessageReceive(context.Background(), event); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := len(app.queue); got != 0 {
-		t.Fatalf("expected queue len 0, got %d", got)
-	}
-}
-
 func TestApp_OnMessageReceive_GroupPrefixModeRequiresPrefix(t *testing.T) {
 	cfg := configForTest()
 	cfg.TriggerMode = "prefix"
@@ -242,8 +188,8 @@ func TestApp_OnMessageReceive_SameFeishuThreadSharesSessionKey(t *testing.T) {
 	if job2.SessionKey != "chat_id:oc_chat" {
 		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
 	}
-	if job1.MemoryScopeKey != "chat_id:oc_chat" || job2.MemoryScopeKey != "chat_id:oc_chat" {
-		t.Fatalf("unexpected memory scope keys: %q %q", job1.MemoryScopeKey, job2.MemoryScopeKey)
+	if job1.ResourceScopeKey != "chat_id:oc_chat" || job2.ResourceScopeKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected resource scope keys: %q %q", job1.ResourceScopeKey, job2.ResourceScopeKey)
 	}
 	if job1.SessionVersion != 1 {
 		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
@@ -297,8 +243,8 @@ func TestApp_OnMessageReceive_ThreadReplyReusesExistingRootSessionKey(t *testing
 	if job2.SessionKey != "chat_id:oc_chat" {
 		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
 	}
-	if job1.MemoryScopeKey != "chat_id:oc_chat" || job2.MemoryScopeKey != "chat_id:oc_chat" {
-		t.Fatalf("unexpected memory scope keys: %q %q", job1.MemoryScopeKey, job2.MemoryScopeKey)
+	if job1.ResourceScopeKey != "chat_id:oc_chat" || job2.ResourceScopeKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected resource scope keys: %q %q", job1.ResourceScopeKey, job2.ResourceScopeKey)
 	}
 	if job1.SessionVersion != 1 {
 		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
@@ -402,8 +348,8 @@ func TestApp_OnMessageReceive_ExistingThreadSessionPreferredWhenRootAppears(t *t
 	if job2.SessionKey != "chat_id:oc_chat" {
 		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
 	}
-	if job1.MemoryScopeKey != "chat_id:oc_chat" || job2.MemoryScopeKey != "chat_id:oc_chat" {
-		t.Fatalf("unexpected memory scope keys: %q %q", job1.MemoryScopeKey, job2.MemoryScopeKey)
+	if job1.ResourceScopeKey != "chat_id:oc_chat" || job2.ResourceScopeKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected resource scope keys: %q %q", job1.ResourceScopeKey, job2.ResourceScopeKey)
 	}
 	if job1.SessionVersion != 1 {
 		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
@@ -486,8 +432,8 @@ func TestApp_OnMessageReceive_P2PMessagesReuseChatSessionKey(t *testing.T) {
 	if job2.SessionKey != "chat_id:oc_chat" {
 		t.Fatalf("unexpected second session key: %s", job2.SessionKey)
 	}
-	if job1.MemoryScopeKey != "chat_id:oc_chat" || job2.MemoryScopeKey != "chat_id:oc_chat" {
-		t.Fatalf("unexpected memory scope keys: %q %q", job1.MemoryScopeKey, job2.MemoryScopeKey)
+	if job1.ResourceScopeKey != "chat_id:oc_chat" || job2.ResourceScopeKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected resource scope keys: %q %q", job1.ResourceScopeKey, job2.ResourceScopeKey)
 	}
 	if job1.SessionVersion != 1 {
 		t.Fatalf("unexpected first session version: %d", job1.SessionVersion)
