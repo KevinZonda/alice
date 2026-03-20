@@ -32,6 +32,8 @@ func (b *kimiBackend) Run(ctx context.Context, req RunRequest) (RunResult, error
 		strings.TrimSpace(req.AgentName),
 		req.UserText,
 		strings.TrimSpace(req.Model),
+		strings.TrimSpace(req.Personality),
+		strings.TrimSpace(req.NoReplyToken),
 		req.Env,
 		req.OnProgress,
 	)

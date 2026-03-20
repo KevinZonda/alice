@@ -49,7 +49,7 @@ const (
 )
 
 func NewApp(cfg config.Config, processor *Processor) *App {
-	return &App{
+	app := &App{
 		cfg:       cfg,
 		runtime:   newAppRuntimeConfig(cfg),
 		queue:     make(chan Job, cfg.QueueCapacity),
@@ -58,6 +58,10 @@ func NewApp(cfg config.Config, processor *Processor) *App {
 		now:       time.Now,
 		prompts:   prompting.DefaultLoader(),
 	}
+	if processor != nil {
+		processor.SetBuiltinHelpConfig(cfg.GroupScenes)
+	}
+	return app
 }
 
 func newAppRuntimeConfig(cfg config.Config) appRuntimeConfig {
@@ -89,6 +93,9 @@ func (a *App) UpdateRuntimeConfig(cfg config.Config) {
 	a.cfgMu.Lock()
 	a.runtime = newAppRuntimeConfig(cfg)
 	a.cfgMu.Unlock()
+	if a.processor != nil {
+		a.processor.SetBuiltinHelpConfig(cfg.GroupScenes)
+	}
 }
 
 func (a *App) IdleSummaryIdle() time.Duration {

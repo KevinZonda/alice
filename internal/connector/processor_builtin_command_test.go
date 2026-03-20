@@ -44,6 +44,9 @@ func TestProcessor_HelpCommand_ListsBuiltinCommands(t *testing.T) {
 	for _, want := range []string{
 		"## Alice 内建命令",
 		"`/help`",
+		"`普通模式`",
+		"`工作模式`",
+		"`#work`",
 	} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("expected reply to contain %q, got %q", want, reply)

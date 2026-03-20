@@ -105,7 +105,7 @@ func TestBuildPrompt_NewThreadIncludesPrefix(t *testing.T) {
 		Prompts:      prompting.NewLoader(filepath.Join("..", "..", "..", "prompts")),
 		PromptPrefix: "你是助手Alice。",
 	}
-	prompt, err := runner.renderPrompt("", "你好")
+	prompt, err := runner.renderPrompt("", "你好", "", "")
 	if err != nil {
 		t.Fatalf("render prompt failed: %v", err)
 	}
@@ -119,12 +119,27 @@ func TestBuildPrompt_ResumeThreadSkipsPrefix(t *testing.T) {
 		Prompts:      prompting.NewLoader(filepath.Join("..", "..", "..", "prompts")),
 		PromptPrefix: "你是助手Alice。",
 	}
-	prompt, err := runner.renderPrompt("session_123", "你好")
+	prompt, err := runner.renderPrompt("session_123", "你好", "", "")
 	if err != nil {
 		t.Fatalf("render prompt failed: %v", err)
 	}
 	if prompt != "你好" {
 		t.Fatalf("unexpected prompt: %q", prompt)
+	}
+}
+
+func TestBuildPrompt_NewThreadIncludesPersonalityMode(t *testing.T) {
+	runner := Runner{
+		Prompts: prompting.NewLoader(filepath.Join("..", "..", "..", "prompts")),
+	}
+	prompt, err := runner.renderPrompt("", "你好", "friendly", "[[NO_REPLY]]")
+	if err != nil {
+		t.Fatalf("render prompt failed: %v", err)
+	}
+	for _, want := range []string{"普通模式", "[[NO_REPLY]]"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected prompt to contain %q, got %q", want, prompt)
+		}
 	}
 }
 
@@ -150,6 +165,8 @@ EOF
 		"",
 		"assistant",
 		"hello",
+		"",
+		"",
 		"",
 		"",
 		map[string]string{"ALICE_TEST_ENV": "env_ok"},
@@ -229,6 +246,8 @@ EOF
 		"",
 		"assistant",
 		"hello",
+		"",
+		"",
 		"",
 		"",
 		nil,

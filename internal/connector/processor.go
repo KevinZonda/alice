@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
@@ -31,7 +32,15 @@ type Processor struct {
 	runtimeAPIBase  string
 	runtimeAPIToken string
 	runtimeAPIBin   string
+	helpConfig      builtinHelpConfig
 	prompts         *prompting.Loader
+}
+
+type builtinHelpConfig struct {
+	chatEnabled        bool
+	workEnabled        bool
+	workRequireMention bool
+	workTriggerTag     string
 }
 
 const interruptedReplyMessage = "已收到你的新消息，当前回复已中断并切换到最新输入。"
@@ -68,6 +77,7 @@ func NewProcessorWithMemory(
 		feedbackEmoji:   defaultImmediateFeedbackEmoji,
 		sessions:        make(map[string]sessionState),
 		now:             time.Now,
+		helpConfig:      defaultBuiltinHelpConfig(),
 		prompts:         prompting.DefaultLoader(),
 	}
 }
@@ -87,6 +97,15 @@ func (p *Processor) SetImmediateFeedback(mode, emojiType string) {
 	defer p.runtimeMu.Unlock()
 	p.feedbackMode = normalizeImmediateFeedbackMode(mode)
 	p.feedbackEmoji = normalizeImmediateFeedbackEmoji(emojiType)
+}
+
+func (p *Processor) SetBuiltinHelpConfig(groupScenes config.GroupScenesConfig) {
+	if p == nil {
+		return
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.helpConfig = builtinHelpConfigFromGroupScenes(groupScenes)
 }
 
 func (p *Processor) SetRuntimeAPI(baseURL, token, runtimeBin string) {
@@ -134,6 +153,7 @@ func (p *Processor) runtimeSnapshot() processorRuntimeSnapshot {
 		runtimeAPIBase:  p.runtimeAPIBase,
 		runtimeAPIToken: p.runtimeAPIToken,
 		runtimeAPIBin:   p.runtimeAPIBin,
+		helpConfig:      p.helpConfig,
 	}
 }
 
@@ -146,6 +166,25 @@ type processorRuntimeSnapshot struct {
 	runtimeAPIBase  string
 	runtimeAPIToken string
 	runtimeAPIBin   string
+	helpConfig      builtinHelpConfig
+}
+
+func defaultBuiltinHelpConfig() builtinHelpConfig {
+	return builtinHelpConfig{
+		chatEnabled:        true,
+		workEnabled:        true,
+		workRequireMention: true,
+		workTriggerTag:     "#work",
+	}
+}
+
+func builtinHelpConfigFromGroupScenes(groupScenes config.GroupScenesConfig) builtinHelpConfig {
+	return builtinHelpConfig{
+		chatEnabled:        groupScenes.Chat.Enabled,
+		workEnabled:        groupScenes.Work.Enabled,
+		workRequireMention: groupScenes.Work.RequireMention,
+		workTriggerTag:     strings.TrimSpace(groupScenes.Work.TriggerTag),
+	}
 }
 
 func (p *Processor) ProcessJob(ctx context.Context, job Job) bool {

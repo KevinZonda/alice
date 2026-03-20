@@ -57,3 +57,21 @@ func TestLoaderRejectsEscapingTemplateNames(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestComposePromptPrefix_AppendsPersonalityPrompt(t *testing.T) {
+	loader := NewLoader(filepath.Join("..", "..", "prompts"))
+
+	got, err := ComposePromptPrefix(loader, "你是 Alice。", "friendly", "[[NO_REPLY]]")
+	if err != nil {
+		t.Fatalf("compose prompt prefix failed: %v", err)
+	}
+	for _, want := range []string{
+		"你是 Alice。",
+		"普通模式",
+		"[[NO_REPLY]]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected composed prompt to contain %q, got %q", want, got)
+		}
+	}
+}
