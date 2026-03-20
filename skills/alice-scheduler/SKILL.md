@@ -1,6 +1,6 @@
 ---
 name: alice-scheduler
-description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化任务。适用于创建、列出、查看、补丁更新、暂停、恢复、删除任务，以及处理 `run_llm` / `run_workflow` 任务。
+description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化任务。适用于创建、列出、查看、补丁更新、暂停、恢复、删除任务，以及处理 `send_text` / `run_llm` 任务。
 ---
 
 # Alice 调度器
@@ -21,17 +21,12 @@ description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化
   `scripts/alice-scheduler.sh patch task_xxx '{"status":"paused"}'`
 - 删除任务：
   `scripts/alice-scheduler.sh delete task_xxx`
-- 查看当前会话 `code_army` 工作流状态：
-  `scripts/alice-scheduler.sh code-army-status`
-  `scripts/alice-scheduler.sh code-army-status rust-cli-calculator`
-
 ## 任务结构
 
 - `schedule.type`：`interval` 或 `cron`
 - `schedule.every_seconds`：`interval` 必填，最小 `60`
 - `schedule.cron_expr`：`cron` 必填
-- `action.type`：`send_text`、`run_llm`、`run_workflow`
-- `action.workflow`：工作流任务当前使用 `code_army`
+- `action.type`：`send_text`、`run_llm`
 - `manage_mode`：`creator_only` 或 `scope_all`（`scope_all` 仅群聊有意义）
 
 ## 工作流
@@ -39,7 +34,6 @@ description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化
 1. 不知道任务 ID 时，先 `list` 再改删。
 2. 更新任务优先用小范围 `patch`，不要整对象重写。
 3. 一次性执行推荐：`interval + every_seconds: 60 + max_runs: 1`。
-4. 触发 `run_workflow` 后，用 `code-army-status` 跟踪进度。
 
 ## 回复模式
 

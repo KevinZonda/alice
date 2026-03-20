@@ -16,7 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Alice-space/alice/internal/automation"
-	"github.com/Alice-space/alice/internal/codearmy"
+	"github.com/Alice-space/alice/internal/campaign"
 	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/memory"
 )
@@ -47,12 +47,18 @@ type Server struct {
 	sender     Sender
 	memory     *memory.Manager
 	automation *automation.Store
-	codeArmy   *codearmy.Inspector
+	campaigns  *campaign.Store
 	engine     *gin.Engine
 	httpSrv    *http.Server
 }
 
-func NewServer(addr, token string, sender Sender, memoryManager *memory.Manager, store *automation.Store, inspector *codearmy.Inspector) *Server {
+func NewServer(
+	addr, token string,
+	sender Sender,
+	memoryManager *memory.Manager,
+	automationStore *automation.Store,
+	campaignStore *campaign.Store,
+) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(gin.Recovery())
@@ -62,8 +68,8 @@ func NewServer(addr, token string, sender Sender, memoryManager *memory.Manager,
 		token:      strings.TrimSpace(token),
 		sender:     sender,
 		memory:     memoryManager,
-		automation: store,
-		codeArmy:   inspector,
+		automation: automationStore,
+		campaigns:  campaignStore,
 		engine:     engine,
 	}
 	engine.Use(srv.authMiddleware())
@@ -81,7 +87,14 @@ func NewServer(addr, token string, sender Sender, memoryManager *memory.Manager,
 	api.GET("/automation/tasks/:taskID", srv.handleAutomationTaskGet)
 	api.PATCH("/automation/tasks/:taskID", srv.handleAutomationTaskPatch)
 	api.DELETE("/automation/tasks/:taskID", srv.handleAutomationTaskDelete)
-	api.GET("/workflows/code-army/status", srv.handleCodeArmyStatus)
+	api.GET("/campaigns", srv.handleCampaignList)
+	api.POST("/campaigns", srv.handleCampaignCreate)
+	api.GET("/campaigns/:campaignID", srv.handleCampaignGet)
+	api.PATCH("/campaigns/:campaignID", srv.handleCampaignPatch)
+	api.POST("/campaigns/:campaignID/trials", srv.handleCampaignTrialUpsert)
+	api.POST("/campaigns/:campaignID/guidance", srv.handleCampaignGuidanceAdd)
+	api.POST("/campaigns/:campaignID/reviews", srv.handleCampaignReviewAdd)
+	api.POST("/campaigns/:campaignID/pitfalls", srv.handleCampaignPitfallAdd)
 	return srv
 }
 
@@ -471,39 +484,6 @@ func (s *Server) handleAutomationTaskDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "task": deleted})
 }
 
-func (s *Server) handleCodeArmyStatus(c *gin.Context) {
-	if s.codeArmy == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "code_army inspector is unavailable"})
-		return
-	}
-	session, err := sessionContextFromHeaders(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	sessionKey := workflowSessionKey(session)
-	stateKey := strings.TrimSpace(c.Query("state_key"))
-	if stateKey != "" {
-		state, err := s.codeArmy.Get(sessionKey, stateKey)
-		if err != nil {
-			status := http.StatusBadGateway
-			if errors.Is(err, codearmy.ErrStateNotFound) {
-				status = http.StatusNotFound
-			}
-			c.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "state": state})
-		return
-	}
-	states, err := s.codeArmy.List(sessionKey)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "states": states, "count": len(states)})
-}
-
 func sessionContextFromHeaders(c *gin.Context) (mcpbridge.SessionContext, error) {
 	session := sessionContextFromHeadersNoError(c)
 	if err := session.Validate(); err != nil {
@@ -542,7 +522,7 @@ func defaultSessionKey(session mcpbridge.SessionContext) string {
 	if sessionKey := strings.TrimSpace(session.SessionKey); sessionKey != "" {
 		return sessionKey
 	}
-	return workflowSessionKey(session)
+	return scopeSessionKey(session)
 }
 
 type automationScopeContext struct {
@@ -628,20 +608,14 @@ func buildTaskFromRequest(req CreateTaskRequest, scopeCtx automationScopeContext
 		return automation.Task{}, errors.New("cron_expr is required for cron schedule")
 	}
 	if task.Action.Type == "" {
-		switch {
-		case strings.TrimSpace(task.Action.Workflow) != "":
-			task.Action.Type = automation.ActionTypeRunWorkflow
-		case strings.TrimSpace(task.Action.Prompt) != "":
+		if strings.TrimSpace(task.Action.Prompt) != "" {
 			task.Action.Type = automation.ActionTypeRunLLM
-		default:
+		} else {
 			task.Action.Type = automation.ActionTypeSendText
 		}
 	}
 	if err := validateMentionPermission(scopeCtx, task.Action.MentionUserIDs); err != nil {
 		return automation.Task{}, err
-	}
-	if task.Action.Type == automation.ActionTypeRunWorkflow {
-		task.Action.SessionKey = workflowSessionKey(scopeCtx.session)
 	}
 	if req.Enabled != nil && !*req.Enabled {
 		task.Status = automation.TaskStatusPaused
@@ -693,18 +667,13 @@ func applyTaskPatch(current automation.Task, patchBytes []byte, contentType stri
 	next.ConsecutiveFailures = current.ConsecutiveFailures
 	next.Running = current.Running
 	next.Revision = current.Revision
-	if next.Action.Type == automation.ActionTypeRunWorkflow {
-		next.Action.SessionKey = workflowSessionKey(scopeCtx.session)
-	} else {
-		next.Action.SessionKey = ""
-	}
 	if err := validateMentionPermission(scopeCtx, next.Action.MentionUserIDs); err != nil {
 		return automation.Task{}, err
 	}
 	return next, nil
 }
 
-func workflowSessionKey(session mcpbridge.SessionContext) string {
+func scopeSessionKey(session mcpbridge.SessionContext) string {
 	sessionKey := strings.TrimSpace(session.SessionKey)
 	if sessionKey != "" {
 		if idx := strings.Index(sessionKey, "|message:"); idx >= 0 {

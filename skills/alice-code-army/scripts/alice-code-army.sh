@@ -6,11 +6,11 @@ alice_home="${ALICE_HOME:-$HOME/.alice}"
 home_bin="$alice_home/bin/alice"
 
 if [[ -n "$runtime_bin" ]]; then
-  exec "$runtime_bin" runtime automation "$@"
+  exec "$runtime_bin" runtime campaigns "$@"
 fi
 
 if [[ -x "$home_bin" ]]; then
-  exec "$home_bin" runtime automation "$@"
+  exec "$home_bin" runtime campaigns "$@"
 fi
 
-exec alice runtime automation "$@"
+exec alice runtime campaigns "$@"

@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Alice-space/alice/internal/automation"
-	"github.com/Alice-space/alice/internal/codearmy"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
@@ -33,8 +31,6 @@ type Processor struct {
 	runtimeAPIBase  string
 	runtimeAPIToken string
 	runtimeAPIBin   string
-	codeArmyStatus  *codearmy.Inspector
-	automationStore *automation.Store
 	prompts         *prompting.Loader
 }
 

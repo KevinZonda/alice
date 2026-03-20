@@ -24,7 +24,7 @@ func newRuntimeCmd() *cobra.Command {
 		newRuntimeMessageCmd(),
 		newRuntimeMemoryCmd(),
 		newRuntimeAutomationCmd(),
-		newRuntimeWorkflowCmd(),
+		newRuntimeCampaignCmd(),
 	)
 	return runtimeCmd
 }

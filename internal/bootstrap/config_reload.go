@@ -2,11 +2,9 @@ package bootstrap
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"time"
 
-	"github.com/Alice-space/alice/internal/codearmy"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
@@ -76,11 +74,6 @@ func (r *ConnectorRuntime) ApplyConfigReload(next config.Config) (ConfigReloadRe
 	if r.AutomationEngine != nil {
 		if llmChanged && backend != nil {
 			r.AutomationEngine.SetLLMRunner(backend)
-			codeArmyStateDir := r.CodeArmyStateDir
-			if codeArmyStateDir == "" {
-				codeArmyStateDir = filepath.Join(ResolveMemoryDir(merged.WorkspaceDir, merged.MemoryDir), "code_army")
-			}
-			r.AutomationEngine.SetWorkflowRunner(codearmy.NewRunner(codeArmyStateDir, backend, promptLoader))
 		}
 		r.AutomationEngine.SetUserTaskTimeout(merged.AutomationTaskTimeout)
 	}
