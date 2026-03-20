@@ -66,9 +66,6 @@ func TestDefaultRuntimePaths(t *testing.T) {
 	if got := DefaultWorkspaceDir(); got != filepath.Join(aliceHome, "workspace") {
 		t.Fatalf("unexpected default workspace path: %q", got)
 	}
-	if got := DefaultMemoryDir(); got != filepath.Join(aliceHome, "memory") {
-		t.Fatalf("unexpected default memory path: %q", got)
-	}
 	if got := DefaultPromptDir(); got != filepath.Join(aliceHome, "prompts") {
 		t.Fatalf("unexpected default prompt path: %q", got)
 	}
@@ -104,9 +101,6 @@ func TestRuntimePaths_ForAliceHomeOverride(t *testing.T) {
 	}
 	if got := WorkspaceDirForAliceHome(override); got != filepath.Join(aliceHome, "workspace") {
 		t.Fatalf("unexpected workspace path: %q", got)
-	}
-	if got := MemoryDirForAliceHome(override); got != filepath.Join(aliceHome, "memory") {
-		t.Fatalf("unexpected memory path: %q", got)
 	}
 	if got := PromptDirForAliceHome(override); got != filepath.Join(aliceHome, "prompts") {
 		t.Fatalf("unexpected prompt path: %q", got)

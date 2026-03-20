@@ -41,18 +41,6 @@ func (c *Client) SendFile(ctx context.Context, session mcpbridge.SessionContext,
 	return c.post(ctx, session, "/api/v1/messages/file", req)
 }
 
-func (c *Client) MemoryContext(ctx context.Context, session mcpbridge.SessionContext) (map[string]any, error) {
-	return c.get(ctx, session, "/api/v1/memory/context", nil)
-}
-
-func (c *Client) WriteLongTerm(ctx context.Context, session mcpbridge.SessionContext, req MemoryWriteRequest) (map[string]any, error) {
-	return c.put(ctx, session, "/api/v1/memory/long-term", req)
-}
-
-func (c *Client) AppendDailySummary(ctx context.Context, session mcpbridge.SessionContext, req DailySummaryRequest) (map[string]any, error) {
-	return c.post(ctx, session, "/api/v1/memory/daily-summary", req)
-}
-
 func (c *Client) ListTasks(ctx context.Context, session mcpbridge.SessionContext, status string, limit int) (map[string]any, error) {
 	query := map[string]string{}
 	if status = strings.TrimSpace(status); status != "" {

@@ -10,7 +10,6 @@ const (
 	connectorPromptCurrentUserInput = "connector/current_user_input.md.tmpl"
 	connectorPromptReplyContext     = "connector/reply_context.md.tmpl"
 	connectorPromptRuntimeSkillHint = "connector/runtime_skill_hint.md.tmpl"
-	connectorPromptIdleSummary      = "connector/idle_summary.md.tmpl"
 	connectorPromptSyntheticMention = "connector/synthetic_mention.md.tmpl"
 )
 

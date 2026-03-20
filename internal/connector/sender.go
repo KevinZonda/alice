@@ -14,8 +14,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
-
-	"github.com/Alice-space/alice/internal/memory"
 )
 
 type LarkSender struct {
@@ -30,11 +28,11 @@ func NewLarkSender(client *lark.Client, resourceDir string) *LarkSender {
 	}
 }
 
-func (s *LarkSender) ResourceRootForScope(memoryScopeKey string) string {
+func (s *LarkSender) ResourceRootForScope(resourceScopeKey string) string {
 	if s == nil {
 		return ""
 	}
-	return memory.ResolveScopedResourceRoot(strings.TrimSpace(s.resourceDir), memoryScopeKey)
+	return resolveScopedResourceRoot(strings.TrimSpace(s.resourceDir), resourceScopeKey)
 }
 
 func (s *LarkSender) SendText(ctx context.Context, receiveIDType, receiveID, text string) error {
@@ -377,7 +375,7 @@ func (s *LarkSender) GetMessageText(ctx context.Context, messageID string) (stri
 	return clipText(content, 1200), nil
 }
 
-func (s *LarkSender) DownloadAttachment(ctx context.Context, memoryScopeKey, sourceMessageID string, attachment *Attachment) error {
+func (s *LarkSender) DownloadAttachment(ctx context.Context, resourceScopeKey, sourceMessageID string, attachment *Attachment) error {
 	if attachment == nil {
 		return errors.New("attachment is nil")
 	}
@@ -388,7 +386,7 @@ func (s *LarkSender) DownloadAttachment(ctx context.Context, memoryScopeKey, sou
 	if strings.TrimSpace(s.resourceDir) == "" {
 		return errors.New("resource dir is empty")
 	}
-	resourceRoot := strings.TrimSpace(s.ResourceRootForScope(memoryScopeKey))
+	resourceRoot := strings.TrimSpace(s.ResourceRootForScope(resourceScopeKey))
 	if resourceRoot == "" {
 		return errors.New("resource root is empty")
 	}
@@ -604,4 +602,67 @@ func ensureAttachmentExtension(fileName, kind string) string {
 	default:
 		return fileName + ".bin"
 	}
+}
+
+func resolveScopedResourceRoot(baseResourceDir, resourceScopeKey string) string {
+	baseResourceDir = strings.TrimSpace(baseResourceDir)
+	if baseResourceDir == "" {
+		return ""
+	}
+
+	scopeType, scopeID := splitResourceScopeKey(resourceScopeKey)
+	return filepath.Join(
+		baseResourceDir,
+		"scopes",
+		sanitizeResourcePathSegment(scopeType),
+		sanitizeResourcePathSegment(scopeID),
+	)
+}
+
+func splitResourceScopeKey(resourceScopeKey string) (string, string) {
+	key := strings.TrimSpace(resourceScopeKey)
+	if key == "" {
+		return "unknown", "unknown"
+	}
+	scopeType, scopeID, found := strings.Cut(key, ":")
+	if !found {
+		return "unknown", sanitizeResourcePathSegment(key)
+	}
+	scopeType = strings.TrimSpace(scopeType)
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeType == "" {
+		scopeType = "unknown"
+	}
+	if scopeID == "" {
+		scopeID = "unknown"
+	}
+	return scopeType, scopeID
+}
+
+func sanitizeResourcePathSegment(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return "unknown"
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(segment))
+	for _, r := range segment {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == '.', r == '_', r == '-':
+			builder.WriteRune(r)
+		default:
+			builder.WriteByte('_')
+		}
+	}
+	if builder.Len() == 0 {
+		return "unknown"
+	}
+	return builder.String()
 }

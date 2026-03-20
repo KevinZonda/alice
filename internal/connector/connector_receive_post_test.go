@@ -51,8 +51,8 @@ func TestApp_OnMessageReceive_GroupChatSceneQueuesPostWithoutMention(t *testing.
 	if job.SessionKey != "chat_id:oc_chat|scene:chat" {
 		t.Fatalf("unexpected session key: %q", job.SessionKey)
 	}
-	if job.MemoryScopeKey != "chat_id:oc_chat|scene:chat" {
-		t.Fatalf("unexpected memory scope key: %q", job.MemoryScopeKey)
+	if job.ResourceScopeKey != "chat_id:oc_chat|scene:chat" {
+		t.Fatalf("unexpected resource scope key: %q", job.ResourceScopeKey)
 	}
 	if job.LLMModel != "gpt-5.4-mini" {
 		t.Fatalf("unexpected llm model: %q", job.LLMModel)

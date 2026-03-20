@@ -14,7 +14,6 @@ const DefaultLLMProvider = "codex"
 const LLMProviderClaude = "claude"
 const LLMProviderKimi = "kimi"
 const TriggerModeAt = "at"
-const TriggerModeActive = "active"
 const TriggerModePrefix = "prefix"
 const ImmediateFeedbackModeReply = "reply"
 const ImmediateFeedbackModeReaction = "reaction"
@@ -37,7 +36,6 @@ type LLMProfileConfig struct {
 
 type GroupSceneConfig struct {
 	Enabled            bool   `mapstructure:"enabled"`
-	RequireMention     bool   `mapstructure:"require_mention"`
 	TriggerTag         string `mapstructure:"trigger_tag"`
 	SessionScope       string `mapstructure:"session_scope"`
 	LLMProfile         string `mapstructure:"llm_profile"`
@@ -86,15 +84,12 @@ type Config struct {
 	ThinkingMessage      string            `mapstructure:"thinking_message"`
 	AliceHome            string            `mapstructure:"alice_home"`
 	WorkspaceDir         string            `mapstructure:"workspace_dir"`
-	MemoryDir            string            `mapstructure:"memory_dir"`
 	PromptDir            string            `mapstructure:"prompt_dir"`
 
 	QueueCapacity             int           `mapstructure:"queue_capacity"`
 	WorkerConcurrency         int           `mapstructure:"worker_concurrency"`
 	AutomationTaskTimeoutSecs int           `mapstructure:"automation_task_timeout_secs"`
 	AutomationTaskTimeout     time.Duration `mapstructure:"-"`
-	IdleSummaryHours          int           `mapstructure:"idle_summary_hours"`
-	IdleSummaryIdle           time.Duration
 
 	LogLevel      string `mapstructure:"log_level"`
 	LogFile       string `mapstructure:"log_file"`
@@ -128,21 +123,16 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("thinking_message", "正在思考中...")
 	v.SetDefault("alice_home", AliceHomeDir())
 	v.SetDefault("workspace_dir", "")
-	v.SetDefault("memory_dir", "")
 	v.SetDefault("prompt_dir", "")
 	v.SetDefault("queue_capacity", 256)
 	v.SetDefault("worker_concurrency", 1)
 	v.SetDefault("automation_task_timeout_secs", 6000)
-	v.SetDefault("idle_summary_hours", 8)
 	v.SetDefault("group_scenes.chat.enabled", false)
-	v.SetDefault("group_scenes.chat.require_mention", false)
-	v.SetDefault("group_scenes.chat.trigger_tag", "")
 	v.SetDefault("group_scenes.chat.session_scope", GroupSceneSessionPerChat)
 	v.SetDefault("group_scenes.chat.llm_profile", "")
 	v.SetDefault("group_scenes.chat.no_reply_token", "[[NO_REPLY]]")
 	v.SetDefault("group_scenes.chat.create_feishu_thread", false)
 	v.SetDefault("group_scenes.work.enabled", false)
-	v.SetDefault("group_scenes.work.require_mention", true)
 	v.SetDefault("group_scenes.work.trigger_tag", "#work")
 	v.SetDefault("group_scenes.work.session_scope", GroupSceneSessionPerThread)
 	v.SetDefault("group_scenes.work.llm_profile", "")
@@ -191,7 +181,6 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
 	cfg.AliceHome = strings.TrimSpace(cfg.AliceHome)
 	cfg.WorkspaceDir = strings.TrimSpace(cfg.WorkspaceDir)
-	cfg.MemoryDir = strings.TrimSpace(cfg.MemoryDir)
 	cfg.PromptDir = strings.TrimSpace(cfg.PromptDir)
 	cfg.LogLevel = strings.ToLower(strings.TrimSpace(cfg.LogLevel))
 	cfg.LogFile = strings.TrimSpace(cfg.LogFile)
@@ -234,9 +223,6 @@ func LoadFromFile(path string) (Config, error) {
 	if cfg.WorkspaceDir == "" {
 		cfg.WorkspaceDir = WorkspaceDirForAliceHome(cfg.AliceHome)
 	}
-	if cfg.MemoryDir == "" {
-		cfg.MemoryDir = MemoryDirForAliceHome(cfg.AliceHome)
-	}
 	if cfg.PromptDir == "" {
 		cfg.PromptDir = PromptDirForAliceHome(cfg.AliceHome)
 	}
@@ -258,7 +244,7 @@ func LoadFromFile(path string) (Config, error) {
 		return Config{}, fmt.Errorf("unsupported llm_provider %q", cfg.LLMProvider)
 	}
 	switch cfg.TriggerMode {
-	case TriggerModeAt, TriggerModeActive, TriggerModePrefix:
+	case TriggerModeAt, TriggerModePrefix:
 	default:
 		return Config{}, fmt.Errorf("unsupported trigger_mode %q", cfg.TriggerMode)
 	}
@@ -310,7 +296,6 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.ClaudeTimeout = time.Duration(cfg.ClaudeTimeoutSecs) * time.Second
 	cfg.KimiTimeout = time.Duration(cfg.KimiTimeoutSecs) * time.Second
 	cfg.AutomationTaskTimeout = time.Duration(cfg.AutomationTaskTimeoutSecs) * time.Second
-	cfg.IdleSummaryIdle = time.Duration(cfg.IdleSummaryHours) * time.Hour
 
 	return cfg, nil
 }
@@ -373,7 +358,6 @@ type baseConfigValidation struct {
 	QueueCapacity             int    `validate:"gt=0"`
 	WorkerConcurrency         int    `validate:"gt=0"`
 	AutomationTaskTimeoutSecs int    `validate:"gt=0"`
-	IdleSummaryHours          int    `validate:"gt=0"`
 }
 
 func validateBaseConfig(cfg Config) error {
@@ -383,7 +367,6 @@ func validateBaseConfig(cfg Config) error {
 		QueueCapacity:             cfg.QueueCapacity,
 		WorkerConcurrency:         cfg.WorkerConcurrency,
 		AutomationTaskTimeoutSecs: cfg.AutomationTaskTimeoutSecs,
-		IdleSummaryHours:          cfg.IdleSummaryHours,
 	}
 	if err := configValidator.Struct(base); err != nil {
 		var validationErrs validator.ValidationErrors
@@ -402,8 +385,6 @@ func validateBaseConfig(cfg Config) error {
 				return errors.New("worker_concurrency must be > 0")
 			case "AutomationTaskTimeoutSecs":
 				return errors.New("automation_task_timeout_secs must be > 0")
-			case "IdleSummaryHours":
-				return errors.New("idle_summary_hours must be > 0")
 			}
 		}
 		return err
@@ -433,6 +414,9 @@ func validateBaseConfig(cfg Config) error {
 	if cfg.GroupScenes.Work.Enabled {
 		if cfg.GroupScenes.Work.LLMProfile == "" {
 			return errors.New("group_scenes.work.llm_profile is required when work scene is enabled")
+		}
+		if cfg.GroupScenes.Work.TriggerTag == "" {
+			return errors.New("group_scenes.work.trigger_tag is required when work scene is enabled")
 		}
 		profile, ok := cfg.LLMProfiles[cfg.GroupScenes.Work.LLMProfile]
 		if !ok {

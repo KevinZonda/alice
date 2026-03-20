@@ -111,9 +111,6 @@ func diffRestartRequiredFields(current, next config.Config) []string {
 	if current.WorkspaceDir != next.WorkspaceDir {
 		changed = append(changed, "workspace_dir")
 	}
-	if current.MemoryDir != next.MemoryDir {
-		changed = append(changed, "memory_dir")
-	}
 	if current.PromptDir != next.PromptDir {
 		changed = append(changed, "prompt_dir")
 	}
@@ -172,8 +169,6 @@ func applyReloadableFields(dst *config.Config, src config.Config, changed map[st
 
 	applyIntField(&dst.AutomationTaskTimeoutSecs, src.AutomationTaskTimeoutSecs, "automation_task_timeout_secs", changed)
 	applyDurationField(&dst.AutomationTaskTimeout, src.AutomationTaskTimeout, "automation_task_timeout", changed)
-	applyIntField(&dst.IdleSummaryHours, src.IdleSummaryHours, "idle_summary_hours", changed)
-	applyDurationField(&dst.IdleSummaryIdle, src.IdleSummaryIdle, "idle_summary_idle", changed)
 
 	applyStringField(&dst.LogLevel, src.LogLevel, "log_level", changed)
 	applyStringField(&dst.LogFile, src.LogFile, "log_file", changed)

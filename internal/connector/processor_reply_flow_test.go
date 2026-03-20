@@ -447,14 +447,12 @@ func TestProcessor_ResolvesAttachmentsAndPassesLocalPathToCodex(t *testing.T) {
 func TestProcessor_CanceledReplyMarksInterruptedInsteadOfFailure(t *testing.T) {
 	fakeCodex := codexStub{err: context.Canceled}
 	sender := &senderStub{}
-	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
 
-	processor := NewProcessorWithMemory(
+	processor := NewProcessor(
 		fakeCodex,
 		sender,
 		"Codex 暂时不可用，请稍后重试。",
 		"正在思考中...",
-		memory,
 	)
 
 	processor.ProcessJob(context.Background(), Job{
@@ -479,22 +477,17 @@ func TestProcessor_CanceledReplyMarksInterruptedInsteadOfFailure(t *testing.T) {
 	if strings.Contains(sender.replyCards[1], "Codex 暂时不可用，请稍后重试") {
 		t.Fatalf("interrupted reply should not include failure message: %q", sender.replyCards[1])
 	}
-	if memory.saveCalls != 0 {
-		t.Fatalf("canceled job should not be saved to memory, got %d", memory.saveCalls)
-	}
 }
 
-func TestProcessor_CanceledNonReplySkipsSendingAndMemory(t *testing.T) {
+func TestProcessor_CanceledNonReplySkipsSending(t *testing.T) {
 	fakeCodex := codexStub{err: context.Canceled}
 	sender := &senderStub{}
-	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
 
-	processor := NewProcessorWithMemory(
+	processor := NewProcessor(
 		fakeCodex,
 		sender,
 		"Codex 暂时不可用，请稍后重试。",
 		"正在思考中...",
-		memory,
 	)
 
 	processor.ProcessJob(context.Background(), Job{
@@ -505,9 +498,6 @@ func TestProcessor_CanceledNonReplySkipsSendingAndMemory(t *testing.T) {
 
 	if sender.sendCalls != 0 {
 		t.Fatalf("expected no send text calls, got %d", sender.sendCalls)
-	}
-	if memory.saveCalls != 0 {
-		t.Fatalf("canceled job should not be saved to memory, got %d", memory.saveCalls)
 	}
 }
 

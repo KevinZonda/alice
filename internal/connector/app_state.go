@@ -304,7 +304,7 @@ func normalizeRuntimeJob(job Job) (Job, bool) {
 	job.MessageType = strings.TrimSpace(job.MessageType)
 	job.RawContent = strings.TrimSpace(job.RawContent)
 	job.EventID = strings.TrimSpace(job.EventID)
-	job.MemoryScopeKey = strings.TrimSpace(job.MemoryScopeKey)
+	job.ResourceScopeKey = strings.TrimSpace(job.ResourceScopeKey)
 	job.SessionKey = strings.TrimSpace(job.SessionKey)
 	job.Scene = strings.ToLower(strings.TrimSpace(job.Scene))
 	job.ResponseMode = strings.ToLower(strings.TrimSpace(job.ResponseMode))
@@ -328,8 +328,8 @@ func normalizeRuntimeJob(job Job) (Job, bool) {
 	if job.SessionKey == "" {
 		job.SessionKey = buildSessionKey(job.ReceiveIDType, job.ReceiveID)
 	}
-	if job.MemoryScopeKey == "" {
-		job.MemoryScopeKey = memoryScopeKeyForJob(job)
+	if job.ResourceScopeKey == "" {
+		job.ResourceScopeKey = resourceScopeKeyForJob(job)
 	}
 	if job.SessionKey == "" || job.SessionVersion == 0 {
 		return Job{}, false

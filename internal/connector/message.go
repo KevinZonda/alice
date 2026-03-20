@@ -67,7 +67,7 @@ func BuildJob(event *larkim.P2MessageReceiveV1) (*Job, error) {
 		RawContent:           strings.TrimSpace(deref(message.Content)),
 		EventID:              eventID(event),
 		ReceivedAt:           time.Now(),
-		MemoryScopeKey:       buildMemoryScopeKey(receiveIDType, receiveID),
+		ResourceScopeKey:     buildResourceScopeKey(receiveIDType, receiveID),
 		SessionKey:           buildSessionKeyForMessage(receiveIDType, receiveID, message),
 	}, nil
 }
@@ -271,10 +271,8 @@ func shouldProcessIncomingMessage(
 	mentionAccepted := isGroupMentionAccepted(message, botOpenID, botUserID)
 
 	switch normalizedTriggerMode(triggerMode) {
-	case config.TriggerModeActive:
-		return mentionAccepted || !isGroupTriggerPrefixMatched(event, triggerPrefix)
 	case config.TriggerModePrefix:
-		return mentionAccepted || isGroupTriggerPrefixMatched(event, triggerPrefix)
+		return isGroupTriggerPrefixMatched(event, triggerPrefix)
 	default:
 		return mentionAccepted
 	}
@@ -283,7 +281,7 @@ func shouldProcessIncomingMessage(
 func normalizedTriggerMode(mode string) string {
 	normalized := strings.ToLower(strings.TrimSpace(mode))
 	switch normalized {
-	case config.TriggerModeActive, config.TriggerModePrefix:
+	case config.TriggerModePrefix:
 		return normalized
 	default:
 		return config.TriggerModeAt
@@ -423,23 +421,23 @@ func buildSessionKey(receiveIDType, receiveID string) string {
 	return idType + ":" + id
 }
 
-func buildMemoryScopeKey(receiveIDType, receiveID string) string {
+func buildResourceScopeKey(receiveIDType, receiveID string) string {
 	return buildSessionKey(receiveIDType, receiveID)
 }
 
-func memoryScopeKeyForJob(job Job) string {
-	scopeKey := strings.TrimSpace(job.MemoryScopeKey)
+func resourceScopeKeyForJob(job Job) string {
+	scopeKey := strings.TrimSpace(job.ResourceScopeKey)
 	if scopeKey != "" {
 		return scopeKey
 	}
-	scopeKey = buildMemoryScopeKey(job.ReceiveIDType, job.ReceiveID)
+	scopeKey = buildResourceScopeKey(job.ReceiveIDType, job.ReceiveID)
 	if scopeKey != "" {
 		return scopeKey
 	}
-	return memoryScopeKeyFromSessionKey(job.SessionKey)
+	return resourceScopeKeyFromSessionKey(job.SessionKey)
 }
 
-func memoryScopeKeyFromSessionKey(sessionKey string) string {
+func resourceScopeKeyFromSessionKey(sessionKey string) string {
 	sessionKey = strings.TrimSpace(sessionKey)
 	if sessionKey == "" {
 		return ""

@@ -7,48 +7,15 @@ import (
 	"github.com/Alice-space/alice/internal/config"
 )
 
-func TestResolveMemoryDir(t *testing.T) {
-	cases := []struct {
-		name        string
-		workspace   string
-		memory      string
-		expectedAbs bool
-		expected    string
-	}{
-		{
-			name:        "absolute memory dir",
-			workspace:   "/tmp/work",
-			memory:      "/var/lib/alice-memory",
-			expectedAbs: true,
-			expected:    "/var/lib/alice-memory",
-		},
-		{
-			name:        "relative memory dir",
-			workspace:   "/tmp/work",
-			memory:      ".memory",
-			expectedAbs: true,
-			expected:    filepath.Join("/tmp/work", ".memory"),
-		},
-		{
-			name:        "default memory dir with empty workspace",
-			workspace:   "",
-			memory:      "",
-			expectedAbs: true,
-			expected:    config.DefaultMemoryDir(),
-		},
+func TestResolveRuntimeStateRoot(t *testing.T) {
+	home := t.TempDir()
+	got := ResolveRuntimeStateRoot(home)
+	want := filepath.Join(config.RunDirForAliceHome(home), "connector")
+	if got != want {
+		t.Fatalf("unexpected runtime state root, got=%q want=%q", got, want)
 	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			got := ResolveMemoryDir(tc.workspace, tc.memory)
-			if got != tc.expected {
-				t.Fatalf("unexpected memory dir, got=%q want=%q", got, tc.expected)
-			}
-			if tc.expectedAbs != filepath.IsAbs(got) {
-				t.Fatalf("unexpected absolute flag, got=%v want=%v", filepath.IsAbs(got), tc.expectedAbs)
-			}
-		})
+	if !filepath.IsAbs(got) {
+		t.Fatalf("runtime state root should be absolute, got=%q", got)
 	}
 }
 

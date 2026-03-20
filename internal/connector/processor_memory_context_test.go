@@ -3,75 +3,9 @@ package connector
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Alice-space/alice/internal/mcpbridge"
 )
-
-func TestProcessor_UsesMemoryPromptAndSavesInteraction(t *testing.T) {
-	fakeCodex := &codexCaptureStub{resp: "final answer"}
-	sender := &senderStub{resourceRoot: "/tmp/resources"}
-	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
-
-	processor := NewProcessorWithMemory(
-		fakeCodex,
-		sender,
-		"Codex 暂时不可用，请稍后重试。",
-		"正在思考中...",
-		memory,
-	)
-
-	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:       "oc_chat",
-		ReceiveIDType:   "chat_id",
-		SourceMessageID: "om_source",
-		Text:            "hello",
-	})
-
-	if memory.buildCalls != 1 {
-		t.Fatalf("unexpected memory build call count: %+v", memory)
-	}
-	if memory.lastBuildScope != "chat_id:oc_chat" {
-		t.Fatalf("unexpected memory build scope: %q", memory.lastBuildScope)
-	}
-	if !strings.Contains(memory.lastBuildInput, "alice-message skill") ||
-		!strings.Contains(memory.lastBuildInput, "hello") {
-		t.Fatalf("first memory build input should include concise tool hint and user text, got: %q", memory.lastBuildInput)
-	}
-	if fakeCodex.lastInput != "记忆上下文 + 用户消息" {
-		t.Fatalf("codex should receive memory prompt, got: %s", fakeCodex.lastInput)
-	}
-	if memory.saveCalls != 1 {
-		t.Fatalf("expected 1 memory save, got %d", memory.saveCalls)
-	}
-	if memory.lastSaveScope != "chat_id:oc_chat" {
-		t.Fatalf("unexpected saved scope: %q", memory.lastSaveScope)
-	}
-	if memory.lastSaveUser != "hello" {
-		t.Fatalf("unexpected saved user text: %s", memory.lastSaveUser)
-	}
-	if memory.lastSaveReply != "final answer" {
-		t.Fatalf("unexpected saved reply: %s", memory.lastSaveReply)
-	}
-	if memory.lastSaveFailed {
-		t.Fatalf("save flag should be success")
-	}
-	if fakeCodex.lastEnv[mcpbridge.EnvReceiveIDType] != "chat_id" {
-		t.Fatalf("missing mcp receive id type env: %#v", fakeCodex.lastEnv)
-	}
-	if fakeCodex.lastEnv[mcpbridge.EnvReceiveID] != "oc_chat" {
-		t.Fatalf("missing mcp receive id env: %#v", fakeCodex.lastEnv)
-	}
-	if fakeCodex.lastEnv[mcpbridge.EnvSourceMessageID] != "om_source" {
-		t.Fatalf("missing mcp source message env: %#v", fakeCodex.lastEnv)
-	}
-	wantResourceRoot := filepath.Join("/tmp/resources", "scopes", "chat_id", "oc_chat")
-	if fakeCodex.lastEnv[mcpbridge.EnvResourceRoot] != wantResourceRoot {
-		t.Fatalf("unexpected scoped mcp resource root env: %#v", fakeCodex.lastEnv)
-	}
-}
 
 func TestProcessor_BuildsIdentityAwareUserContext(t *testing.T) {
 	fakeCodex := &codexCaptureStub{resp: "final answer"}
@@ -366,47 +300,5 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	}
 	if sender.getMessageTextCalls != 0 {
 		t.Fatalf("resume mode should not fetch parent text, got %d", sender.getMessageTextCalls)
-	}
-}
-
-func TestProcessor_ResumeSkipsMemoryBuildPrompt(t *testing.T) {
-	fakeCodex := &codexResumableCaptureStub{
-		respByCall:   []string{"B", "D"},
-		threadByCall: []string{"thread_1", "thread_1"},
-	}
-	sender := &senderStub{}
-	memory := &memoryStub{prompt: "记忆上下文 + 用户消息"}
-	processor := NewProcessorWithMemory(
-		fakeCodex,
-		sender,
-		"Codex 暂时不可用，请稍后重试。",
-		"正在思考中...",
-		memory,
-	)
-
-	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:     "oc_chat",
-		ReceiveIDType: "chat_id",
-		Text:          "A",
-		SessionKey:    "chat_id:oc_chat",
-	})
-	processor.ProcessJob(context.Background(), Job{
-		ReceiveID:     "oc_chat",
-		ReceiveIDType: "chat_id",
-		Text:          "C",
-		SessionKey:    "chat_id:oc_chat",
-	})
-
-	if memory.buildCalls != 1 {
-		t.Fatalf("expected memory build only once before resume, got %d", memory.buildCalls)
-	}
-	if len(fakeCodex.receivedInputs) != 2 {
-		t.Fatalf("expected 2 codex calls, got %d", len(fakeCodex.receivedInputs))
-	}
-	if fakeCodex.receivedInputs[0] != "记忆上下文 + 用户消息" {
-		t.Fatalf("first call should use memory prompt, got %q", fakeCodex.receivedInputs[0])
-	}
-	if fakeCodex.receivedInputs[1] != "C" {
-		t.Fatalf("resume call should use raw user text, got %q", fakeCodex.receivedInputs[1])
 	}
 }

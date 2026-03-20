@@ -23,7 +23,7 @@ func (a *App) routeIncomingJob(job *Job, event *larkim.P2MessageReceiveV1) bool 
 		return true
 	}
 
-	if a.routeGroupSceneJob(job, message) {
+	if a.routeGroupSceneJob(job, event, message) {
 		return true
 	}
 
@@ -44,23 +44,33 @@ func (a *App) routeIncomingJob(job *Job, event *larkim.P2MessageReceiveV1) bool 
 	return true
 }
 
-func (a *App) routeGroupSceneJob(job *Job, message *larkim.EventMessage) bool {
+func (a *App) routeGroupSceneJob(job *Job, event *larkim.P2MessageReceiveV1, message *larkim.EventMessage) bool {
 	cfg := a.runtimeConfig()
 	if !cfg.groupScenes.Chat.Enabled && !cfg.groupScenes.Work.Enabled {
 		return false
 	}
 
-	if sessionKey := a.resolveExistingWorkSession(job, message); sessionKey != "" {
+	if sessionKey := a.resolveExistingWorkSession(job, event, message); sessionKey != "" {
 		applyWorkSceneToJob(job, cfg, sessionKey)
+		normalizeIncomingGroupJobTextForTriggerMode(job, cfg.triggerMode, cfg.triggerPrefix)
 		if a.processor != nil && message != nil {
 			a.processor.rememberSessionAliases(sessionKey, buildSessionKeyCandidatesForMessage(job.ReceiveIDType, job.ReceiveID, message)...)
 		}
 		return true
 	}
 
-	if cfg.groupScenes.Work.Enabled && matchesWorkSceneTrigger(job, message, cfg.groupScenes.Work, cfg.feishuBotOpenID, cfg.feishuBotUserID) {
+	if cfg.groupScenes.Work.Enabled &&
+		shouldProcessIncomingMessage(
+			event,
+			cfg.triggerMode,
+			cfg.triggerPrefix,
+			cfg.feishuBotOpenID,
+			cfg.feishuBotUserID,
+		) &&
+		hasSceneTriggerTag(job.Text, cfg.groupScenes.Work.TriggerTag) {
 		sessionKey := buildWorkSceneSessionKey(job.ReceiveIDType, job.ReceiveID, job.SourceMessageID)
 		applyWorkSceneToJob(job, cfg, sessionKey)
+		normalizeIncomingGroupJobTextForTriggerMode(job, cfg.triggerMode, cfg.triggerPrefix)
 		job.Text = trimSceneTriggerTag(job.Text, cfg.groupScenes.Work.TriggerTag)
 		if a.processor != nil && message != nil {
 			a.processor.rememberSessionAliases(sessionKey, buildSessionKeyCandidatesForMessage(job.ReceiveIDType, job.ReceiveID, message)...)
@@ -75,8 +85,18 @@ func (a *App) routeGroupSceneJob(job *Job, message *larkim.EventMessage) bool {
 	return false
 }
 
-func (a *App) resolveExistingWorkSession(job *Job, message *larkim.EventMessage) string {
+func (a *App) resolveExistingWorkSession(job *Job, event *larkim.P2MessageReceiveV1, message *larkim.EventMessage) string {
 	if job == nil || message == nil {
+		return ""
+	}
+	cfg := a.runtimeConfig()
+	if !shouldProcessIncomingMessage(
+		event,
+		cfg.triggerMode,
+		cfg.triggerPrefix,
+		cfg.feishuBotOpenID,
+		cfg.feishuBotUserID,
+	) {
 		return ""
 	}
 	sessionKey := strings.TrimSpace(a.findExistingSessionKey(buildSessionKeyCandidatesForMessage(job.ReceiveIDType, job.ReceiveID, message)))
@@ -84,26 +104,6 @@ func (a *App) resolveExistingWorkSession(job *Job, message *larkim.EventMessage)
 		return ""
 	}
 	return sessionKey
-}
-
-func matchesWorkSceneTrigger(
-	job *Job,
-	message *larkim.EventMessage,
-	scene config.GroupSceneConfig,
-	botOpenID string,
-	botUserID string,
-) bool {
-	if job == nil || !scene.Enabled {
-		return false
-	}
-	if scene.RequireMention && !isGroupMentionAccepted(message, botOpenID, botUserID) {
-		return false
-	}
-	triggerTag := strings.TrimSpace(scene.TriggerTag)
-	if triggerTag == "" {
-		return false
-	}
-	return strings.Contains(strings.ToLower(strings.TrimSpace(job.Text)), strings.ToLower(triggerTag))
 }
 
 func applyChatSceneToJob(job *Job, cfg appRuntimeConfig) {
@@ -114,7 +114,7 @@ func applyChatSceneToJob(job *Job, cfg appRuntimeConfig) {
 	job.ResponseMode = jobResponseModeReply
 	job.DisableAck = true
 	job.SessionKey = buildChatSceneSessionKey(job.ReceiveIDType, job.ReceiveID)
-	job.MemoryScopeKey = buildChatSceneMemoryScopeKey(job.ReceiveIDType, job.ReceiveID)
+	job.ResourceScopeKey = buildChatSceneResourceScopeKey(job.ReceiveIDType, job.ReceiveID)
 	job.CreateFeishuThread = cfg.groupScenes.Chat.CreateFeishuThread
 	job.NoReplyToken = strings.TrimSpace(cfg.groupScenes.Chat.NoReplyToken)
 	applyLLMProfileToJob(job, cfg.llmProvider, cfg.llmProfiles[cfg.groupScenes.Chat.LLMProfile])
@@ -126,9 +126,9 @@ func applyWorkSceneToJob(job *Job, cfg appRuntimeConfig, sessionKey string) {
 	}
 	job.Scene = jobSceneWork
 	job.ResponseMode = jobResponseModeReply
-	job.DisableAck = true
+	job.DisableAck = false
 	job.SessionKey = strings.TrimSpace(sessionKey)
-	job.MemoryScopeKey = buildWorkSceneMemoryScopeKeyFromSessionKey(sessionKey)
+	job.ResourceScopeKey = buildWorkSceneResourceScopeKeyFromSessionKey(sessionKey)
 	job.CreateFeishuThread = cfg.groupScenes.Work.CreateFeishuThread
 	job.NoReplyToken = strings.TrimSpace(cfg.groupScenes.Work.NoReplyToken)
 	applyLLMProfileToJob(job, cfg.llmProvider, cfg.llmProfiles[cfg.groupScenes.Work.LLMProfile])
@@ -153,7 +153,7 @@ func buildChatSceneSessionKey(receiveIDType, receiveID string) string {
 	return base + "|scene:" + jobSceneChat
 }
 
-func buildChatSceneMemoryScopeKey(receiveIDType, receiveID string) string {
+func buildChatSceneResourceScopeKey(receiveIDType, receiveID string) string {
 	return buildChatSceneSessionKey(receiveIDType, receiveID)
 }
 
@@ -166,7 +166,7 @@ func buildWorkSceneSessionKey(receiveIDType, receiveID, sourceMessageID string) 
 	return base + "|scene:" + jobSceneWork + "|seed:" + sourceMessageID
 }
 
-func buildWorkSceneMemoryScopeKeyFromSessionKey(sessionKey string) string {
+func buildWorkSceneResourceScopeKeyFromSessionKey(sessionKey string) string {
 	sessionKey = strings.TrimSpace(sessionKey)
 	if sessionKey == "" {
 		return ""
@@ -176,6 +176,15 @@ func buildWorkSceneMemoryScopeKeyFromSessionKey(sessionKey string) string {
 
 func isWorkSceneSessionKey(sessionKey string) bool {
 	return strings.Contains(strings.TrimSpace(sessionKey), "|scene:"+jobSceneWork)
+}
+
+func hasSceneTriggerTag(text, tag string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	if text == "" || tag == "" {
+		return false
+	}
+	return strings.Contains(text, tag)
 }
 
 func trimSceneTriggerTag(text, tag string) string {

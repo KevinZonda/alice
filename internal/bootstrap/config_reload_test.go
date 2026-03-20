@@ -16,7 +16,6 @@ func TestDiffRestartRequiredFields(t *testing.T) {
 		RuntimeHTTPAddr:   "127.0.0.1:7331",
 		RuntimeHTTPToken:  "token_a",
 		WorkspaceDir:      "/workspace/a",
-		MemoryDir:         ".memory",
 		PromptDir:         "prompts",
 		QueueCapacity:     256,
 		WorkerConcurrency: 1,
@@ -67,8 +66,6 @@ func TestApplyReloadableFields(t *testing.T) {
 		KimiPromptPrefix:          "old kimi",
 		AutomationTaskTimeoutSecs: 6000,
 		AutomationTaskTimeout:     100 * time.Minute,
-		IdleSummaryHours:          8,
-		IdleSummaryIdle:           8 * time.Hour,
 		LLMProfiles: map[string]config.LLMProfileConfig{
 			"chat": {Provider: config.DefaultLLMProvider, Model: "gpt-5.4-mini", ReasoningEffort: "low", Personality: "friendly"},
 		},
@@ -104,7 +101,7 @@ func TestApplyReloadableFields(t *testing.T) {
 	}
 	next.GroupScenes = config.GroupScenesConfig{
 		Chat: config.GroupSceneConfig{Enabled: true, LLMProfile: "chat", SessionScope: config.GroupSceneSessionPerChat, NoReplyToken: "[[NO_REPLY]]"},
-		Work: config.GroupSceneConfig{Enabled: true, LLMProfile: "work", SessionScope: config.GroupSceneSessionPerThread, TriggerTag: "#work", RequireMention: true, CreateFeishuThread: true},
+		Work: config.GroupSceneConfig{Enabled: true, LLMProfile: "work", SessionScope: config.GroupSceneSessionPerThread, TriggerTag: "#work", CreateFeishuThread: true},
 	}
 	next.QueueCapacity = 1024
 	next.WorkerConcurrency = 8

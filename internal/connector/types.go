@@ -21,12 +21,6 @@ func wasInterruptedByNewMessage(ctx context.Context) bool {
 	return errors.Is(context.Cause(ctx), errSessionInterrupted)
 }
 
-type MemoryManager interface {
-	BuildPrompt(memoryScopeKey, userText string) (string, error)
-	SaveInteraction(memoryScopeKey, userText, assistantText string, failed bool) (changed bool, err error)
-	AppendDailySummary(memoryScopeKey, sessionKey, summary string, at time.Time) error
-}
-
 type Sender interface {
 	SendText(ctx context.Context, receiveIDType, receiveID, text string) error
 	SendCard(ctx context.Context, receiveIDType, receiveID, cardContent string) error
@@ -45,7 +39,7 @@ type ReplyContextProvider interface {
 }
 
 type AttachmentDownloader interface {
-	DownloadAttachment(ctx context.Context, memoryScopeKey, sourceMessageID string, attachment *Attachment) error
+	DownloadAttachment(ctx context.Context, resourceScopeKey, sourceMessageID string, attachment *Attachment) error
 }
 
 type UserNameResolver interface {
@@ -95,7 +89,7 @@ type Job struct {
 	RawContent           string
 	EventID              string
 	ReceivedAt           time.Time
-	MemoryScopeKey       string
+	ResourceScopeKey     string
 	SessionKey           string
 	SessionVersion       uint64
 	Scene                string

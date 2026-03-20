@@ -23,7 +23,6 @@ type ConnectorRuntime struct {
 	RuntimeAPI          *runtimeapi.Server
 	RuntimeAPIBaseURL   string
 	RuntimeAPIToken     string
-	MemoryDir           string
 	AutomationStatePath string
 	CampaignStatePath   string
 	PromptLoader        *prompting.Loader

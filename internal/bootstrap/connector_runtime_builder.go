@@ -16,13 +16,12 @@ import (
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
-	"github.com/Alice-space/alice/internal/memory"
 	"github.com/Alice-space/alice/internal/prompting"
 	"github.com/Alice-space/alice/internal/runtimeapi"
 )
 
 type connectorRuntimePaths struct {
-	memoryDir           string
+	stateRoot           string
 	promptDir           string
 	resourceDir         string
 	automationStatePath string
@@ -39,7 +38,6 @@ type connectorRuntimeBuilder struct {
 	processor *connector.Processor
 	app       *connector.App
 
-	memoryManager    *memory.Manager
 	automationStore  *automation.Store
 	campaignStore    *campaign.Store
 	automationEngine *automation.Engine
@@ -66,24 +64,20 @@ func newConnectorRuntimeBuilder(cfg config.Config, provider llm.Provider) (*conn
 }
 
 func newConnectorRuntimePaths(cfg config.Config) connectorRuntimePaths {
-	memoryDir := ResolveMemoryDir(cfg.WorkspaceDir, cfg.MemoryDir)
+	stateRoot := ResolveRuntimeStateRoot(cfg.AliceHome)
 	return connectorRuntimePaths{
-		memoryDir:           memoryDir,
+		stateRoot:           stateRoot,
 		promptDir:           ResolvePromptDir(cfg.WorkspaceDir, cfg.PromptDir),
-		resourceDir:         filepath.Join(memoryDir, "resources"),
-		automationStatePath: filepath.Join(memoryDir, "automation.db"),
-		campaignStatePath:   filepath.Join(memoryDir, "campaigns.db"),
-		sessionStatePath:    filepath.Join(memoryDir, "session_state.json"),
-		runtimeStatePath:    filepath.Join(memoryDir, "runtime_state.json"),
+		resourceDir:         filepath.Join(stateRoot, "resources"),
+		automationStatePath: filepath.Join(stateRoot, "automation.db"),
+		campaignStatePath:   filepath.Join(stateRoot, "campaigns.db"),
+		sessionStatePath:    filepath.Join(stateRoot, "session_state.json"),
+		runtimeStatePath:    filepath.Join(stateRoot, "runtime_state.json"),
 	}
 }
 
 func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 	b.promptLoader = prompting.NewLoader(b.paths.promptDir)
-	if err := b.prepareMemory(); err != nil {
-		return nil, err
-	}
-
 	b.buildSender()
 	b.buildAutomationStore()
 	b.buildCampaignStore()
@@ -106,21 +100,11 @@ func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 		RuntimeAPI:          b.apiServer,
 		RuntimeAPIBaseURL:   runtimeapi.BaseURL(b.cfg.RuntimeHTTPAddr),
 		RuntimeAPIToken:     b.apiToken,
-		MemoryDir:           b.paths.memoryDir,
 		AutomationStatePath: b.paths.automationStatePath,
 		CampaignStatePath:   b.paths.campaignStatePath,
 		PromptLoader:        b.promptLoader,
 		Config:              b.cfg,
 	}, nil
-}
-
-func (b *connectorRuntimeBuilder) prepareMemory() error {
-	memoryManager := memory.NewManager(b.paths.memoryDir, b.promptLoader)
-	if err := memoryManager.Init(); err != nil {
-		return err
-	}
-	b.memoryManager = memoryManager
-	return nil
 }
 
 func (b *connectorRuntimeBuilder) buildSender() {
@@ -141,12 +125,11 @@ func (b *connectorRuntimeBuilder) buildCampaignStore() {
 }
 
 func (b *connectorRuntimeBuilder) buildProcessor() error {
-	processor := connector.NewProcessorWithMemory(
+	processor := connector.NewProcessor(
 		b.backend,
 		b.sender,
 		b.cfg.FailureMessage,
 		b.cfg.ThinkingMessage,
-		b.memoryManager,
 	)
 	processor.SetPromptLoader(b.promptLoader)
 	processor.SetImmediateFeedback(b.cfg.ImmediateFeedbackMode, b.cfg.ImmediateFeedbackReaction)
@@ -181,11 +164,6 @@ func (b *connectorRuntimeBuilder) buildAutomationEngine() error {
 		runtimeapi.EnvBin:     ResolveRuntimeBinary(b.cfg.WorkspaceDir),
 	})
 
-	if err := automationEngine.RegisterSystemTask("system.idle_summary_scan", 60*time.Second, func(runCtx context.Context) {
-		b.processor.RunIdleSummaryScan(runCtx, b.app.IdleSummaryIdle())
-	}); err != nil {
-		return err
-	}
 	if err := automationEngine.RegisterSystemTask("system.state_flush", 1*time.Second, func(context.Context) {
 		if err := b.processor.FlushSessionStateIfDirty(); err != nil {
 			logging.Warnf("flush session state failed: %v", err)
@@ -207,7 +185,6 @@ func (b *connectorRuntimeBuilder) buildRuntimeAPI() {
 		b.cfg.RuntimeHTTPAddr,
 		b.resolveRuntimeAPIToken(),
 		b.sender,
-		b.memoryManager,
 		b.automationStore,
 		b.campaignStore,
 	)
