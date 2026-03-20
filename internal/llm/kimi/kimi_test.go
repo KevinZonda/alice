@@ -35,7 +35,7 @@ func TestBuildPrompt_UsesPrefixOnlyForNewThread(t *testing.T) {
 		PromptPrefix: "你是助手Alice。",
 	}
 
-	prompt, err := runner.renderPrompt("", "你好")
+	prompt, err := runner.renderPrompt("", "你好", "", "")
 	if err != nil {
 		t.Fatalf("render prompt failed: %v", err)
 	}
@@ -43,12 +43,25 @@ func TestBuildPrompt_UsesPrefixOnlyForNewThread(t *testing.T) {
 		t.Fatalf("unexpected new-thread prompt: %q", prompt)
 	}
 
-	resumePrompt, err := runner.renderPrompt("session_123", "你好")
+	resumePrompt, err := runner.renderPrompt("session_123", "你好", "", "")
 	if err != nil {
 		t.Fatalf("render resume prompt failed: %v", err)
 	}
 	if resumePrompt != "你好" {
 		t.Fatalf("unexpected resume prompt: %q", resumePrompt)
+	}
+}
+
+func TestBuildPrompt_UsesPersonalityForNewThread(t *testing.T) {
+	runner := Runner{
+		Prompts: prompting.NewLoader(filepath.Join("..", "..", "..", "prompts")),
+	}
+	prompt, err := runner.renderPrompt("", "你好", "pragmatic", "")
+	if err != nil {
+		t.Fatalf("render prompt failed: %v", err)
+	}
+	if !strings.Contains(prompt, "工作模式") {
+		t.Fatalf("expected prompt to contain work mode, got %q", prompt)
 	}
 }
 
@@ -103,6 +116,8 @@ EOF
 		"assistant",
 		"hello",
 		"",
+		"",
+		"",
 		nil,
 		func(step string) {
 			updates = append(updates, strings.TrimSpace(step))
@@ -150,6 +165,8 @@ EOF
 		"",
 		"assistant",
 		"你好",
+		"",
+		"",
 		"",
 		map[string]string{mcpbridge.EnvSessionKey: sessionKey},
 		nil,
@@ -203,6 +220,8 @@ EOF
 		"assistant",
 		"hello",
 		"",
+		"",
+		"",
 		nil,
 		nil,
 	)
@@ -239,6 +258,8 @@ exit 37
 		"assistant",
 		"hello",
 		"",
+		"",
+		"",
 		nil,
 		nil,
 	)
@@ -273,6 +294,8 @@ sleep 5
 		"",
 		"assistant",
 		"hello",
+		"",
+		"",
 		"",
 		nil,
 		nil,
