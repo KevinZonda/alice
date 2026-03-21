@@ -92,6 +92,9 @@ func TestBuildJob_ExtractsSenderAndMentionedUsers(t *testing.T) {
 	if job.MentionedUsers[0].OpenID != "ou_carlo" || job.MentionedUsers[0].UserID != "u_carlo" {
 		t.Fatalf("unexpected mentioned user ids: %+v", job.MentionedUsers[0])
 	}
+	if job.Text != "@Carlo 这是xxx" {
+		t.Fatalf("unexpected text with mention display name: %q", job.Text)
+	}
 }
 
 func TestBuildJob_TextMessageStripsMentionKey(t *testing.T) {
@@ -146,6 +149,36 @@ func TestBuildJob_TextMessageMentionOnlyWithKeyIgnored(t *testing.T) {
 	_, err := BuildJob(event)
 	if !errors.Is(err, ErrIgnoreMessage) {
 		t.Fatalf("expected ErrIgnoreMessage, got: %v", err)
+	}
+}
+
+func TestBuildJob_TextMessagePreservesMentionPosition(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_plain_mention_middle"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"我是谁？@_user_1 又是谁？"}`),
+				ChatId:      strPtr("oc_chat"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Key:  strPtr("@_user_1"),
+						Name: strPtr("Carlo"),
+						Id: &larkim.UserId{
+							OpenId: strPtr("ou_carlo"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	job, err := BuildJob(event)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if job.Text != "我是谁？@Carlo 又是谁？" {
+		t.Fatalf("unexpected text: %q", job.Text)
 	}
 }
 

@@ -186,6 +186,39 @@ func TestProcessor_ResumeThreadSkipsRepeatedSenderMappingHint(t *testing.T) {
 	}
 }
 
+func TestProcessor_PreservesMentionOrderWhenTextAlreadyContainsMention(t *testing.T) {
+	fakeCodex := &codexCaptureStub{resp: "final answer"}
+	sender := &senderStub{
+		userNameByIdentity: map[string]string{
+			"open_id:ou_bob":   "Bob",
+			"open_id:ou_carlo": "Carlo",
+		},
+	}
+	processor := NewProcessor(
+		fakeCodex,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+	)
+
+	processor.ProcessJob(context.Background(), Job{
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		SenderOpenID:  "ou_bob",
+		MentionedUsers: []MentionedUser{
+			{OpenID: "ou_carlo"},
+		},
+		Text: "我是谁？@Carlo 又是谁？",
+	})
+
+	if !strings.Contains(fakeCodex.lastInput, "Bob说：我是谁？@Carlo 又是谁？") {
+		t.Fatalf("missing expected preserved mention order in input: %s", fakeCodex.lastInput)
+	}
+	if strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 我是谁？") {
+		t.Fatalf("mention should not be duplicated or re-prefixed in input: %s", fakeCodex.lastInput)
+	}
+}
+
 func TestProcessor_AttachesReplyParentMessageContext(t *testing.T) {
 	fakeCodex := &codexCaptureStub{resp: "final answer"}
 	sender := &senderStub{

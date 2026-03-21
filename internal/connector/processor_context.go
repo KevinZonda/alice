@@ -308,11 +308,14 @@ func (p *Processor) buildCurrentUserInputWithThread(job Job, threadID string) st
 
 	speechText := baseText
 	if len(mentionedNames) > 0 {
-		mentionedText := "@" + strings.Join(mentionedNames, " @")
-		if speechText == "" {
-			speechText = mentionedText
-		} else {
-			speechText = mentionedText + " " + speechText
+		missingMentions := missingMentionDisplayNames(speechText, mentionedNames)
+		if len(missingMentions) > 0 {
+			mentionedText := "@" + strings.Join(missingMentions, " @")
+			if speechText == "" {
+				speechText = mentionedText
+			} else {
+				speechText = mentionedText + " " + speechText
+			}
 		}
 	}
 
@@ -409,6 +412,24 @@ func buildMentionDisplayNames(mentionedUsers []MentionedUser, botOpenID, botUser
 		names = append(names, name)
 	}
 	return names
+}
+
+func missingMentionDisplayNames(text string, mentionedNames []string) []string {
+	if len(mentionedNames) == 0 {
+		return nil
+	}
+	missing := make([]string, 0, len(mentionedNames))
+	for _, name := range mentionedNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if strings.Contains(text, "@"+name) {
+			continue
+		}
+		missing = append(missing, name)
+	}
+	return missing
 }
 
 func isBotIdentity(openID, userID, candidateID, botOpenID, botUserID string) bool {
