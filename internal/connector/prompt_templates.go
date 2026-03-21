@@ -8,7 +8,7 @@ import (
 
 const (
 	connectorPromptCurrentUserInput = "connector/current_user_input.md.tmpl"
-	connectorPromptBotSoul         = "connector/bot_soul.md.tmpl"
+	connectorPromptBotSoul          = "connector/bot_soul.md.tmpl"
 	connectorPromptReplyContext     = "connector/reply_context.md.tmpl"
 	connectorPromptRuntimeSkillHint = "connector/runtime_skill_hint.md.tmpl"
 	connectorPromptSyntheticMention = "connector/synthetic_mention.md.tmpl"

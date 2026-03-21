@@ -33,9 +33,9 @@ type App struct {
 }
 
 type appRuntimeConfig struct {
-	botID            string
-	botName          string
-	soulPath         string
+	botID           string
+	botName         string
+	soulPath        string
 	triggerMode     string
 	triggerPrefix   string
 	llmProvider     string
@@ -67,9 +67,9 @@ func NewApp(cfg config.Config, processor *Processor) *App {
 
 func newAppRuntimeConfig(cfg config.Config) appRuntimeConfig {
 	return appRuntimeConfig{
-		botID:            strings.TrimSpace(cfg.BotID),
-		botName:          strings.TrimSpace(cfg.BotName),
-		soulPath:         strings.TrimSpace(cfg.SoulPath),
+		botID:           strings.TrimSpace(cfg.BotID),
+		botName:         strings.TrimSpace(cfg.BotName),
+		soulPath:        strings.TrimSpace(cfg.SoulPath),
 		triggerMode:     cfg.TriggerMode,
 		triggerPrefix:   cfg.TriggerPrefix,
 		llmProvider:     cfg.LLMProvider,
