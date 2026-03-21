@@ -25,17 +25,9 @@ func buildExecArgs(
 	policy.AddDirs = uniqueAddDirs(policy.AddDirs)
 
 	buildRootFlags := func() []string {
-		args := make([]string, 0, 2)
+		args := make([]string, 0, 10+len(policy.AddDirs)*2)
 		if policy.AskForApproval != "" {
 			args = append(args, "-a", policy.AskForApproval)
-		}
-		return args
-	}
-
-	buildExecFlags := func() []string {
-		args := []string{
-			"--json",
-			"--skip-git-repo-check",
 		}
 		if policy.Sandbox != "" {
 			args = append(args, "--sandbox", policy.Sandbox)
@@ -56,6 +48,13 @@ func buildExecArgs(
 			args = append(args, "-c", "personality="+strconv.Quote(personality))
 		}
 		return args
+	}
+
+	buildExecFlags := func() []string {
+		return []string{
+			"--json",
+			"--skip-git-repo-check",
+		}
 	}
 
 	args := buildRootFlags()
