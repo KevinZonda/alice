@@ -123,6 +123,7 @@ func TestBuildExecArgs_ResumeThread(t *testing.T) {
 		AskForApproval: "never",
 	})
 	approvalFlagIndex := slices.Index(args, "-a")
+	sandboxFlagIndex := slices.Index(args, "--sandbox")
 	execIndex := slices.Index(args, "exec")
 	if !slices.Contains(args, "resume") {
 		t.Fatalf("expected resume args, got: %#v", args)
@@ -139,6 +140,9 @@ func TestBuildExecArgs_ResumeThread(t *testing.T) {
 	if execIndex < 0 || approvalFlagIndex > execIndex {
 		t.Fatalf("approval mode must be passed before exec to satisfy current codex CLI parsing, got: %#v", args)
 	}
+	if sandboxFlagIndex < 0 || sandboxFlagIndex > execIndex {
+		t.Fatalf("sandbox mode must be passed before exec to satisfy current codex CLI parsing, got: %#v", args)
+	}
 	if slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
 		t.Fatalf("resume args should not include dangerous bypass flag, got: %#v", args)
 	}
@@ -153,6 +157,7 @@ func TestBuildExecArgs_NewThreadUsesWorkspaceSandbox(t *testing.T) {
 		AskForApproval: "never",
 	})
 	approvalFlagIndex := slices.Index(args, "-a")
+	sandboxFlagIndex := slices.Index(args, "--sandbox")
 	execIndex := slices.Index(args, "exec")
 	if !slices.Contains(args, "--sandbox") || !slices.Contains(args, "workspace-write") {
 		t.Fatalf("new thread args should include workspace sandbox flag, got: %#v", args)
@@ -162,6 +167,9 @@ func TestBuildExecArgs_NewThreadUsesWorkspaceSandbox(t *testing.T) {
 	}
 	if execIndex < 0 || approvalFlagIndex > execIndex {
 		t.Fatalf("approval mode must be passed before exec to satisfy current codex CLI parsing, got: %#v", args)
+	}
+	if sandboxFlagIndex < 0 || sandboxFlagIndex > execIndex {
+		t.Fatalf("sandbox mode must be passed before exec to satisfy current codex CLI parsing, got: %#v", args)
 	}
 	if slices.Contains(args, "--dangerously-bypass-approvals-and-sandbox") {
 		t.Fatalf("new thread args should not include dangerous bypass flag, got: %#v", args)
@@ -210,11 +218,39 @@ func TestBuildExecArgs_WithAddDirs(t *testing.T) {
 		AskForApproval: "never",
 		AddDirs:        []string{"/tmp/resources", "/tmp/assets"},
 	})
+	addDirIndex := slices.Index(args, "--add-dir")
+	execIndex := slices.Index(args, "exec")
 	if !slices.Contains(args, "--add-dir") {
 		t.Fatalf("expected add-dir flags, got: %#v", args)
 	}
 	if !slices.Contains(args, "/tmp/resources") || !slices.Contains(args, "/tmp/assets") {
 		t.Fatalf("expected add-dir paths, got: %#v", args)
+	}
+	if addDirIndex < 0 || addDirIndex > execIndex {
+		t.Fatalf("add-dir flags must be passed before exec to satisfy current codex CLI parsing, got: %#v", args)
+	}
+}
+
+func TestBuildExecArgs_ResumeThreadPlacesRootFlagsBeforeExec(t *testing.T) {
+	args := buildExecArgs("thread_123", "hello", "gpt-5.4", "worker-cheap", "high", "pragmatic", ExecPolicyConfig{
+		Sandbox:        "workspace-write",
+		AskForApproval: "never",
+		AddDirs:        []string{"/tmp/resources"},
+	})
+	execIndex := slices.Index(args, "exec")
+	if execIndex < 0 {
+		t.Fatalf("expected exec in args, got: %#v", args)
+	}
+
+	rootFlags := []string{"-a", "--sandbox", "--add-dir", "-m", "-p", "-c"}
+	for _, flag := range rootFlags {
+		flagIndex := slices.Index(args, flag)
+		if flagIndex < 0 {
+			t.Fatalf("expected %s in args, got: %#v", flag, args)
+		}
+		if flagIndex > execIndex {
+			t.Fatalf("expected %s before exec to satisfy current codex CLI parsing, got: %#v", flag, args)
+		}
 	}
 }
 

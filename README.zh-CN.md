@@ -93,12 +93,11 @@ curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-inst
 - 默认下载 stable GitHub Release 并安装到 `${ALICE_HOME:-~/.alice}/bin/alice`；显式 `--channel dev` 时切换到 dev 预发布（默认目录 `~/.alice-dev`）
 - 若 release 提供 `SHA256SUMS`，会先校验校验和再解压安装
 - 初始化 `${ALICE_HOME:-~/.alice}` 目录
-- 检测并复制已有 Codex 登录凭证 `auth.json` 到 `${ALICE_HOME}/.codex/`
 - 安装并管理 `systemd --user` 服务（默认 `alice.service`，自动拉起与崩溃重启）
 - 尝试开启 linger，尽量保证退出登录后服务仍保持活跃
-- 若 `config.yaml` 不存在，服务首次启动会从内嵌 `config.example.yaml` 释放配置并正常退出
+- `alice` 二进制在启动时会按需补齐 `config.yaml`、各 bot 的 `SOUL.md`，并从可用来源同步隔离 `CODEX_HOME` 下的 `auth.json`
 
-首次安装后请先配置 `${ALICE_HOME:-~/.alice}/config.yaml` 中的 `feishu_app_id` 和 `feishu_app_secret`，然后执行 `systemctl --user restart alice.service`（或再次执行安装命令）启动服务。
+首次安装后请先配置 `${ALICE_HOME:-~/.alice}/config.yaml` 中的 `bots.*.feishu_app_id` 和 `bots.*.feishu_app_secret`，然后执行 `systemctl --user restart alice.service`（或再次执行安装命令）启动服务。
 
 安装完成后可用 `alice --version` 确认当前二进制版本。
 
@@ -176,7 +175,7 @@ make precommit-install
 - `file-printing`
 - `feishu-task`
 
-连接器启动时会把内嵌的自带 skill 自动释放到 `$CODEX_HOME/skills`（默认 `~/.alice/.codex/skills`）。非托管的自定义同名目录保持不变。
+连接器启动时会把内嵌的自带 skill 自动释放到 `$CODEX_HOME/skills`。多 bot 默认路径是 `~/.alice/bots/<bot_id>/.codex/skills`；非托管的自定义同名目录保持不变。
 
 ## 配置文件
 
@@ -224,8 +223,8 @@ runtime_http_token: ""
 alice_home: ""
 workspace_dir: ""
 env:
-  HTTPS_PROXY: "http://127.0.0.1:7890"
-  ALL_PROXY: "socks5://127.0.0.1:7891"
+  HTTPS_PROXY: "http://127.0.0.1:8080"
+  ALL_PROXY: "http://127.0.0.1:8080"
 memory_dir: ""
 prompt_dir: ""
 
@@ -234,8 +233,8 @@ claude_prompt_prefix: ""
 kimi_prompt_prefix: ""
 failure_message: "Codex 暂时不可用，请稍后重试。"
 thinking_message: "正在思考中..."
-immediate_feedback_mode: "reply"
-immediate_feedback_reaction: "SMILE"
+immediate_feedback_mode: "reaction"
+immediate_feedback_reaction: "OK"
 group_scenes:
   chat:
     enabled: true
@@ -255,7 +254,7 @@ group_scenes:
     create_feishu_thread: true
 
 queue_capacity: 256
-worker_concurrency: 1
+worker_concurrency: 3
 automation_task_timeout_secs: 6000
 idle_summary_hours: 8
 
@@ -282,12 +281,12 @@ log_compress: false
 - `runtime_http_addr` / `runtime_http_token`：Alice 本地 runtime HTTP API 的监听地址和鉴权 token。若 `runtime_http_token` 为空，Alice 会在每次启动时自动生成一个 token 并注入 agent 环境变量。
 - `alice_home`：运行时根目录（release 默认 `~/.alice`；dev 预发布二进制默认 `~/.alice-dev`）。
 - `workspace_dir` / `memory_dir` / `prompt_dir`：运行时目录。默认在 `alice_home` 下，分别是 `workspace/`、`memory/`、`prompts/`。
-- `CODEX_HOME`：Alice 启动时会强制设置为 `alice_home/.codex`；子进程默认继承该值（若在 `env` 里显式设置则以显式值为准）。
+- `CODEX_HOME`：Alice 服务进程启动时会设置为 `${ALICE_HOME}/.codex`；每个 bot 的 LLM 子进程默认使用各自的 `${ALICE_HOME}/bots/<bot_id>/.codex`（若在 `env` 里显式设置则以显式值为准）。
 - `env`：注入到所选 LLM 子进程的环境变量键值（例如 HTTP/HTTPS/SOCKS 代理配置）。
 - `codex_prompt_prefix` / `claude_prompt_prefix` / `kimi_prompt_prefix`：仅在新线程中追加的全局指令前缀，默认为空。
 - `group_scenes`：群聊/话题群的场景路由配置。启用后优先于 `trigger_mode` / `trigger_prefix`。常见做法是让 `chat` 场景按群共享一个 session，让 `work` 场景由 `#work + @bot` 新开 thread/session。
-- `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply`（默认，直接回复 `收到！`）和 `reaction`（优先给原消息加表情，失败再回退 `收到！`）。
-- `immediate_feedback_reaction`：`immediate_feedback_mode=reaction` 时使用的飞书 reaction 类型，默认 `SMILE`。
+- `immediate_feedback_mode`：收到引用回复消息后给用户的即时反馈方式。支持 `reply` 和 `reaction`（默认，优先给原消息加表情，失败再回退 `收到！`）。
+- `immediate_feedback_reaction`：`immediate_feedback_mode=reaction` 时使用的飞书 reaction 类型，默认 `OK`。
 - 自动化 cron 调度使用运行机器的操作系统时区（`time.Local`）。
 - `automation_task_timeout_secs`：单次自动化用户任务（`send_text`/`run_llm`）的执行超时秒数，默认 `6000`。
 - `idle_summary_hours`：触发后台分日期摘要落盘的空闲阈值（小时，默认 `8`）。
@@ -333,7 +332,7 @@ log_compress: false
 - 消息主处理路径不会等待空闲摘要落盘，新消息会被立即处理。
 - 在“引用回复”链路里，机器人会优先使用“话题回复”（`reply_in_thread=true`）发送收到/进度/结果；若飞书拒绝话题模式，则自动回退普通引用回复。
 - 仓库自带 `alice-message` skill 仅用于通过本地 runtime HTTP API 发送图片、文件等附件；纯文本回复由程序主链路直接转发。附件发送目标始终由当前会话上下文自动决定：私聊发送到当前私聊；群聊/话题群存在 `source_message_id` 时按该消息引用回复（优先 thread）。
-- 收到用户消息后，机器人会按 `immediate_feedback_mode` 立即反馈：默认引用回复 `收到！`，也可改成优先给原消息添加 reaction。
+- 收到用户消息后，机器人会按 `immediate_feedback_mode` 立即反馈：默认优先给原消息添加 reaction，失败再回退为引用回复 `收到！`。
 - Codex 执行期间，流式 `agent_message` 会优先以卡片回复；若卡片失败，会依次回退到富文本（`post`）和纯文本回复。
 - 若回复内容中包含可解析的 @提及，连接器会直接发送纯文本消息（不走卡片/富文本），以确保飞书侧正确触发 mention。
 - Codex 执行期间，流式 `file_change` 事件也走同样的“卡片优先”回复链路，例如：`internal/x.go已更改，+23-34`。

@@ -101,14 +101,13 @@ What the installer does:
 - Downloads stable GitHub Release assets by default (`~/.alice`), and uses dev prerelease channel only when `--channel dev` is provided (`~/.alice-dev`)
 - Verifies release checksum against `SHA256SUMS` when available
 - Initializes `${ALICE_HOME:-~/.alice}` directories
-- Copies existing Codex auth (`auth.json`) into `${ALICE_HOME}/.codex/` when available
 - Installs and manages `systemd --user` service (`alice.service` by default; override with `--service NAME`) for auto-restart
 - Attempts to enable user linger so the service can stay alive after logout
-- If `config.yaml` is missing, the service writes it from embedded `config.example.yaml` on first boot and exits cleanly
+- On startup, the `alice` binary bootstraps missing `config.yaml`, per-bot `SOUL.md`, and isolated Codex auth (`auth.json`) from embedded/default sources when available
 
 After first install:
 
-1. Edit `${ALICE_HOME:-~/.alice}/config.yaml` and set `feishu_app_id` + `feishu_app_secret`
+1. Edit `${ALICE_HOME:-~/.alice}/config.yaml` and set `bots.*.feishu_app_id` + `bots.*.feishu_app_secret`
 2. Start or restart service: `systemctl --user restart alice.service` (or rerun installer)
 3. Confirm the installed binary version: `alice --version`
 
@@ -136,8 +135,8 @@ Common optional keys:
 
 Default process env behavior:
 
-- Alice enforces `CODEX_HOME=${ALICE_HOME}/.codex` on startup
-- The same `CODEX_HOME` is injected into Codex/Claude/Kimi subprocesses unless explicitly overridden in `env`
+- Alice starts the service process with `CODEX_HOME=${ALICE_HOME}/.codex`
+- Each bot injects its own subprocess `CODEX_HOME` by default: `${ALICE_HOME}/bots/<bot_id>/.codex` unless overridden in `bots.<id>.env.CODEX_HOME`
 
 See [config.example.yaml](./config.example.yaml) for full schema.
 

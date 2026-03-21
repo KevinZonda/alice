@@ -237,34 +237,6 @@ download_and_install_binary() {
   log "installed binary to $BIN_PATH"
 }
 
-copy_codex_auth_if_exists() {
-  local target src
-  mkdir -p "$ALICE_HOME/.codex"
-  target="$ALICE_HOME/.codex/auth.json"
-
-  if [[ -f "$target" ]]; then
-    log "existing Codex auth.json found at $target; skip copy"
-    return
-  fi
-
-  for src in \
-    "${CODEX_HOME:-}/auth.json" \
-    "$HOME/.codex/auth.json" \
-    "$HOME/.config/codex/auth.json"; do
-    [[ -n "$src" ]] || continue
-    [[ -f "$src" ]] || continue
-    if [[ "$src" == "$target" ]]; then
-      return
-    fi
-    cp "$src" "$target"
-    chmod 600 "$target" || true
-    log "copied Codex auth.json from $src to $target"
-    return
-  done
-
-  log "Codex auth.json not found; skipped auth copy"
-}
-
 enable_linger_if_possible() {
   if ! command -v loginctl >/dev/null 2>&1; then
     return
@@ -331,7 +303,6 @@ install_or_update() {
   log "target version: $version"
 
   download_and_install_binary "$version" "$CHANNEL"
-  copy_codex_auth_if_exists
   write_systemd_unit
 
   enable_linger_if_possible
