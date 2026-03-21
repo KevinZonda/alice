@@ -108,7 +108,7 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool) error {
 	if strings.TrimSpace(cfg.AliceHome) != "" {
 		_ = os.Setenv(config.EnvAliceHome, cfg.AliceHome)
 	}
-	codexHome := ensureIsolatedCodexHomeEnv("")
+	codexHome := ensureIsolatedCodexHomeEnv(cfg.CodexHome)
 	if !pidFileExplicit {
 		pidFilePath = config.PIDFilePathForAliceHome(cfg.AliceHome)
 	}
@@ -138,9 +138,27 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool) error {
 	if err != nil {
 		return err
 	}
+	authReport, authErr := bootstrap.EnsureCodexAuthForCodexHome(cfg.CodexHome)
+	if authErr != nil {
+		logging.Warnf("sync root Codex auth failed target=%s: %v", cfg.CodexHome, authErr)
+	} else if authReport.Copied {
+		logging.Infof("codex auth synced source=%s target=%s", authReport.Source, authReport.Target)
+	}
 	for _, runtimeCfg := range runtimeConfigs {
 		if err := ensureWorkspaceDir(runtimeCfg.WorkspaceDir); err != nil {
 			return err
+		}
+		soulReport, soulErr := bootstrap.EnsureBotSoulFile(runtimeCfg.SoulPath)
+		if soulErr != nil {
+			logging.Warnf("ensure bot soul failed bot=%s path=%s: %v", runtimeCfg.BotID, runtimeCfg.SoulPath, soulErr)
+		} else if soulReport.Created {
+			logging.Infof("bot soul template created bot=%s path=%s", runtimeCfg.BotID, soulReport.Path)
+		}
+		authReport, authErr := bootstrap.EnsureCodexAuthForCodexHome(runtimeCfg.CodexHome, cfg.CodexHome)
+		if authErr != nil {
+			logging.Warnf("sync Codex auth failed bot=%s: %v", runtimeCfg.BotID, authErr)
+		} else if authReport.Copied {
+			logging.Infof("codex auth synced bot=%s source=%s target=%s", runtimeCfg.BotID, authReport.Source, authReport.Target)
 		}
 		skillReport, skillErr := bootstrap.EnsureBundledSkillsLinkedForCodexHome(runtimeCfg.CodexHome, runtimeCfg.AllowedBundledSkills())
 		if skillErr != nil {

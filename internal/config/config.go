@@ -18,8 +18,12 @@ const TriggerModeAt = "at"
 const TriggerModePrefix = "prefix"
 const ImmediateFeedbackModeReply = "reply"
 const ImmediateFeedbackModeReaction = "reaction"
-const DefaultImmediateFeedbackReaction = "SMILE"
+const DefaultImmediateFeedbackMode = ImmediateFeedbackModeReaction
+const DefaultImmediateFeedbackReaction = "OK"
 const DefaultRuntimeHTTPAddr = "127.0.0.1:7331"
+const DefaultWorkerConcurrency = 3
+const DefaultHTTPSProxy = "http://127.0.0.1:8080"
+const DefaultALLProxy = "http://127.0.0.1:8080"
 
 var configValidator = validator.New()
 
@@ -174,7 +178,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("feishu_base_url", "https://open.feishu.cn")
 	v.SetDefault("trigger_mode", TriggerModeAt)
 	v.SetDefault("trigger_prefix", "")
-	v.SetDefault("immediate_feedback_mode", ImmediateFeedbackModeReply)
+	v.SetDefault("immediate_feedback_mode", DefaultImmediateFeedbackMode)
 	v.SetDefault("immediate_feedback_reaction", DefaultImmediateFeedbackReaction)
 	v.SetDefault("llm_provider", DefaultLLMProvider)
 	v.SetDefault("codex_command", "codex")
@@ -194,6 +198,8 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("prompt_dir", "")
 	v.SetDefault("codex_home", "")
 	v.SetDefault("soul_path", "")
+	v.SetDefault("env.HTTPS_PROXY", DefaultHTTPSProxy)
+	v.SetDefault("env.ALL_PROXY", DefaultALLProxy)
 	v.SetDefault("bot_name", "")
 	v.SetDefault("permissions.runtime_message", true)
 	v.SetDefault("permissions.runtime_automation", true)
@@ -203,7 +209,7 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("permissions.codex.work.sandbox", "danger-full-access")
 	v.SetDefault("permissions.codex.work.ask_for_approval", "never")
 	v.SetDefault("queue_capacity", 256)
-	v.SetDefault("worker_concurrency", 1)
+	v.SetDefault("worker_concurrency", DefaultWorkerConcurrency)
 	v.SetDefault("automation_task_timeout_secs", 6000)
 	v.SetDefault("group_scenes.chat.enabled", false)
 	v.SetDefault("group_scenes.chat.session_scope", GroupSceneSessionPerChat)
@@ -284,7 +290,7 @@ func setBotDefaults(v *viper.Viper) {
 		v.SetDefault(prefix+"feishu_base_url", "https://open.feishu.cn")
 		v.SetDefault(prefix+"trigger_mode", TriggerModeAt)
 		v.SetDefault(prefix+"trigger_prefix", "")
-		v.SetDefault(prefix+"immediate_feedback_mode", ImmediateFeedbackModeReply)
+		v.SetDefault(prefix+"immediate_feedback_mode", DefaultImmediateFeedbackMode)
 		v.SetDefault(prefix+"immediate_feedback_reaction", DefaultImmediateFeedbackReaction)
 		v.SetDefault(prefix+"llm_provider", DefaultLLMProvider)
 		v.SetDefault(prefix+"codex_command", "codex")
@@ -298,8 +304,10 @@ func setBotDefaults(v *viper.Viper) {
 		v.SetDefault(prefix+"runtime_http_token", "")
 		v.SetDefault(prefix+"failure_message", "Codex 暂时不可用，请稍后重试。")
 		v.SetDefault(prefix+"thinking_message", "正在思考中...")
+		v.SetDefault(prefix+"env.HTTPS_PROXY", DefaultHTTPSProxy)
+		v.SetDefault(prefix+"env.ALL_PROXY", DefaultALLProxy)
 		v.SetDefault(prefix+"queue_capacity", 256)
-		v.SetDefault(prefix+"worker_concurrency", 1)
+		v.SetDefault(prefix+"worker_concurrency", DefaultWorkerConcurrency)
 		v.SetDefault(prefix+"automation_task_timeout_secs", 6000)
 		v.SetDefault(prefix+"permissions.runtime_message", true)
 		v.SetDefault(prefix+"permissions.runtime_automation", true)
@@ -391,6 +399,17 @@ func normalizeEnvMap(in map[string]string) map[string]string {
 	for key, value := range in {
 		normalizedKey := strings.ToUpper(strings.TrimSpace(key))
 		out[normalizedKey] = strings.TrimSpace(value)
+	}
+	return out
+}
+
+func applyDefaultCodexEnv(in map[string]string) map[string]string {
+	out := normalizeEnvMap(in)
+	if _, ok := out["HTTPS_PROXY"]; !ok {
+		out["HTTPS_PROXY"] = DefaultHTTPSProxy
+	}
+	if _, ok := out["ALL_PROXY"]; !ok {
+		out["ALL_PROXY"] = DefaultALLProxy
 	}
 	return out
 }

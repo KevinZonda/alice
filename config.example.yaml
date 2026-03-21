@@ -8,6 +8,7 @@
 # - prompts:      <alice_home>/prompts
 # - codex_home:   <alice_home>/.codex
 # - soul_path:    <workspace>/SOUL.md
+# Missing SOUL.md files are created from the embedded SOUL.md.example on startup.
 #
 # Process-level base home is still controlled by:
 # - CLI flag: `alice --alice-home /path/to/home`
@@ -27,6 +28,7 @@ bots:
     workspace_dir: ""
     prompt_dir: ""
     codex_home: ""
+    # If the file does not exist yet, Alice writes the embedded SOUL.md.example here on startup.
     soul_path: "SOUL.md"
 
     # Group work-scene trigger mode:
@@ -60,8 +62,8 @@ bots:
 
     # Optional: environment variables passed to LLM subprocesses.
     env:
-      HTTPS_PROXY: "http://127.0.0.1:7890"
-      ALL_PROXY: "socks5://127.0.0.1:7891"
+      HTTPS_PROXY: "http://127.0.0.1:8080"
+      ALL_PROXY: "http://127.0.0.1:8080"
 
     # Prompt and fallback
     codex_prompt_prefix: ""
@@ -73,8 +75,8 @@ bots:
     # Immediate feedback after receiving a reply-style message:
     # - reply: send an explicit `收到！` reply
     # - reaction: add a message reaction first, then fallback to `收到！` if reaction fails
-    immediate_feedback_mode: "reply"
-    immediate_feedback_reaction: "SMILE"
+    immediate_feedback_mode: "reaction"
+    immediate_feedback_reaction: "OK"
 
     # Scene router for group/topic-group chats.
     group_scenes:
@@ -105,13 +107,14 @@ bots:
           add_dirs: []
 
     queue_capacity: 256
-    worker_concurrency: 1
+    worker_concurrency: 3
     automation_task_timeout_secs: 6000
 
   work_bot:
     name: "Alice Work"
     feishu_app_id: "cli_work_xxxxx"
     feishu_app_secret: "work_secret"
+    # If the file does not exist yet, Alice writes the embedded SOUL.md.example here on startup.
     soul_path: "SOUL.md"
     llm_provider: "codex"
     llm_profiles:

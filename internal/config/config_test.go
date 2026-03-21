@@ -53,7 +53,7 @@ feishu_app_secret: sss
 	if runtime.TriggerPrefix != "" {
 		t.Fatalf("unexpected trigger_prefix: %q", runtime.TriggerPrefix)
 	}
-	if runtime.ImmediateFeedbackMode != ImmediateFeedbackModeReply {
+	if runtime.ImmediateFeedbackMode != DefaultImmediateFeedbackMode {
 		t.Fatalf("unexpected immediate_feedback_mode: %q", runtime.ImmediateFeedbackMode)
 	}
 	if runtime.ImmediateFeedbackReaction != DefaultImmediateFeedbackReaction {
@@ -77,6 +77,9 @@ feishu_app_secret: sss
 	if runtime.QueueCapacity != 256 {
 		t.Fatalf("unexpected queue_capacity: %d", runtime.QueueCapacity)
 	}
+	if runtime.WorkerConcurrency != DefaultWorkerConcurrency {
+		t.Fatalf("unexpected worker_concurrency: %d", runtime.WorkerConcurrency)
+	}
 	if runtime.AutomationTaskTimeoutSecs != 6000 {
 		t.Fatalf("unexpected automation_task_timeout_secs: %d", runtime.AutomationTaskTimeoutSecs)
 	}
@@ -88,6 +91,12 @@ feishu_app_secret: sss
 	}
 	if len(runtime.LLMProfiles) != 0 {
 		t.Fatalf("unexpected llm_profiles: %#v", runtime.LLMProfiles)
+	}
+	if runtime.CodexEnv["HTTPS_PROXY"] != DefaultHTTPSProxy {
+		t.Fatalf("unexpected default HTTPS_PROXY: %q", runtime.CodexEnv["HTTPS_PROXY"])
+	}
+	if runtime.CodexEnv["ALL_PROXY"] != DefaultALLProxy {
+		t.Fatalf("unexpected default ALL_PROXY: %q", runtime.CodexEnv["ALL_PROXY"])
 	}
 	if runtime.GroupScenes.Chat.Enabled {
 		t.Fatal("chat scene should default to disabled")

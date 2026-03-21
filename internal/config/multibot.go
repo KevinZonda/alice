@@ -43,11 +43,12 @@ func finalizeConfig(cfg Config, requireCredentials bool) (Config, error) {
 		cfg.TriggerMode = TriggerModeAt
 	}
 	if cfg.ImmediateFeedbackMode == "" {
-		cfg.ImmediateFeedbackMode = ImmediateFeedbackModeReply
+		cfg.ImmediateFeedbackMode = DefaultImmediateFeedbackMode
 	}
 	if cfg.ImmediateFeedbackReaction == "" {
 		cfg.ImmediateFeedbackReaction = DefaultImmediateFeedbackReaction
 	}
+	cfg.CodexEnv = applyDefaultCodexEnv(cfg.CodexEnv)
 	if cfg.CodexCommand == "" {
 		cfg.CodexCommand = "codex"
 	}
