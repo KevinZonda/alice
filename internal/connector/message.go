@@ -540,12 +540,16 @@ func extractTextWithMentions(content *string, mentions []*larkim.MentionEvent) (
 		return "", fmt.Errorf("invalid text content json: %w", err)
 	}
 
-	text := mentionPattern.ReplaceAllString(payload.Text, "")
-	text = stripMentionKeys(text, mentions)
-	text = strings.TrimSpace(text)
-	if text == "" {
+	stripped := mentionPattern.ReplaceAllString(payload.Text, "")
+	stripped = stripMentionKeys(stripped, mentions)
+	stripped = strings.TrimSpace(stripped)
+	if stripped == "" {
 		return "", ErrIgnoreMessage
 	}
+
+	text := mentionPattern.ReplaceAllString(payload.Text, "")
+	text = replaceMentionKeysWithDisplayNames(text, mentions)
+	text = strings.TrimSpace(text)
 	return text, nil
 }
 
@@ -562,6 +566,32 @@ func stripMentionKeys(text string, mentions []*larkim.MentionEvent) string {
 		cleaned = strings.ReplaceAll(cleaned, key, "")
 	}
 	return cleaned
+}
+
+func replaceMentionKeysWithDisplayNames(text string, mentions []*larkim.MentionEvent) string {
+	replaced := text
+	for _, mention := range mentions {
+		if mention == nil {
+			continue
+		}
+		key := strings.TrimSpace(deref(mention.Key))
+		if key == "" {
+			continue
+		}
+		replaced = strings.ReplaceAll(replaced, key, formatMentionDisplayName(deref(mention.Name)))
+	}
+	return replaced
+}
+
+func formatMentionDisplayName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if strings.HasPrefix(name, "@") {
+		return name
+	}
+	return "@" + name
 }
 
 func extractOpenID(event *larkim.P2MessageReceiveV1) string {
