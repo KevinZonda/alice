@@ -111,6 +111,54 @@ func TestProcessor_GeneratesImageFromRoleplayReply(t *testing.T) {
 	}
 }
 
+func TestProcessor_GeneratedImageRepliesDirectlyInChatScene(t *testing.T) {
+	sender := &senderStub{resourceRoot: t.TempDir()}
+	provider := &fakeImageProvider{}
+	processor := NewProcessor(codexStub{}, sender, "failed", "thinking")
+
+	err := processor.generateAndSendImage(
+		context.Background(),
+		processorRuntimeSnapshot{
+			imageGeneration: config.ImageGenerationConfig{
+				OutputFormat: "png",
+			},
+			imageProvider: provider,
+		},
+		Job{
+			ReceiveID:          "oc_chat",
+			ReceiveIDType:      "chat_id",
+			SourceMessageID:    "om_src",
+			Scene:              jobSceneChat,
+			CreateFeishuThread: false,
+			ResourceScopeKey:   "chat_id:oc_chat|scene:chat",
+			BotName:            "Mea",
+		},
+		roleplayEnvelope{
+			ActionLine: "抬手打招呼",
+			Speech:     "你好呀",
+		},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("generateAndSendImage failed: %v", err)
+	}
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	if sender.replyImageCalls != 1 {
+		t.Fatalf("expected one image reply, got %d", sender.replyImageCalls)
+	}
+	if sender.replyImageDirectCalls != 1 {
+		t.Fatalf("expected direct image reply in chat scene, got %d", sender.replyImageDirectCalls)
+	}
+	if len(sender.replyTargets) != 1 || sender.replyTargets[0] != "om_src" {
+		t.Fatalf("unexpected reply targets: %#v", sender.replyTargets)
+	}
+	if sender.sendImageCalls != 0 {
+		t.Fatalf("expected no image send fallback, got %d", sender.sendImageCalls)
+	}
+}
+
 func TestParseSoulDocument_UsesFrontmatterImageRefs(t *testing.T) {
 	doc := parseSoulDocument("---\nimage_refs:\n  - refs/base.png\n  - refs/face.png\nimage_generation:\n  min_reply_will: 60\noutput_contract:\n  hidden_tags:\n    - reply_will\n    - motion\n  reply_will_tag: reply_will\n  reply_will_field: reply_will\n  motion_tag: motion\n  suppress_token: \"[[NO_REPLY]]\"\n---\n角色正文")
 	if doc.Body != "角色正文" {

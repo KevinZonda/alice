@@ -34,12 +34,24 @@ type replyTextSender interface {
 	ReplyText(ctx context.Context, sourceMessageID, text string) (string, error)
 }
 
+type replyTextDirectSender interface {
+	ReplyTextDirect(ctx context.Context, sourceMessageID, text string) (string, error)
+}
+
 type replyImageSender interface {
 	ReplyImage(ctx context.Context, sourceMessageID, imageKey string) (string, error)
 }
 
+type replyImageDirectSender interface {
+	ReplyImageDirect(ctx context.Context, sourceMessageID, imageKey string) (string, error)
+}
+
 type replyFileSender interface {
 	ReplyFile(ctx context.Context, sourceMessageID, fileKey string) (string, error)
+}
+
+type replyFileDirectSender interface {
+	ReplyFileDirect(ctx context.Context, sourceMessageID, fileKey string) (string, error)
 }
 
 type Server struct {
@@ -764,6 +776,12 @@ func canManageTask(task automation.Task, actorID string) bool {
 
 func (s *Server) dispatchText(ctx context.Context, session mcpbridge.SessionContext, text string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
+		if !s.prefersThreadReply(session) {
+			if replySender, ok := s.sender.(replyTextDirectSender); ok {
+				_, err := replySender.ReplyTextDirect(ctx, sourceMessageID, text)
+				return err
+			}
+		}
 		if replySender, ok := s.sender.(replyTextSender); ok {
 			_, err := replySender.ReplyText(ctx, sourceMessageID, text)
 			return err
@@ -774,6 +792,12 @@ func (s *Server) dispatchText(ctx context.Context, session mcpbridge.SessionCont
 
 func (s *Server) dispatchImage(ctx context.Context, session mcpbridge.SessionContext, imageKey string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
+		if !s.prefersThreadReply(session) {
+			if replySender, ok := s.sender.(replyImageDirectSender); ok {
+				_, err := replySender.ReplyImageDirect(ctx, sourceMessageID, imageKey)
+				return err
+			}
+		}
 		if replySender, ok := s.sender.(replyImageSender); ok {
 			_, err := replySender.ReplyImage(ctx, sourceMessageID, imageKey)
 			return err
@@ -784,12 +808,35 @@ func (s *Server) dispatchImage(ctx context.Context, session mcpbridge.SessionCon
 
 func (s *Server) dispatchFile(ctx context.Context, session mcpbridge.SessionContext, fileKey string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
+		if !s.prefersThreadReply(session) {
+			if replySender, ok := s.sender.(replyFileDirectSender); ok {
+				_, err := replySender.ReplyFileDirect(ctx, sourceMessageID, fileKey)
+				return err
+			}
+		}
 		if replySender, ok := s.sender.(replyFileSender); ok {
 			_, err := replySender.ReplyFile(ctx, sourceMessageID, fileKey)
 			return err
 		}
 	}
 	return s.sender.SendFile(ctx, session.ReceiveIDType, session.ReceiveID, fileKey)
+}
+
+func (s *Server) prefersThreadReply(session mcpbridge.SessionContext) bool {
+	cfg := s.runtimeConfig()
+	sessionKey := strings.TrimSpace(session.SessionKey)
+	switch {
+	case strings.Contains(sessionKey, "|scene:chat"):
+		return cfg.groupScenes.Chat.CreateFeishuThread
+	case strings.Contains(sessionKey, "|scene:work"):
+		return cfg.groupScenes.Work.CreateFeishuThread
+	}
+	switch strings.TrimSpace(session.ChatType) {
+	case "group", "topic_group":
+		return true
+	default:
+		return false
+	}
 }
 
 func validatePathUnderRoot(path string, root string) error {

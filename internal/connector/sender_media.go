@@ -59,6 +59,21 @@ func (s *LarkSender) ReplyImage(ctx context.Context, sourceMessageID, imageKey s
 	)
 }
 
+func (s *LarkSender) ReplyImageDirect(ctx context.Context, sourceMessageID, imageKey string) (string, error) {
+	imageKey = strings.TrimSpace(imageKey)
+	if imageKey == "" {
+		return "", errors.New("image key is empty")
+	}
+	return s.replyMessage(
+		ctx,
+		sourceMessageID,
+		"image",
+		imageMessageContent(imageKey),
+		false,
+		"reply image success but response message_id is empty",
+	)
+}
+
 func (s *LarkSender) SendFile(ctx context.Context, receiveIDType, receiveID, fileKey string) error {
 	fileKey = strings.TrimSpace(fileKey)
 	if fileKey == "" {
@@ -100,6 +115,21 @@ func (s *LarkSender) ReplyFile(ctx context.Context, sourceMessageID, fileKey str
 		sourceMessageID,
 		"file",
 		fileMessageContent(fileKey),
+		"reply file success but response message_id is empty",
+	)
+}
+
+func (s *LarkSender) ReplyFileDirect(ctx context.Context, sourceMessageID, fileKey string) (string, error) {
+	fileKey = strings.TrimSpace(fileKey)
+	if fileKey == "" {
+		return "", errors.New("file key is empty")
+	}
+	return s.replyMessage(
+		ctx,
+		sourceMessageID,
+		"file",
+		fileMessageContent(fileKey),
+		false,
 		"reply file success but response message_id is empty",
 	)
 }

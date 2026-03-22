@@ -213,11 +213,19 @@ image_generation:
   model: "  gpt-image-1.5  "
   base_url: "  https://api.openai.example/v1  "
   timeout_secs: 180
+  moderation: "  LOW  "
+  n: 3
+  output_compression: 85
+  response_format: "  B64_JSON  "
   size: "  1024x1024  "
   quality: "  HIGH  "
   background: "  OPAQUE  "
   output_format: "  PNG  "
+  partial_images: 2
+  stream: true
+  style: "  NATURAL  "
   input_fidelity: "  HIGH  "
+  mask_path: "  /tmp/mask.png  "
   use_current_attachments: false
 `)
 
@@ -236,6 +244,18 @@ image_generation:
 	if runtime.ImageGeneration.TimeoutSecs != 180 {
 		t.Fatalf("unexpected image_generation.timeout_secs: %d", runtime.ImageGeneration.TimeoutSecs)
 	}
+	if runtime.ImageGeneration.Moderation != "low" {
+		t.Fatalf("unexpected image_generation.moderation: %q", runtime.ImageGeneration.Moderation)
+	}
+	if runtime.ImageGeneration.N != 3 {
+		t.Fatalf("unexpected image_generation.n: %d", runtime.ImageGeneration.N)
+	}
+	if runtime.ImageGeneration.OutputCompression != 85 {
+		t.Fatalf("unexpected image_generation.output_compression: %d", runtime.ImageGeneration.OutputCompression)
+	}
+	if runtime.ImageGeneration.ResponseFormat != "b64_json" {
+		t.Fatalf("unexpected image_generation.response_format: %q", runtime.ImageGeneration.ResponseFormat)
+	}
 	if runtime.ImageGeneration.Size != "1024x1024" {
 		t.Fatalf("unexpected image_generation.size: %q", runtime.ImageGeneration.Size)
 	}
@@ -248,8 +268,20 @@ image_generation:
 	if runtime.ImageGeneration.OutputFormat != "png" {
 		t.Fatalf("unexpected image_generation.output_format: %q", runtime.ImageGeneration.OutputFormat)
 	}
+	if runtime.ImageGeneration.PartialImages != 2 {
+		t.Fatalf("unexpected image_generation.partial_images: %d", runtime.ImageGeneration.PartialImages)
+	}
+	if !runtime.ImageGeneration.Stream {
+		t.Fatal("expected image_generation.stream to be true")
+	}
+	if runtime.ImageGeneration.Style != "natural" {
+		t.Fatalf("unexpected image_generation.style: %q", runtime.ImageGeneration.Style)
+	}
 	if runtime.ImageGeneration.InputFidelity != "high" {
 		t.Fatalf("unexpected image_generation.input_fidelity: %q", runtime.ImageGeneration.InputFidelity)
+	}
+	if runtime.ImageGeneration.MaskPath != "/tmp/mask.png" {
+		t.Fatalf("unexpected image_generation.mask_path: %q", runtime.ImageGeneration.MaskPath)
 	}
 	if runtime.ImageGeneration.UseCurrentAttachments {
 		t.Fatal("expected use_current_attachments to be false")

@@ -38,19 +38,22 @@ require_cmd() {
 }
 
 resolve_ihep_gitlab_helper() {
-  local script_dir repo_helper installed_helper
+  local script_dir candidate
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  repo_helper="$(cd "$script_dir/../../ihep-gitlab/scripts" 2>/dev/null && pwd)/ihep-gitlab.sh" || true
-  installed_helper="$ALICE_HOME_DIR/.codex/skills/ihep-gitlab/scripts/ihep-gitlab.sh"
 
-  if [[ -x "$repo_helper" ]]; then
-    printf '%s\n' "$repo_helper"
-    return 0
-  fi
-  if [[ -x "$installed_helper" ]]; then
-    printf '%s\n' "$installed_helper"
-    return 0
-  fi
+  for candidate in \
+    "$script_dir/../../ihep-gitlab/scripts/ihep-gitlab.sh" \
+    "$script_dir/../../../../IHEP-cluster-skill/skills/ihep-gitlab/scripts/ihep-gitlab.sh" \
+    "$ALICE_HOME_DIR/.codex/skills/ihep-gitlab/scripts/ihep-gitlab.sh" \
+    "$ALICE_HOME_DIR"/bots/*/.codex/skills/ihep-gitlab/scripts/ihep-gitlab.sh \
+    "$HOME/.alice/.codex/skills/ihep-gitlab/scripts/ihep-gitlab.sh" \
+    "$HOME/.alice"/bots/*/.codex/skills/ihep-gitlab/scripts/ihep-gitlab.sh
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
   if command -v ihep-gitlab.sh >/dev/null 2>&1; then
     command -v ihep-gitlab.sh
     return 0
@@ -173,8 +176,14 @@ gitlab_note_issue() {
     if [[ -n "$legacy_match" ]]; then
       cmd+=(--upsert-fallback-substring "$legacy_match")
     fi
-    "${cmd[@]}"
-    return
+    if "${cmd[@]}"; then
+      return
+    fi
+    if [[ -n "$marker" || -n "$legacy_match" ]]; then
+      die "managed issue note sync failed via ihep-gitlab helper for ${repo}#${iid}; refusing raw glab fallback"
+    fi
+  elif [[ -n "$marker" || -n "$legacy_match" ]]; then
+    die "managed issue note sync requires ihep-gitlab helper for ${repo}#${iid}; refusing raw glab fallback"
   fi
   require_cmd glab
   GITLAB_HOST="$DEFAULT_GITLAB_HOST" glab issue note "$iid" -R "$repo" -m "$body"
@@ -194,6 +203,11 @@ gitlab_note_mr() {
     if "${cmd[@]}"; then
       return
     fi
+    if [[ -n "$marker" || -n "$legacy_match" ]]; then
+      die "managed MR note sync failed via ihep-gitlab helper for ${repo}!${iid}; refusing raw glab fallback"
+    fi
+  elif [[ -n "$marker" || -n "$legacy_match" ]]; then
+    die "managed MR note sync requires ihep-gitlab helper for ${repo}!${iid}; refusing raw glab fallback"
   fi
   require_cmd glab
   GITLAB_HOST="$DEFAULT_GITLAB_HOST" glab mr note "$iid" -R "$repo" -m "$body"

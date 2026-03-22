@@ -91,7 +91,7 @@ func TestOpenAIFileWrapperCarriesImageMetadata(t *testing.T) {
 	}
 }
 
-func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
+func TestOpenAIProviderEditImage_UsesConfiguredParams(t *testing.T) {
 	t.Parallel()
 
 	type uploadedImage struct {
@@ -103,6 +103,7 @@ func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
 		Path   string
 		Fields map[string][]string
 		Images []uploadedImage
+		Masks  []uploadedImage
 	}
 
 	captured := requestCapture{}
@@ -126,6 +127,14 @@ func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
 			if readErr != nil {
 				t.Fatalf("ReadAll(%q) failed: %v", part.FormName(), readErr)
 			}
+			if part.FormName() == "mask" {
+				captured.Masks = append(captured.Masks, uploadedImage{
+					FormName:    part.FormName(),
+					FileName:    part.FileName(),
+					ContentType: part.Header.Get("Content-Type"),
+				})
+				continue
+			}
 			if strings.HasPrefix(part.FormName(), "image") {
 				captured.Images = append(captured.Images, uploadedImage{
 					FormName:    part.FormName(),
@@ -141,13 +150,28 @@ func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := mustNewTestOpenAIProvider(t, server.URL)
 	tempDir := t.TempDir()
 	outputPath := filepath.Join(tempDir, "out.png")
 	refPath := filepath.Join(tempDir, "ref.png")
+	maskPath := filepath.Join(tempDir, "mask.png")
 	if err := os.WriteFile(refPath, []byte("fake-png"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) failed: %v", refPath, err)
 	}
+	if err := os.WriteFile(maskPath, []byte("fake-mask"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) failed: %v", maskPath, err)
+	}
+	provider := mustNewTestOpenAIProvider(t, server.URL, func(cfg *config.ImageGenerationConfig) {
+		cfg.Moderation = "low"
+		cfg.N = 2
+		cfg.OutputCompression = 80
+		cfg.Size = "1024x1024"
+		cfg.Quality = "medium"
+		cfg.Background = "transparent"
+		cfg.OutputFormat = "webp"
+		cfg.PartialImages = 2
+		cfg.InputFidelity = "low"
+		cfg.MaskPath = maskPath
+	})
 
 	_, err := provider.Generate(context.Background(), Request{
 		Prompt:          "draw Mea waving",
@@ -162,9 +186,22 @@ func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
 	if captured.Path != "/images/edits" {
 		t.Fatalf("unexpected path: %q", captured.Path)
 	}
-	for _, field := range []string{"background", "size", "quality", "output_format", "input_fidelity"} {
-		if got := firstField(captured.Fields, field); got != "" {
-			t.Fatalf("%s should be omitted for edit requests, got %q", field, got)
+	wantFields := map[string]string{
+		"background":         "transparent",
+		"input_fidelity":     "low",
+		"model":              "gpt-image-1.5",
+		"moderation":         "low",
+		"n":                  "2",
+		"output_compression": "80",
+		"output_format":      "webp",
+		"partial_images":     "2",
+		"quality":            "medium",
+		"size":               "1024x1024",
+		"user":               "user-123",
+	}
+	for field, want := range wantFields {
+		if got := firstField(captured.Fields, field); got != want {
+			t.Fatalf("unexpected %s: got %q want %q", field, got, want)
 		}
 	}
 	if len(captured.Images) != 1 {
@@ -176,18 +213,34 @@ func TestOpenAIProviderEditImage_UsesMinimalCompatibleParams(t *testing.T) {
 	if captured.Images[0].FileName != "ref.png" {
 		t.Fatalf("unexpected image filename: %q", captured.Images[0].FileName)
 	}
+	if len(captured.Masks) != 1 {
+		t.Fatalf("unexpected mask count: %d", len(captured.Masks))
+	}
+	if captured.Masks[0].ContentType != "image/png" {
+		t.Fatalf("unexpected mask content type: %q", captured.Masks[0].ContentType)
+	}
+	if captured.Masks[0].FileName != "mask.png" {
+		t.Fatalf("unexpected mask filename: %q", captured.Masks[0].FileName)
+	}
 }
 
-func TestOpenAIProviderGenerateImage_KeepsBackground(t *testing.T) {
+func TestOpenAIProviderGenerateImage_UsesConfiguredParams(t *testing.T) {
 	t.Parallel()
 
 	type generateRequest struct {
-		Path       string `json:"-"`
-		Background string `json:"background"`
-		Prompt     string `json:"prompt"`
-		Model      string `json:"model"`
-		Quality    string `json:"quality"`
-		Size       string `json:"size"`
+		Path              string `json:"-"`
+		Background        string `json:"background"`
+		Moderation        string `json:"moderation"`
+		N                 int    `json:"n"`
+		OutputCompression int    `json:"output_compression"`
+		OutputFormat      string `json:"output_format"`
+		PartialImages     int    `json:"partial_images"`
+		Prompt            string `json:"prompt"`
+		Model             string `json:"model"`
+		Quality           string `json:"quality"`
+		ResponseFormat    string `json:"response_format"`
+		Size              string `json:"size"`
+		User              string `json:"user"`
 	}
 
 	var captured generateRequest
@@ -207,7 +260,16 @@ func TestOpenAIProviderGenerateImage_KeepsBackground(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := mustNewTestOpenAIProvider(t, server.URL)
+	provider := mustNewTestOpenAIProvider(t, server.URL, func(cfg *config.ImageGenerationConfig) {
+		cfg.Moderation = "low"
+		cfg.N = 2
+		cfg.OutputCompression = 70
+		cfg.OutputFormat = "webp"
+		cfg.PartialImages = 2
+		cfg.Quality = "medium"
+		cfg.ResponseFormat = "b64_json"
+		cfg.Size = "1024x1024"
+	})
 	outputPath := filepath.Join(t.TempDir(), "out.png")
 
 	_, err := provider.Generate(context.Background(), Request{
@@ -228,12 +290,168 @@ func TestOpenAIProviderGenerateImage_KeepsBackground(t *testing.T) {
 	if captured.Model != "gpt-image-1.5" {
 		t.Fatalf("unexpected model: %q", captured.Model)
 	}
+	if captured.Moderation != "low" {
+		t.Fatalf("unexpected moderation: %q", captured.Moderation)
+	}
+	if captured.N != 2 {
+		t.Fatalf("unexpected n: %d", captured.N)
+	}
+	if captured.OutputCompression != 70 {
+		t.Fatalf("unexpected output_compression: %d", captured.OutputCompression)
+	}
+	if captured.OutputFormat != "webp" {
+		t.Fatalf("unexpected output_format: %q", captured.OutputFormat)
+	}
+	if captured.PartialImages != 2 {
+		t.Fatalf("unexpected partial_images: %d", captured.PartialImages)
+	}
+	if captured.Quality != "medium" {
+		t.Fatalf("unexpected quality: %q", captured.Quality)
+	}
+	if captured.ResponseFormat != "b64_json" {
+		t.Fatalf("unexpected response_format: %q", captured.ResponseFormat)
+	}
+	if captured.Size != "1024x1024" {
+		t.Fatalf("unexpected size: %q", captured.Size)
+	}
+	if captured.User != "user-123" {
+		t.Fatalf("unexpected user: %q", captured.User)
+	}
 }
 
-func mustNewTestOpenAIProvider(t *testing.T, baseURL string) Provider {
+func TestOpenAIProviderGenerateImage_DownloadsURLResponse(t *testing.T) {
+	t.Parallel()
+
+	imageBytes := []byte("downloaded-image")
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+		switch r.URL.Path {
+		case "/images/generations":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"url":"` + server.URL + `/files/out.png"}]}`))
+		case "/files/out.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(imageBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := mustNewTestOpenAIProvider(t, server.URL, func(cfg *config.ImageGenerationConfig) {
+		cfg.Model = "dall-e-3"
+		cfg.ResponseFormat = "url"
+		cfg.Style = "natural"
+		cfg.Quality = "hd"
+		cfg.Size = "1792x1024"
+		cfg.Background = ""
+		cfg.OutputFormat = ""
+		cfg.Moderation = ""
+	})
+	outputPath := filepath.Join(t.TempDir(), "out.png")
+
+	result, err := provider.Generate(context.Background(), Request{
+		Prompt:     "draw Mea waving",
+		OutputPath: outputPath,
+	})
+	if err != nil {
+		t.Fatalf("Generate() failed: %v", err)
+	}
+	if result.LocalPath != outputPath {
+		t.Fatalf("unexpected local path: %q", result.LocalPath)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) failed: %v", outputPath, err)
+	}
+	if string(data) != string(imageBytes) {
+		t.Fatalf("unexpected downloaded image bytes: %q", string(data))
+	}
+}
+
+func TestOpenAIProviderEditImage_StreamingUsesCompletedEvent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Helper()
+		if r.URL.Path != "/images/edits" {
+			t.Fatalf("unexpected path: %q", r.URL.Path)
+		}
+		reader, err := r.MultipartReader()
+		if err != nil {
+			t.Fatalf("MultipartReader() failed: %v", err)
+		}
+		fields := map[string]string{}
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatalf("NextPart() failed: %v", err)
+			}
+			if strings.HasPrefix(part.FormName(), "image") {
+				_, _ = io.Copy(io.Discard, part)
+				continue
+			}
+			body, readErr := io.ReadAll(part)
+			if readErr != nil {
+				t.Fatalf("ReadAll(%q) failed: %v", part.FormName(), readErr)
+			}
+			fields[part.FormName()] = string(body)
+		}
+		if fields["stream"] != "true" {
+			t.Fatalf("expected stream=true, got %q", fields["stream"])
+		}
+		if fields["moderation"] != "low" {
+			t.Fatalf("expected moderation=low, got %q", fields["moderation"])
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: image_edit.completed\n")
+		_, _ = io.WriteString(w, `data: {"type":"image_edit.completed","b64_json":"`+base64.StdEncoding.EncodeToString([]byte("streamed-ok"))+`","background":"auto","created_at":1,"output_format":"png","quality":"high","size":"1024x1024","usage":{"input_tokens":1,"input_tokens_details":{"image_tokens":0,"text_tokens":1},"output_tokens":1,"total_tokens":2}}`+"\n\n")
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	refPath := filepath.Join(tempDir, "ref.png")
+	if err := os.WriteFile(refPath, []byte("fake-png"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) failed: %v", refPath, err)
+	}
+	provider := mustNewTestOpenAIProvider(t, server.URL, func(cfg *config.ImageGenerationConfig) {
+		cfg.Stream = true
+		cfg.Moderation = "low"
+	})
+	outputPath := filepath.Join(tempDir, "out.png")
+
+	result, err := provider.Generate(context.Background(), Request{
+		Prompt:          "draw Mea waving",
+		ReferenceImages: []string{refPath},
+		OutputPath:      outputPath,
+	})
+	if err != nil {
+		t.Fatalf("Generate() failed: %v", err)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) failed: %v", outputPath, err)
+	}
+	if string(data) != "streamed-ok" {
+		t.Fatalf("unexpected streamed image bytes: %q", string(data))
+	}
+	if result.LocalPath != outputPath {
+		t.Fatalf("unexpected local path: %q", result.LocalPath)
+	}
+}
+
+func mustNewTestOpenAIProvider(
+	t *testing.T,
+	baseURL string,
+	override func(*config.ImageGenerationConfig),
+) *openAIProvider {
 	t.Helper()
 
-	provider, err := newOpenAIProvider(config.ImageGenerationConfig{
+	cfg := config.ImageGenerationConfig{
 		Provider:              "openai",
 		Model:                 "gpt-image-1.5",
 		BaseURL:               baseURL,
@@ -244,13 +462,23 @@ func mustNewTestOpenAIProvider(t *testing.T, baseURL string) Provider {
 		OutputFormat:          "png",
 		InputFidelity:         "high",
 		UseCurrentAttachments: true,
-	}, map[string]string{
+		OutputCompression:     -1,
+		PartialImages:         -1,
+	}
+	if override != nil {
+		override(&cfg)
+	}
+	provider, err := newOpenAIProvider(cfg, map[string]string{
 		"OPENAI_API_KEY": "test-key",
 	})
 	if err != nil {
 		t.Fatalf("newOpenAIProvider() failed: %v", err)
 	}
-	return provider
+	typed, ok := provider.(*openAIProvider)
+	if !ok {
+		t.Fatalf("unexpected provider type: %T", provider)
+	}
+	return typed
 }
 
 func firstField(fields map[string][]string, key string) string {
