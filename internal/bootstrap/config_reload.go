@@ -74,6 +74,9 @@ func (r *ConnectorRuntime) ApplyConfigReload(next config.Config) (ConfigReloadRe
 		}
 		r.Processor.SetReplyMessages(merged.FailureMessage, merged.ThinkingMessage)
 		r.Processor.SetImmediateFeedback(merged.ImmediateFeedbackMode, merged.ImmediateFeedbackReaction)
+		if err := r.Processor.SetImageGeneration(merged.ImageGeneration, merged.CodexEnv); err != nil {
+			return report, fmt.Errorf("reconfigure image generation failed: %w", err)
+		}
 	}
 	if r.AutomationEngine != nil {
 		if llmChanged && backend != nil {
@@ -141,6 +144,10 @@ func applyReloadableFields(dst *config.Config, src config.Config, changed map[st
 	applyStringField(&dst.ThinkingMessage, src.ThinkingMessage, "thinking_message", changed)
 	applyStringField(&dst.ImmediateFeedbackMode, src.ImmediateFeedbackMode, "immediate_feedback_mode", changed)
 	applyStringField(&dst.ImmediateFeedbackReaction, src.ImmediateFeedbackReaction, "immediate_feedback_reaction", changed)
+	if dst.ImageGeneration != src.ImageGeneration {
+		dst.ImageGeneration = src.ImageGeneration
+		changed["image_generation"] = struct{}{}
+	}
 
 	applyStringField(&dst.LLMProvider, src.LLMProvider, "llm_provider", changed)
 	if !llmProfileMapEqual(dst.LLMProfiles, src.LLMProfiles) {

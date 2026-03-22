@@ -570,7 +570,13 @@ func TestProcessor_SendModeSuppressesNoReplyToken(t *testing.T) {
 		ReceiveIDType: "chat_id",
 		ResponseMode:  jobResponseModeSend,
 		NoReplyToken:  "[[NO_REPLY]]",
-		Text:          "hello",
+		SoulDoc: soulDocument{
+			OutputContract: outputContract{
+				ReplyWillTag:   "reply_will",
+				ReplyWillField: "reply_will",
+			},
+		},
+		Text: "hello",
 	})
 
 	if sender.sendCardCalls != 0 {
@@ -591,7 +597,13 @@ func TestProcessor_SendModeSuppressesNoReplyToken_WithReplyWillBlock(t *testing.
 		ReceiveIDType: "chat_id",
 		ResponseMode:  jobResponseModeSend,
 		NoReplyToken:  "[[NO_REPLY]]",
-		Text:          "hello",
+		SoulDoc: soulDocument{
+			OutputContract: outputContract{
+				ReplyWillTag:   "reply_will",
+				ReplyWillField: "reply_will",
+			},
+		},
+		Text: "hello",
 	})
 
 	if sender.sendCardCalls != 0 {
@@ -603,7 +615,7 @@ func TestProcessor_SendModeSuppressesNoReplyToken_WithReplyWillBlock(t *testing.
 }
 
 func TestProcessor_ChatSceneStripsReplyWillBlockBeforeSending(t *testing.T) {
-	fakeCodex := codexStub{resp: "<reply_will>88%</reply_will>\n【轻轻晃了晃尾巴】\n咱在这儿看着你喵。"}
+	fakeCodex := codexStub{resp: "<reply_will>88%</reply_will>\n<motion>轻轻晃了晃尾巴</motion>\n咱在这儿看着你喵。"}
 	sender := &senderStub{}
 	processor := NewProcessor(fakeCodex, sender, "Codex 暂时不可用，请稍后重试。", "正在思考中...")
 
@@ -615,7 +627,14 @@ func TestProcessor_ChatSceneStripsReplyWillBlockBeforeSending(t *testing.T) {
 		ResponseMode:       jobResponseModeReply,
 		CreateFeishuThread: false,
 		DisableAck:         true,
-		Text:               "hello",
+		SoulDoc: soulDocument{
+			OutputContract: outputContract{
+				ReplyWillTag:   "reply_will",
+				ReplyWillField: "reply_will",
+				MotionTag:      "motion",
+			},
+		},
+		Text: "hello",
 	})
 
 	if sender.replyRichMarkdownCalls != 1 {
@@ -627,7 +646,10 @@ func TestProcessor_ChatSceneStripsReplyWillBlockBeforeSending(t *testing.T) {
 	if strings.Contains(sender.replyMarkdownTexts[0], "<reply_will>") {
 		t.Fatalf("reply_will block should be stripped before sending, got %q", sender.replyMarkdownTexts[0])
 	}
-	want := "【轻轻晃了晃尾巴】\n咱在这儿看着你喵。"
+	if strings.Contains(sender.replyMarkdownTexts[0], "<motion>") {
+		t.Fatalf("motion block should be stripped before sending, got %q", sender.replyMarkdownTexts[0])
+	}
+	want := "咱在这儿看着你喵。"
 	if sender.replyMarkdownTexts[0] != want {
 		t.Fatalf("unexpected markdown reply:\nwant: %q\ngot : %q", want, sender.replyMarkdownTexts[0])
 	}

@@ -98,14 +98,18 @@ func (p *Processor) appendBotSoul(userText string, job Job) string {
 	if soulPath == "" {
 		return strings.TrimSpace(userText)
 	}
-	raw, err := os.ReadFile(soulPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			logging.Warnf("read bot soul failed event_id=%s path=%s: %v", job.EventID, soulPath, err)
+	soulDoc := job.SoulDoc
+	if !soulDoc.Loaded {
+		raw, err := os.ReadFile(soulPath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				logging.Warnf("read bot soul failed event_id=%s path=%s: %v", job.EventID, soulPath, err)
+			}
+			return strings.TrimSpace(userText)
 		}
-		return strings.TrimSpace(userText)
+		soulDoc = parseSoulDocument(string(raw))
 	}
-	soulText := strings.TrimSpace(string(raw))
+	soulText := strings.TrimSpace(soulDoc.Body)
 	if soulText == "" {
 		return strings.TrimSpace(userText)
 	}
@@ -244,7 +248,26 @@ func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 }
 
 func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
-	if job == nil || len(job.Attachments) == 0 {
+	if job == nil {
+		return
+	}
+
+	if !job.SoulDoc.Loaded {
+		soulPath := strings.TrimSpace(job.SoulPath)
+		if soulPath != "" {
+			raw, err := os.ReadFile(soulPath)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					logging.Warnf("read bot soul failed event_id=%s path=%s: %v", job.EventID, soulPath, err)
+				}
+			} else {
+				job.SoulDoc = parseSoulDocument(string(raw))
+				job.NoReplyToken = job.SoulDoc.OutputContract.effectiveSuppressToken(job.NoReplyToken)
+			}
+		}
+	}
+
+	if len(job.Attachments) == 0 {
 		return
 	}
 

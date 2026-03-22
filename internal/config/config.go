@@ -55,6 +55,28 @@ type GroupScenesConfig struct {
 	Work GroupSceneConfig `mapstructure:"work"`
 }
 
+type ProxyConfig struct {
+	HTTPProxy  string `mapstructure:"http_proxy"`
+	HTTPSProxy string `mapstructure:"https_proxy"`
+	ALLProxy   string `mapstructure:"all_proxy"`
+	NoProxy    string `mapstructure:"no_proxy"`
+}
+
+type ImageGenerationConfig struct {
+	Enabled               bool        `mapstructure:"enabled"`
+	Provider              string      `mapstructure:"provider"`
+	Model                 string      `mapstructure:"model"`
+	BaseURL               string      `mapstructure:"base_url"`
+	TimeoutSecs           int         `mapstructure:"timeout_secs"`
+	Size                  string      `mapstructure:"size"`
+	Quality               string      `mapstructure:"quality"`
+	Background            string      `mapstructure:"background"`
+	OutputFormat          string      `mapstructure:"output_format"`
+	InputFidelity         string      `mapstructure:"input_fidelity"`
+	UseCurrentAttachments bool        `mapstructure:"use_current_attachments"`
+	Proxy                 ProxyConfig `mapstructure:"proxy"`
+}
+
 type CodexExecPolicyConfig struct {
 	Sandbox        string   `mapstructure:"sandbox"`
 	AskForApproval string   `mapstructure:"ask_for_approval"`
@@ -106,6 +128,7 @@ type BotConfig struct {
 	RuntimeHTTPToken          string                      `mapstructure:"runtime_http_token"`
 	FailureMessage            string                      `mapstructure:"failure_message"`
 	ThinkingMessage           string                      `mapstructure:"thinking_message"`
+	ImageGeneration           ImageGenerationConfig       `mapstructure:"image_generation"`
 	AliceHome                 string                      `mapstructure:"alice_home"`
 	WorkspaceDir              string                      `mapstructure:"workspace_dir"`
 	PromptDir                 string                      `mapstructure:"prompt_dir"`
@@ -135,36 +158,37 @@ type Config struct {
 	LLMProfiles map[string]LLMProfileConfig `mapstructure:"llm_profiles"`
 	GroupScenes GroupScenesConfig           `mapstructure:"group_scenes"`
 
-	CodexCommand         string               `mapstructure:"codex_command"`
-	CodexTimeout         time.Duration        `mapstructure:"-"`
-	CodexTimeoutSecs     int                  `mapstructure:"codex_timeout_secs"`
-	CodexModel           string               `mapstructure:"codex_model"`
-	CodexReasoningEffort string               `mapstructure:"codex_model_reasoning_effort"`
-	CodexEnv             map[string]string    `mapstructure:"env"`
-	CodexPromptPrefix    string               `mapstructure:"codex_prompt_prefix"`
-	ClaudeCommand        string               `mapstructure:"claude_command"`
-	ClaudeTimeout        time.Duration        `mapstructure:"-"`
-	ClaudeTimeoutSecs    int                  `mapstructure:"claude_timeout_secs"`
-	ClaudePromptPrefix   string               `mapstructure:"claude_prompt_prefix"`
-	GeminiCommand        string               `mapstructure:"gemini_command"`
-	GeminiTimeout        time.Duration        `mapstructure:"-"`
-	GeminiTimeoutSecs    int                  `mapstructure:"gemini_timeout_secs"`
-	GeminiPromptPrefix   string               `mapstructure:"gemini_prompt_prefix"`
-	KimiCommand          string               `mapstructure:"kimi_command"`
-	KimiTimeout          time.Duration        `mapstructure:"-"`
-	KimiTimeoutSecs      int                  `mapstructure:"kimi_timeout_secs"`
-	KimiPromptPrefix     string               `mapstructure:"kimi_prompt_prefix"`
-	RuntimeHTTPAddr      string               `mapstructure:"runtime_http_addr"`
-	RuntimeHTTPToken     string               `mapstructure:"runtime_http_token"`
-	FailureMessage       string               `mapstructure:"failure_message"`
-	ThinkingMessage      string               `mapstructure:"thinking_message"`
-	AliceHome            string               `mapstructure:"alice_home"`
-	WorkspaceDir         string               `mapstructure:"workspace_dir"`
-	PromptDir            string               `mapstructure:"prompt_dir"`
-	CodexHome            string               `mapstructure:"codex_home"`
-	SoulPath             string               `mapstructure:"soul_path"`
-	Permissions          BotPermissionsConfig `mapstructure:"permissions"`
-	Bots                 map[string]BotConfig `mapstructure:"bots"`
+	CodexCommand         string                `mapstructure:"codex_command"`
+	CodexTimeout         time.Duration         `mapstructure:"-"`
+	CodexTimeoutSecs     int                   `mapstructure:"codex_timeout_secs"`
+	CodexModel           string                `mapstructure:"codex_model"`
+	CodexReasoningEffort string                `mapstructure:"codex_model_reasoning_effort"`
+	CodexEnv             map[string]string     `mapstructure:"env"`
+	CodexPromptPrefix    string                `mapstructure:"codex_prompt_prefix"`
+	ClaudeCommand        string                `mapstructure:"claude_command"`
+	ClaudeTimeout        time.Duration         `mapstructure:"-"`
+	ClaudeTimeoutSecs    int                   `mapstructure:"claude_timeout_secs"`
+	ClaudePromptPrefix   string                `mapstructure:"claude_prompt_prefix"`
+	GeminiCommand        string                `mapstructure:"gemini_command"`
+	GeminiTimeout        time.Duration         `mapstructure:"-"`
+	GeminiTimeoutSecs    int                   `mapstructure:"gemini_timeout_secs"`
+	GeminiPromptPrefix   string                `mapstructure:"gemini_prompt_prefix"`
+	KimiCommand          string                `mapstructure:"kimi_command"`
+	KimiTimeout          time.Duration         `mapstructure:"-"`
+	KimiTimeoutSecs      int                   `mapstructure:"kimi_timeout_secs"`
+	KimiPromptPrefix     string                `mapstructure:"kimi_prompt_prefix"`
+	RuntimeHTTPAddr      string                `mapstructure:"runtime_http_addr"`
+	RuntimeHTTPToken     string                `mapstructure:"runtime_http_token"`
+	FailureMessage       string                `mapstructure:"failure_message"`
+	ThinkingMessage      string                `mapstructure:"thinking_message"`
+	ImageGeneration      ImageGenerationConfig `mapstructure:"image_generation"`
+	AliceHome            string                `mapstructure:"alice_home"`
+	WorkspaceDir         string                `mapstructure:"workspace_dir"`
+	PromptDir            string                `mapstructure:"prompt_dir"`
+	CodexHome            string                `mapstructure:"codex_home"`
+	SoulPath             string                `mapstructure:"soul_path"`
+	Permissions          BotPermissionsConfig  `mapstructure:"permissions"`
+	Bots                 map[string]BotConfig  `mapstructure:"bots"`
 
 	QueueCapacity             int           `mapstructure:"queue_capacity"`
 	WorkerConcurrency         int           `mapstructure:"worker_concurrency"`
@@ -203,6 +227,17 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("runtime_http_token", "")
 	v.SetDefault("failure_message", "Codex 暂时不可用，请稍后重试。")
 	v.SetDefault("thinking_message", "正在思考中...")
+	v.SetDefault("image_generation.enabled", false)
+	v.SetDefault("image_generation.provider", "openai")
+	v.SetDefault("image_generation.model", "gpt-image-1.5")
+	v.SetDefault("image_generation.base_url", "")
+	v.SetDefault("image_generation.timeout_secs", 120)
+	v.SetDefault("image_generation.size", "1024x1536")
+	v.SetDefault("image_generation.quality", "high")
+	v.SetDefault("image_generation.background", "auto")
+	v.SetDefault("image_generation.output_format", "png")
+	v.SetDefault("image_generation.input_fidelity", "high")
+	v.SetDefault("image_generation.use_current_attachments", true)
 	v.SetDefault("alice_home", AliceHomeDir())
 	v.SetDefault("workspace_dir", "")
 	v.SetDefault("prompt_dir", "")
@@ -279,6 +314,7 @@ func LoadFromFile(path string) (Config, error) {
 	cfg.RuntimeHTTPToken = strings.TrimSpace(cfg.RuntimeHTTPToken)
 	cfg.FailureMessage = strings.TrimSpace(cfg.FailureMessage)
 	cfg.ThinkingMessage = strings.TrimSpace(cfg.ThinkingMessage)
+	cfg.ImageGeneration = normalizeImageGenerationConfig(cfg.ImageGeneration)
 	cfg.AliceHome = strings.TrimSpace(cfg.AliceHome)
 	cfg.WorkspaceDir = strings.TrimSpace(cfg.WorkspaceDir)
 	cfg.PromptDir = strings.TrimSpace(cfg.PromptDir)
@@ -318,6 +354,17 @@ func setBotDefaults(v *viper.Viper) {
 		v.SetDefault(prefix+"runtime_http_token", "")
 		v.SetDefault(prefix+"failure_message", "Codex 暂时不可用，请稍后重试。")
 		v.SetDefault(prefix+"thinking_message", "正在思考中...")
+		v.SetDefault(prefix+"image_generation.enabled", false)
+		v.SetDefault(prefix+"image_generation.provider", "openai")
+		v.SetDefault(prefix+"image_generation.model", "gpt-image-1.5")
+		v.SetDefault(prefix+"image_generation.base_url", "")
+		v.SetDefault(prefix+"image_generation.timeout_secs", 120)
+		v.SetDefault(prefix+"image_generation.size", "1024x1536")
+		v.SetDefault(prefix+"image_generation.quality", "high")
+		v.SetDefault(prefix+"image_generation.background", "auto")
+		v.SetDefault(prefix+"image_generation.output_format", "png")
+		v.SetDefault(prefix+"image_generation.input_fidelity", "high")
+		v.SetDefault(prefix+"image_generation.use_current_attachments", true)
 		v.SetDefault(prefix+"env.HTTPS_PROXY", DefaultHTTPSProxy)
 		v.SetDefault(prefix+"env.ALL_PROXY", DefaultALLProxy)
 		v.SetDefault(prefix+"queue_capacity", 256)
@@ -380,6 +427,7 @@ func validatePureMultiBotRootConfig(v *viper.Viper) error {
 		"runtime_http_token",
 		"failure_message",
 		"thinking_message",
+		"image_generation",
 		"alice_home",
 		"workspace_dir",
 		"prompt_dir",
@@ -418,6 +466,27 @@ func normalizeEnvMap(in map[string]string) map[string]string {
 		out[normalizedKey] = strings.TrimSpace(value)
 	}
 	return out
+}
+
+func normalizeProxyConfig(in ProxyConfig) ProxyConfig {
+	in.HTTPProxy = strings.TrimSpace(in.HTTPProxy)
+	in.HTTPSProxy = strings.TrimSpace(in.HTTPSProxy)
+	in.ALLProxy = strings.TrimSpace(in.ALLProxy)
+	in.NoProxy = strings.TrimSpace(in.NoProxy)
+	return in
+}
+
+func normalizeImageGenerationConfig(in ImageGenerationConfig) ImageGenerationConfig {
+	in.Provider = strings.ToLower(strings.TrimSpace(in.Provider))
+	in.Model = strings.TrimSpace(in.Model)
+	in.BaseURL = strings.TrimSpace(in.BaseURL)
+	in.Size = strings.ToLower(strings.TrimSpace(in.Size))
+	in.Quality = strings.ToLower(strings.TrimSpace(in.Quality))
+	in.Background = strings.ToLower(strings.TrimSpace(in.Background))
+	in.OutputFormat = strings.ToLower(strings.TrimSpace(in.OutputFormat))
+	in.InputFidelity = strings.ToLower(strings.TrimSpace(in.InputFidelity))
+	in.Proxy = normalizeProxyConfig(in.Proxy)
+	return in
 }
 
 func applyDefaultCodexEnv(in map[string]string) map[string]string {
@@ -513,6 +582,14 @@ func validateBaseConfig(cfg Config, requireCredentials bool) error {
 		default:
 			return fmt.Errorf("llm_profiles.%s.provider %q is unsupported", name, profile.Provider)
 		}
+	}
+	switch cfg.ImageGeneration.Provider {
+	case "", "openai":
+	default:
+		return fmt.Errorf("image_generation.provider %q is unsupported", cfg.ImageGeneration.Provider)
+	}
+	if cfg.ImageGeneration.TimeoutSecs <= 0 {
+		return errors.New("image_generation.timeout_secs must be > 0")
 	}
 	if cfg.GroupScenes.Chat.Enabled {
 		if cfg.GroupScenes.Chat.LLMProfile == "" {

@@ -102,6 +102,31 @@ func finalizeConfig(cfg Config, requireCredentials bool) (Config, error) {
 	if cfg.ThinkingMessage == "" {
 		cfg.ThinkingMessage = "正在思考中..."
 	}
+	cfg.ImageGeneration = normalizeImageGenerationConfig(cfg.ImageGeneration)
+	if cfg.ImageGeneration.Provider == "" {
+		cfg.ImageGeneration.Provider = "openai"
+	}
+	if cfg.ImageGeneration.Model == "" {
+		cfg.ImageGeneration.Model = "gpt-image-1.5"
+	}
+	if cfg.ImageGeneration.TimeoutSecs <= 0 {
+		cfg.ImageGeneration.TimeoutSecs = 120
+	}
+	if cfg.ImageGeneration.Size == "" {
+		cfg.ImageGeneration.Size = "1024x1536"
+	}
+	if cfg.ImageGeneration.Quality == "" {
+		cfg.ImageGeneration.Quality = "high"
+	}
+	if cfg.ImageGeneration.Background == "" {
+		cfg.ImageGeneration.Background = "auto"
+	}
+	if cfg.ImageGeneration.OutputFormat == "" {
+		cfg.ImageGeneration.OutputFormat = "png"
+	}
+	if cfg.ImageGeneration.InputFidelity == "" {
+		cfg.ImageGeneration.InputFidelity = "high"
+	}
 	if cfg.BotName == "" {
 		switch {
 		case strings.TrimSpace(cfg.BotID) != "":
@@ -280,6 +305,7 @@ func normalizeBots(in map[string]BotConfig) map[string]BotConfig {
 		bot.RuntimeHTTPToken = strings.TrimSpace(bot.RuntimeHTTPToken)
 		bot.FailureMessage = strings.TrimSpace(bot.FailureMessage)
 		bot.ThinkingMessage = strings.TrimSpace(bot.ThinkingMessage)
+		bot.ImageGeneration = normalizeImageGenerationConfig(bot.ImageGeneration)
 		bot.AliceHome = strings.TrimSpace(bot.AliceHome)
 		bot.WorkspaceDir = strings.TrimSpace(bot.WorkspaceDir)
 		bot.PromptDir = strings.TrimSpace(bot.PromptDir)
@@ -503,6 +529,7 @@ func (cfg Config) deriveBotRuntimeConfig(botID string, bot BotConfig, index int)
 	runtime.RuntimeHTTPToken = bot.RuntimeHTTPToken
 	runtime.FailureMessage = bot.FailureMessage
 	runtime.ThinkingMessage = bot.ThinkingMessage
+	runtime.ImageGeneration = bot.ImageGeneration
 	runtime.AliceHome = deriveBotAliceHome(bot, runtime.BotID)
 	runtime.WorkspaceDir = deriveBotWorkspaceDir(bot, runtime.AliceHome)
 	runtime.PromptDir = deriveBotPromptDir(bot, runtime.AliceHome)

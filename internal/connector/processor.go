@@ -8,31 +8,35 @@ import (
 	"time"
 
 	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/imagegen"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
 )
 
 type Processor struct {
-	llm             llm.Backend
-	sender          Sender
-	replies         *replyDispatcher
-	failureMessage  string
-	thinkingMessage string
-	feedbackMode    string
-	feedbackEmoji   string
-	runtimeMu       sync.RWMutex
-	mu              sync.Mutex
-	sessions        map[string]sessionState
-	stateFilePath   string
-	stateVersion    uint64
-	flushedVersion  uint64
-	now             func() time.Time
-	runtimeAPIBase  string
-	runtimeAPIToken string
-	runtimeAPIBin   string
-	helpConfig      builtinHelpConfig
-	prompts         *prompting.Loader
+	llm              llm.Backend
+	sender           Sender
+	replies          *replyDispatcher
+	failureMessage   string
+	thinkingMessage  string
+	feedbackMode     string
+	feedbackEmoji    string
+	imageGeneration  config.ImageGenerationConfig
+	imageProvider    imagegen.Provider
+	runtimeMu        sync.RWMutex
+	mu               sync.Mutex
+	sessions         map[string]sessionState
+	stateFilePath    string
+	stateVersion     uint64
+	flushedVersion   uint64
+	now              func() time.Time
+	newImageProvider func(config.ImageGenerationConfig, map[string]string) (imagegen.Provider, error)
+	runtimeAPIBase   string
+	runtimeAPIToken  string
+	runtimeAPIBin    string
+	helpConfig       builtinHelpConfig
+	prompts          *prompting.Loader
 }
 
 type builtinHelpConfig struct {
@@ -57,17 +61,18 @@ func NewProcessor(
 	thinkingMessage string,
 ) *Processor {
 	return &Processor{
-		llm:             backend,
-		sender:          sender,
-		replies:         newReplyDispatcher(sender),
-		failureMessage:  failureMessage,
-		thinkingMessage: thinkingMessage,
-		feedbackMode:    immediateFeedbackModeReply,
-		feedbackEmoji:   defaultImmediateFeedbackEmoji,
-		sessions:        make(map[string]sessionState),
-		now:             time.Now,
-		helpConfig:      defaultBuiltinHelpConfig(),
-		prompts:         prompting.DefaultLoader(),
+		llm:              backend,
+		sender:           sender,
+		replies:          newReplyDispatcher(sender),
+		failureMessage:   failureMessage,
+		thinkingMessage:  thinkingMessage,
+		feedbackMode:     immediateFeedbackModeReply,
+		feedbackEmoji:    defaultImmediateFeedbackEmoji,
+		sessions:         make(map[string]sessionState),
+		now:              time.Now,
+		newImageProvider: imagegen.NewProvider,
+		helpConfig:       defaultBuiltinHelpConfig(),
+		prompts:          prompting.DefaultLoader(),
 	}
 }
 
@@ -108,6 +113,43 @@ func (p *Processor) SetRuntimeAPI(baseURL, token, runtimeBin string) {
 	p.runtimeAPIBin = strings.TrimSpace(runtimeBin)
 }
 
+func (p *Processor) SetImageGeneration(cfg config.ImageGenerationConfig, env map[string]string) error {
+	if p == nil {
+		return nil
+	}
+	cfg = config.ImageGenerationConfig{
+		Enabled:               cfg.Enabled,
+		Provider:              strings.TrimSpace(cfg.Provider),
+		Model:                 strings.TrimSpace(cfg.Model),
+		BaseURL:               strings.TrimSpace(cfg.BaseURL),
+		TimeoutSecs:           cfg.TimeoutSecs,
+		Size:                  strings.TrimSpace(cfg.Size),
+		Quality:               strings.TrimSpace(cfg.Quality),
+		Background:            strings.TrimSpace(cfg.Background),
+		OutputFormat:          strings.TrimSpace(cfg.OutputFormat),
+		InputFidelity:         strings.TrimSpace(cfg.InputFidelity),
+		UseCurrentAttachments: cfg.UseCurrentAttachments,
+		Proxy:                 cfg.Proxy,
+	}
+	var provider imagegen.Provider
+	if cfg.Enabled {
+		factory := p.newImageProvider
+		if factory == nil {
+			factory = imagegen.NewProvider
+		}
+		var err error
+		provider, err = factory(cfg, env)
+		if err != nil {
+			return err
+		}
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.imageGeneration = cfg
+	p.imageProvider = provider
+	return nil
+}
+
 func (p *Processor) SetLLMBackend(backend llm.Backend) {
 	if p == nil || backend == nil {
 		return
@@ -139,6 +181,8 @@ func (p *Processor) runtimeSnapshot() processorRuntimeSnapshot {
 		thinkingMessage: p.thinkingMessage,
 		feedbackMode:    p.feedbackMode,
 		feedbackEmoji:   p.feedbackEmoji,
+		imageGeneration: p.imageGeneration,
+		imageProvider:   p.imageProvider,
 		runtimeAPIBase:  p.runtimeAPIBase,
 		runtimeAPIToken: p.runtimeAPIToken,
 		runtimeAPIBin:   p.runtimeAPIBin,
@@ -152,6 +196,8 @@ type processorRuntimeSnapshot struct {
 	thinkingMessage string
 	feedbackMode    string
 	feedbackEmoji   string
+	imageGeneration config.ImageGenerationConfig
+	imageProvider   imagegen.Provider
 	runtimeAPIBase  string
 	runtimeAPIToken string
 	runtimeAPIBin   string
@@ -241,6 +287,7 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 	if sendErr := p.replies.send(ctx, job, job.ReceiveIDType, job.ReceiveID, reply); sendErr != nil {
 		logging.Errorf("send message failed event_id=%s: %v", job.EventID, sendErr)
 	}
+	p.startImageGeneration(ctx, job, reply, "")
 	return JobProcessCompleted
 }
 
@@ -359,7 +406,10 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 			logging.Errorf("send final reply failed event_id=%s: %v", job.EventID, replyErr)
 		} else {
 			p.rememberReplySessionMessage(job, messageID)
+			p.startImageGeneration(ctx, job, finalReply, messageID)
 		}
+	} else {
+		p.startImageGeneration(ctx, job, finalReply, "")
 	}
 	return JobProcessCompleted
 }
@@ -390,11 +440,11 @@ func jobLLMRunOptions(job Job) llmRunOptions {
 }
 
 func shouldSuppressReply(job Job, reply string) bool {
-	token := strings.TrimSpace(job.NoReplyToken)
+	token := job.SoulDoc.OutputContract.effectiveSuppressToken(job.NoReplyToken)
 	if token == "" {
 		return false
 	}
-	return stripHiddenReplyMetadata(reply) == token
+	return stripHiddenReplyMetadata(reply, job.SoulDoc.OutputContract) == token
 }
 
 func (p *Processor) sendImmediateFeedback(ctx context.Context, job Job) bool {

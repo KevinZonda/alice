@@ -56,8 +56,15 @@ func TestNormalizeOutgoingReplyWithMentions_SkipsEmailAndBot(t *testing.T) {
 
 func TestNormalizeOutgoingReplyWithMentions_StripsReplyWillBlock(t *testing.T) {
 	converted, changed := normalizeOutgoingReplyWithMentions(
-		"<reply_will>72%</reply_will>\n@Bob 需要你看看。",
+		"<reply_will>72%</reply_will>\n<motion>抬手指了指屏幕</motion>\n@Bob 需要你看看。",
 		Job{
+			SoulDoc: soulDocument{
+				OutputContract: outputContract{
+					ReplyWillTag:   "reply_will",
+					ReplyWillField: "reply_will",
+					MotionTag:      "motion",
+				},
+			},
 			MentionedUsers: []MentionedUser{
 				{
 					Name:   "Bob",

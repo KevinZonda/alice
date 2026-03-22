@@ -103,6 +103,7 @@ type Job struct {
 	LLMReasoningEffort   string
 	LLMPersonality       string
 	NoReplyToken         string
+	SoulDoc              soulDocument
 	DisableAck           bool
 	WorkflowPhase        string
 }

@@ -1,51 +1,65 @@
-# Alice Connector
+# Alice
 
 [![Dev CI](https://github.com/Alice-space/alice/actions/workflows/ci.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/ci.yml)
 [![Main Release](https://github.com/Alice-space/alice/actions/workflows/main-release.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/main-release.yml)
 [![Release On Tag](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/release-on-tag.yml)
 
-A Feishu long-connection connector for Codex / Claude / Gemini / Kimi.
+A Feishu long-connection connector for CLI-based LLM agents such as Codex, Claude, Gemini, and Kimi.
 
-- Receives Feishu messages over WebSocket (`im.message.receive_v1`)
-- Calls the selected LLM CLI backend
-- Sends reply / progress / file-change feedback back to Feishu
-- Supports memory, automation scheduling, and runtime APIs
+Alice runs as a local multi-bot runtime:
 
-## Highlights
+- receives Feishu messages over WebSocket
+- routes messages into `chat` or `work` scenes
+- calls the configured LLM CLI backend
+- sends progress, replies, files, and images back to Feishu
+- exposes a local runtime API used by bundled skills
 
-- Standalone runtime: binary can run without repository checkout
-- Embedded prompts + skills: prompts are bundled in binary; bundled skills are synced on startup
-- Isolated runtime home: release builds default to `~/.alice`, dev builds default to `~/.alice-dev`
-- Isolated Codex home: defaults to `${ALICE_HOME}/.codex`
-- Dev/Main branch release pipeline with automatic tagging on main merge
+For Chinese documentation, see [README.zh-CN.md](./README.zh-CN.md).
 
-## Runtime Layout
+## Features
 
-Release builds use this default layout (`~/.alice`):
-
-- Config: `${ALICE_HOME:-~/.alice}/config.yaml`
-- Binary: `${ALICE_HOME:-~/.alice}/bin/alice`
-- Logs: `${ALICE_HOME:-~/.alice}/log/YYYY-MM-DD.log` (default)
-- Runtime state: `${ALICE_HOME:-~/.alice}/memory/`
-- Bundled skills: `${ALICE_HOME:-~/.alice}/.codex/skills/`
-
-Dev builds use the same layout under `~/.alice-dev` by default.
+- Multi-bot runtime from a single `config.yaml`
+- Per-bot isolated `workspace`, `SOUL.md`, prompts, and `CODEX_HOME`
+- Scene-aware routing for casual chat and explicit work threads
+- Runtime HTTP API for bundled skills and automation
+- Embedded prompts, skills, config example, and `SOUL.md` example
+- Release installer for `systemd --user` deployments
 
 ## Requirements
 
-- Go 1.25+ (source build only)
-- `codex` CLI (or `claude` / `gemini` / `kimi`) installed and logged in
-- Linux host with `systemd --user` (for one-line install script)
-- Feishu app with:
+- Go 1.25+ for source builds
+- One installed and authenticated backend CLI:
+  - `codex`
+  - `claude`
+  - `gemini`
+  - `kimi`
+- A Feishu app with:
   - bot capability
   - `im.message.receive_v1` subscription
   - required message permissions
   - long connection mode enabled
 
-## Quick Start (Source Build)
+## Quick Start
+
+### Install From Release
 
 ```bash
-mkdir -p ~/.alice
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install
+```
+
+Then:
+
+1. Edit `${ALICE_HOME:-~/.alice}/config.yaml`
+2. Set `bots.*.feishu_app_id` and `bots.*.feishu_app_secret`
+3. Restart the service:
+
+```bash
+systemctl --user restart alice.service
+```
+
+### Run From Source
+
+```bash
 cp config.example.yaml ~/.alice/config.yaml
 # edit ~/.alice/config.yaml
 
@@ -54,134 +68,59 @@ go test ./...
 go run ./cmd/connector
 ```
 
-## One-Line Install / Update / Uninstall (Recommended)
-
-Installer script (in this repo): [`scripts/alice-installer.sh`](./scripts/alice-installer.sh)
-
-Install latest release (also works as update if run again):
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install
-```
-
-Update to latest release (explicit action):
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- update
-```
-
-Install/update to a pinned version:
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --version vX.Y.Z
-```
-
-Install dev prerelease explicitly (default is stable release):
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install --channel dev
-```
-
-`--channel dev` defaults to `~/.alice-dev` unless `--home` or `ALICE_HOME` is provided.
-
-Uninstall (remove service + binary + `~/.alice`):
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall
-```
-
-Uninstall but keep runtime data:
-
-```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall --keep-data
-```
-
-What the installer does:
-
-- Downloads stable GitHub Release assets by default (`~/.alice`), and uses dev prerelease channel only when `--channel dev` is provided (`~/.alice-dev`)
-- Verifies release checksum against `SHA256SUMS` when available
-- Initializes `${ALICE_HOME:-~/.alice}` directories
-- Installs and manages `systemd --user` service (`alice.service` by default; override with `--service NAME`) for auto-restart
-- Attempts to enable user linger so the service can stay alive after logout
-- On startup, the `alice` binary bootstraps missing `config.yaml`, per-bot `SOUL.md`, and isolated Codex auth (`auth.json`) from embedded/default sources when available
-
-After first install:
-
-1. Edit `${ALICE_HOME:-~/.alice}/config.yaml` and set `bots.*.feishu_app_id` + `bots.*.feishu_app_secret`
-2. Start or restart service: `systemctl --user restart alice.service` (or rerun installer)
-3. Confirm the installed binary version: `alice --version`
-
 ## Configuration
 
-Required keys:
+Alice uses a pure multi-bot config model.
 
-- `feishu_app_id`
-- `feishu_app_secret`
+Important concepts:
 
-Common optional keys:
+- `bots.<id>`: one runtime bot
+- `llm_profiles`: named model presets
+- `group_scenes.chat`: conversational scene for group chats
+- `group_scenes.work`: explicit task scene for work threads
+- `trigger_mode`: legacy fallback when both scenes are disabled
+- `workspace_dir` / `prompt_dir` / `codex_home`: per-bot runtime directories
+- `image_generation`: optional roleplay image generation pipeline
 
-- `llm_provider`: `codex` (default), `claude`, `gemini`, `kimi`
-- `<provider>_command` / `<provider>_timeout_secs`
-- `runtime_http_addr` / `runtime_http_token`
-- `env`: extra env vars passed to backend process
-- `alice_home`: runtime home directory (default `~/.alice`)
-- `workspace_dir` / `memory_dir` / `prompt_dir`
-- `llm_profiles`: named scene-specific model / reasoning / personality presets
-- `group_scenes`: optional group chat scene router; when either scene is enabled it overrides legacy trigger matching for group chats
-- `trigger_mode`: `at` / `active` / `prefix` (legacy fallback only when both `group_scenes.chat` and `group_scenes.work` are disabled)
-- `trigger_prefix`
-- automation cron scheduling uses OS timezone (`time.Local`)
-- `log_file` (default `${ALICE_HOME}/log/YYYY-MM-DD.log`) and rotate options
+Start from [config.example.yaml](./config.example.yaml).
 
-Default process env behavior:
+## Usage
 
-- Alice starts the service process with `CODEX_HOME=${ALICE_HOME}/.codex`
-- Each bot injects its own subprocess `CODEX_HOME` by default: `${ALICE_HOME}/bots/<bot_id>/.codex` unless overridden in `bots.<id>.env.CODEX_HOME`
-- Gemini CLI currently depends on the `node` found in `PATH`. If Alice is launched outside an `nvm`-initialized shell, set `bots.<id>.env.PATH` so `gemini` resolves a Node >= 20 runtime.
+Alice's operating model and `chat` / `work` scene behavior are documented in:
 
-See [config.example.yaml](./config.example.yaml) for full schema.
+- [Usage Guide](./docs/usage.md)
+- [使用说明](./docs/usage.zh-CN.md)
 
-## Branch And CI Policy
+Additional docs:
 
-- Day-to-day commits go to `dev`.
-- Pull requests into `main` are limited to `dev -> main` by workflow policy.
-- Push to `main` must be a merge commit from `dev`; workflow enforces this.
-- When `dev` is merged to `main`, CI runs quality gate, computes next `vX.Y.Z`, pushes tag, and creates GitHub Release.
-- Manual `v*` tag pushes are still supported through [release-on-tag.yml](./.github/workflows/release-on-tag.yml).
-- In GitHub settings, enable branch protection for `main` and disallow direct pushes for hard enforcement.
+- [Architecture](./docs/architecture.md)
+- [架构文档](./docs/architecture.zh-CN.md)
+- [Feishu Message Flow (Chinese)](./docs/feishu-message-flow.zh-CN.md)
 
-## Bundled Skills
+## `SOUL.md`
 
-Bundled skills are embedded into the binary (`skills/**`) and extracted to `${CODEX_HOME}/skills` on startup.
+Each bot can define persona and machine-readable metadata in `workspace/SOUL.md`.
 
-Included skills:
+Current frontmatter keys accepted by Alice:
 
-- `alice-memory`
-- `alice-message`
-- `alice-scheduler`
-- `alice-code-army`
-- `file-printing`
-- `feishu-task`
+- `image_refs`
+- `image_generation`
+- `output_contract`
 
-## Release Pipeline
+The embedded example is [SOUL.md.example](./SOUL.md.example).
 
-Current release paths:
+## Installer
 
-1. `dev` push: quality gate + dev binary build + update prerelease tag `dev-latest`.
-2. `dev` merged into `main`: quality gate + auto semver tag + cross-build + GitHub Release.
-3. Manual `v*` tag push: test + cross-build + GitHub Release.
+The installer script lives at [scripts/alice-installer.sh](./scripts/alice-installer.sh).
 
-Workflow files:
-
-- [ci.yml](./.github/workflows/ci.yml)
-- [main-release.yml](./.github/workflows/main-release.yml)
-- [release-on-tag.yml](./.github/workflows/release-on-tag.yml)
-
-Manual release tag example:
+Common commands:
 
 ```bash
-git tag v1.2.3
-git push github v1.2.3
+# install or update the latest stable release
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- install
+
+# uninstall
+curl -fsSL https://cdn.jsdelivr.net/gh/Alice-space/alice@main/scripts/alice-installer.sh | bash -s -- uninstall
 ```
 
 ## Development
@@ -192,20 +131,21 @@ make build
 make run
 ```
 
-`make check` includes:
+`make check` includes formatting, vet, unit tests, and connector race tests.
 
-- secret scan
-- shell script syntax check
-- gofmt check
-- `go vet ./...`
-- `go test ./...`
-- `go test -race ./internal/connector`
+Contribution guidelines are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Docs
+## Release Process
 
-- [README.zh-CN.md](./README.zh-CN.md)
-- [Architecture](./docs/architecture.md)
-- [Feishu Message Flow (ZH)](./docs/feishu-message-flow.zh-CN.md)
+- Day-to-day work happens on `dev`
+- `dev -> main` drives the normal release path
+- Tagged releases are published through GitHub Actions
+
+Workflow files:
+
+- [.github/workflows/ci.yml](./.github/workflows/ci.yml)
+- [.github/workflows/main-release.yml](./.github/workflows/main-release.yml)
+- [.github/workflows/release-on-tag.yml](./.github/workflows/release-on-tag.yml)
 
 ## License
 
