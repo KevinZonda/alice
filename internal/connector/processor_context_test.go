@@ -10,7 +10,8 @@ import (
 
 func TestProcessorBuildPrompt_AppendsBotSoulForNewThread(t *testing.T) {
 	soulPath := filepath.Join(t.TempDir(), "SOUL.md")
-	if err := os.WriteFile(soulPath, []byte("# Alice Chat\n- 回答前先澄清目标\n"), 0o644); err != nil {
+	soulText := "---\noutput_contract:\n  hidden_tags:\n    - reply_will\n    - motion\n  reply_will_tag: reply_will\n  reply_will_field: reply_will\n  motion_tag: motion\n  suppress_token: \"[[NO_REPLY]]\"\n---\n# Alice Chat\n- 回答前先澄清目标\n"
+	if err := os.WriteFile(soulPath, []byte(soulText), 0o644); err != nil {
 		t.Fatalf("write SOUL.md failed: %v", err)
 	}
 
@@ -27,6 +28,9 @@ func TestProcessorBuildPrompt_AppendsBotSoulForNewThread(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "回答前先澄清目标") {
 		t.Fatalf("expected prompt to include soul content, got %q", prompt)
+	}
+	if strings.Contains(prompt, "output_contract:") {
+		t.Fatalf("expected frontmatter to be stripped from prompt, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "帮我总结一下") {
 		t.Fatalf("expected prompt to include user text, got %q", prompt)

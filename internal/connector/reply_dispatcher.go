@@ -43,7 +43,7 @@ func (d *replyDispatcher) reply(
 		if messageID, textErr := d.replyText(ctx, sourceMessageID, normalized, preferThread); textErr == nil {
 			return messageID, nil
 		}
-		normalized = stripHiddenReplyMetadata(markdown)
+		normalized = stripHiddenReplyMetadata(markdown, job.SoulDoc.OutputContract)
 		if normalized == "" {
 			return "", nil
 		}
@@ -53,7 +53,7 @@ func (d *replyDispatcher) reply(
 			return messageID, nil
 		}
 	}
-	return d.replyMarkdownPost(ctx, sourceMessageID, normalized, false, preferThread)
+	return d.replyMarkdownPost(ctx, job, sourceMessageID, normalized, false, preferThread)
 }
 
 func (d *replyDispatcher) send(
@@ -75,7 +75,7 @@ func (d *replyDispatcher) send(
 		if textErr := d.sender.SendText(ctx, receiveIDType, receiveID, normalized); textErr == nil {
 			return nil
 		}
-		normalized = stripHiddenReplyMetadata(markdown)
+		normalized = stripHiddenReplyMetadata(markdown, job.SoulDoc.OutputContract)
 		if normalized == "" {
 			return nil
 		}
@@ -90,6 +90,7 @@ func (d *replyDispatcher) send(
 
 func (d *replyDispatcher) replyMarkdownPost(
 	ctx context.Context,
+	job Job,
 	sourceMessageID,
 	markdown string,
 	forceText bool,
@@ -99,7 +100,7 @@ func (d *replyDispatcher) replyMarkdownPost(
 		return "", errors.New("reply dispatcher sender is nil")
 	}
 
-	normalized := stripHiddenReplyMetadata(markdown)
+	normalized := stripHiddenReplyMetadata(markdown, job.SoulDoc.OutputContract)
 	if normalized == "" {
 		return "", nil
 	}

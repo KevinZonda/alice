@@ -69,6 +69,11 @@ bots:
       PATH: "/home/you/.nvm/versions/node/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin"
       HTTPS_PROXY: "http://127.0.0.1:8080"
       ALL_PROXY: "http://127.0.0.1:8080"
+      OPENAI_API_KEY: ""
+      # Dedicated OpenAI image proxy envs. These only affect image_generation
+      # and do not affect the Feishu sender chain.
+      OPENAI_HTTPS_PROXY: "http://127.0.0.1:7890"
+      OPENAI_NO_PROXY: "open.feishu.cn"
 
     # Prompt and fallback
     codex_prompt_prefix: ""
@@ -77,6 +82,32 @@ bots:
     kimi_prompt_prefix: ""
     failure_message: "Codex 暂时不可用，请稍后重试。"
     thinking_message: "正在思考中..."
+
+    # Optional roleplay image generation. This runs inside Alice after a text
+    # reply is produced. Dedicated OPENAI_*_PROXY env vars take precedence over
+    # the static proxy block below and still do not affect Feishu traffic.
+    image_generation:
+      enabled: false
+      provider: "openai"
+      model: "gpt-image-1.5"
+      base_url: ""
+      timeout_secs: 120
+      # size: auto | 1024x1024 | 1536x1024 | 1024x1536 | 256x256 | 512x512 | 1792x1024 | 1024x1792
+      size: "1024x1536"
+      # quality: auto | low | medium | high | standard | hd
+      quality: "high"
+      # background: auto | opaque | transparent
+      background: "auto"
+      # output_format: png | jpeg | webp
+      output_format: "png"
+      # input_fidelity: low | high; only applies when reference images are provided
+      input_fidelity: "high"
+      use_current_attachments: true
+      proxy:
+        http_proxy: ""
+        https_proxy: "http://127.0.0.1:7890"
+        all_proxy: ""
+        no_proxy: "open.feishu.cn"
 
     # Immediate feedback after receiving a reply-style message:
     # - reply: send an explicit `收到！` reply
