@@ -61,11 +61,19 @@ type ImageGenerationConfig struct {
 	Model                 string `mapstructure:"model"`
 	BaseURL               string `mapstructure:"base_url"`
 	TimeoutSecs           int    `mapstructure:"timeout_secs"`
+	Moderation            string `mapstructure:"moderation"`
+	N                     int    `mapstructure:"n"`
+	OutputCompression     int    `mapstructure:"output_compression"`
+	ResponseFormat        string `mapstructure:"response_format"`
 	Size                  string `mapstructure:"size"`
 	Quality               string `mapstructure:"quality"`
 	Background            string `mapstructure:"background"`
 	OutputFormat          string `mapstructure:"output_format"`
+	PartialImages         int    `mapstructure:"partial_images"`
+	Stream                bool   `mapstructure:"stream"`
+	Style                 string `mapstructure:"style"`
 	InputFidelity         string `mapstructure:"input_fidelity"`
+	MaskPath              string `mapstructure:"mask_path"`
 	UseCurrentAttachments bool   `mapstructure:"use_current_attachments"`
 }
 
@@ -224,11 +232,19 @@ func LoadFromFile(path string) (Config, error) {
 	v.SetDefault("image_generation.model", "gpt-image-1.5")
 	v.SetDefault("image_generation.base_url", "")
 	v.SetDefault("image_generation.timeout_secs", 120)
+	v.SetDefault("image_generation.moderation", "")
+	v.SetDefault("image_generation.n", 0)
+	v.SetDefault("image_generation.output_compression", -1)
+	v.SetDefault("image_generation.response_format", "")
 	v.SetDefault("image_generation.size", "1024x1536")
 	v.SetDefault("image_generation.quality", "high")
 	v.SetDefault("image_generation.background", "auto")
 	v.SetDefault("image_generation.output_format", "png")
+	v.SetDefault("image_generation.partial_images", -1)
+	v.SetDefault("image_generation.stream", false)
+	v.SetDefault("image_generation.style", "")
 	v.SetDefault("image_generation.input_fidelity", "high")
+	v.SetDefault("image_generation.mask_path", "")
 	v.SetDefault("image_generation.use_current_attachments", true)
 	v.SetDefault("alice_home", AliceHomeDir())
 	v.SetDefault("workspace_dir", "")
@@ -354,11 +370,19 @@ func setBotDefaults(v *viper.Viper) {
 		v.SetDefault(prefix+"image_generation.model", "gpt-image-1.5")
 		v.SetDefault(prefix+"image_generation.base_url", "")
 		v.SetDefault(prefix+"image_generation.timeout_secs", 120)
+		v.SetDefault(prefix+"image_generation.moderation", "")
+		v.SetDefault(prefix+"image_generation.n", 0)
+		v.SetDefault(prefix+"image_generation.output_compression", -1)
+		v.SetDefault(prefix+"image_generation.response_format", "")
 		v.SetDefault(prefix+"image_generation.size", "1024x1536")
 		v.SetDefault(prefix+"image_generation.quality", "high")
 		v.SetDefault(prefix+"image_generation.background", "auto")
 		v.SetDefault(prefix+"image_generation.output_format", "png")
+		v.SetDefault(prefix+"image_generation.partial_images", -1)
+		v.SetDefault(prefix+"image_generation.stream", false)
+		v.SetDefault(prefix+"image_generation.style", "")
 		v.SetDefault(prefix+"image_generation.input_fidelity", "high")
+		v.SetDefault(prefix+"image_generation.mask_path", "")
 		v.SetDefault(prefix+"image_generation.use_current_attachments", true)
 		v.SetDefault(prefix+"env.HTTPS_PROXY", DefaultHTTPSProxy)
 		v.SetDefault(prefix+"env.ALL_PROXY", DefaultALLProxy)
@@ -467,11 +491,15 @@ func normalizeImageGenerationConfig(in ImageGenerationConfig) ImageGenerationCon
 	in.Provider = strings.ToLower(strings.TrimSpace(in.Provider))
 	in.Model = strings.TrimSpace(in.Model)
 	in.BaseURL = strings.TrimSpace(in.BaseURL)
+	in.Moderation = strings.ToLower(strings.TrimSpace(in.Moderation))
+	in.ResponseFormat = strings.ToLower(strings.TrimSpace(in.ResponseFormat))
 	in.Size = strings.ToLower(strings.TrimSpace(in.Size))
 	in.Quality = strings.ToLower(strings.TrimSpace(in.Quality))
 	in.Background = strings.ToLower(strings.TrimSpace(in.Background))
 	in.OutputFormat = strings.ToLower(strings.TrimSpace(in.OutputFormat))
+	in.Style = strings.ToLower(strings.TrimSpace(in.Style))
 	in.InputFidelity = strings.ToLower(strings.TrimSpace(in.InputFidelity))
+	in.MaskPath = strings.TrimSpace(in.MaskPath)
 	return in
 }
 
@@ -591,6 +619,15 @@ func validateBaseConfig(cfg Config, requireCredentials bool) error {
 	}
 	if cfg.ImageGeneration.TimeoutSecs <= 0 {
 		return errors.New("image_generation.timeout_secs must be > 0")
+	}
+	if cfg.ImageGeneration.N < 0 {
+		return errors.New("image_generation.n must be >= 0")
+	}
+	if cfg.ImageGeneration.OutputCompression < -1 || cfg.ImageGeneration.OutputCompression > 100 {
+		return errors.New("image_generation.output_compression must be between 0 and 100, or -1 to leave unset")
+	}
+	if cfg.ImageGeneration.PartialImages < -1 || cfg.ImageGeneration.PartialImages > 3 {
+		return errors.New("image_generation.partial_images must be between 0 and 3, or -1 to leave unset")
 	}
 	if cfg.GroupScenes.Chat.Enabled {
 		if cfg.GroupScenes.Chat.LLMProfile == "" {

@@ -33,6 +33,10 @@ type imageReplySender interface {
 	ReplyImage(ctx context.Context, sourceMessageID, imageKey string) (string, error)
 }
 
+type imageDirectReplySender interface {
+	ReplyImageDirect(ctx context.Context, sourceMessageID, imageKey string) (string, error)
+}
+
 type imageSendSender interface {
 	SendImage(ctx context.Context, receiveIDType, receiveID, imageKey string) error
 }
@@ -111,30 +115,80 @@ func (p *Processor) generateAndSendImage(
 	if err != nil {
 		return err
 	}
-	localPath := strings.TrimSpace(result.LocalPath)
-	if localPath == "" {
+	localPaths := collectGeneratedImageLocalPaths(result)
+	if len(localPaths) == 0 {
 		return fmt.Errorf("generated image path is empty")
-	}
-	imageKey, err := uploader.UploadImage(ctx, localPath)
-	if err != nil {
-		return fmt.Errorf("upload generated image failed: %w", err)
 	}
 	replyTarget := strings.TrimSpace(job.SourceMessageID)
 	if replyTarget == "" {
 		replyTarget = strings.TrimSpace(fallbackReplyTarget)
 	}
-	if replyTarget != "" {
-		if replier, ok := p.sender.(imageReplySender); ok {
-			if messageID, err := replier.ReplyImage(ctx, replyTarget, imageKey); err == nil {
-				p.rememberReplySessionMessage(job, messageID)
-				return nil
+	lastReplyMessageID := ""
+	for _, localPath := range localPaths {
+		imageKey, err := uploader.UploadImage(ctx, localPath)
+		if err != nil {
+			return fmt.Errorf("upload generated image failed: %w", err)
+		}
+		if replyTarget != "" {
+			if messageID, err := p.replyGeneratedImage(ctx, job, replyTarget, imageKey); err == nil && strings.TrimSpace(messageID) != "" {
+				lastReplyMessageID = messageID
+				continue
 			}
 		}
+		if sender, ok := p.sender.(imageSendSender); ok {
+			if err := sender.SendImage(ctx, job.ReceiveIDType, job.ReceiveID, imageKey); err != nil {
+				return err
+			}
+			continue
+		}
+		return fmt.Errorf("sender does not support image send")
 	}
-	if sender, ok := p.sender.(imageSendSender); ok {
-		return sender.SendImage(ctx, job.ReceiveIDType, job.ReceiveID, imageKey)
+	if strings.TrimSpace(lastReplyMessageID) != "" {
+		p.rememberReplySessionMessage(job, lastReplyMessageID)
 	}
-	return fmt.Errorf("sender does not support image send")
+	return nil
+}
+
+func collectGeneratedImageLocalPaths(result imagegen.Result) []string {
+	paths := make([]string, 0, len(result.LocalPaths)+1)
+	for _, path := range result.LocalPaths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		if path := strings.TrimSpace(result.LocalPath); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func (p *Processor) replyGeneratedImage(
+	ctx context.Context,
+	job Job,
+	replyTarget string,
+	imageKey string,
+) (string, error) {
+	if p == nil || p.sender == nil {
+		return "", fmt.Errorf("sender does not support image reply")
+	}
+	replyTarget = strings.TrimSpace(replyTarget)
+	imageKey = strings.TrimSpace(imageKey)
+	if replyTarget == "" || imageKey == "" {
+		return "", fmt.Errorf("reply target or image key is empty")
+	}
+	if !jobPrefersThreadReply(job) {
+		if replier, ok := p.sender.(imageDirectReplySender); ok {
+			return replier.ReplyImageDirect(ctx, replyTarget, imageKey)
+		}
+	}
+	if replier, ok := p.sender.(imageReplySender); ok {
+		return replier.ReplyImage(ctx, replyTarget, imageKey)
+	}
+	return "", fmt.Errorf("sender does not support image reply")
 }
 
 func parseRoleplayEnvelope(reply string, contract outputContract, noReplyToken string) roleplayEnvelope {

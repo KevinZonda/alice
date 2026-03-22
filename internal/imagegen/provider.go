@@ -17,6 +17,7 @@ type Request struct {
 
 type Result struct {
 	LocalPath     string
+	LocalPaths    []string
 	RevisedPrompt string
 }
 

@@ -228,33 +228,41 @@ func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool
 type senderStub struct {
 	mu sync.Mutex
 
-	sendCalls            int
-	lastSendText         string
-	sendImages           []string
-	sendImageCalls       int
-	sendFiles            []string
-	sendFileCalls        int
-	uploadImageErr       error
-	uploadFileErr        error
-	imageKeyByPath       map[string]string
-	fileKeyByPath        map[string]string
-	sendCardCalls        int
-	lastSendCard         string
-	sendCards            []string
-	sendCardErr          error
-	reactionCalls        int
-	reactionErr          error
-	reactionTypes        []string
-	reactionTargets      []string
-	replyTextCalls       int
-	replyTextDirectCalls int
-	lastReplyText        string
-	replyTexts           []string
-	replyTargets         []string
-	replyTextErr         error
-	replyRichCalls       int
-	lastReplyRich        []string
-	replyRichLines       [][]string
+	sendCalls             int
+	lastSendText          string
+	sendImages            []string
+	sendImageCalls        int
+	sendFiles             []string
+	sendFileCalls         int
+	uploadImageErr        error
+	uploadFileErr         error
+	imageKeyByPath        map[string]string
+	fileKeyByPath         map[string]string
+	sendCardCalls         int
+	lastSendCard          string
+	sendCards             []string
+	sendCardErr           error
+	reactionCalls         int
+	reactionErr           error
+	reactionTypes         []string
+	reactionTargets       []string
+	replyTextCalls        int
+	replyTextDirectCalls  int
+	lastReplyText         string
+	replyTexts            []string
+	replyTargets          []string
+	replyTextErr          error
+	replyImageCalls       int
+	replyImageDirectCalls int
+	replyImages           []string
+	replyImageErr         error
+	replyFileCalls        int
+	replyFileDirectCalls  int
+	replyFiles            []string
+	replyFileErr          error
+	replyRichCalls        int
+	lastReplyRich         []string
+	replyRichLines        [][]string
 
 	replyRichMarkdownCalls       int
 	replyRichMarkdownDirectCalls int
@@ -398,6 +406,56 @@ func (s *senderStub) ReplyTextDirect(_ context.Context, sourceMessageID string, 
 		return "", s.replyTextErr
 	}
 	return "om_reply_text_direct", nil
+}
+
+func (s *senderStub) ReplyImage(_ context.Context, sourceMessageID, imageKey string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyImageCalls++
+	s.replyImages = append(s.replyImages, strings.TrimSpace(imageKey))
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyImageErr != nil {
+		return "", s.replyImageErr
+	}
+	return "om_reply_image", nil
+}
+
+func (s *senderStub) ReplyImageDirect(_ context.Context, sourceMessageID, imageKey string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyImageCalls++
+	s.replyImageDirectCalls++
+	s.replyImages = append(s.replyImages, strings.TrimSpace(imageKey))
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyImageErr != nil {
+		return "", s.replyImageErr
+	}
+	return "om_reply_image_direct", nil
+}
+
+func (s *senderStub) ReplyFile(_ context.Context, sourceMessageID, fileKey string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyFileCalls++
+	s.replyFiles = append(s.replyFiles, strings.TrimSpace(fileKey))
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyFileErr != nil {
+		return "", s.replyFileErr
+	}
+	return "om_reply_file", nil
+}
+
+func (s *senderStub) ReplyFileDirect(_ context.Context, sourceMessageID, fileKey string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.replyFileCalls++
+	s.replyFileDirectCalls++
+	s.replyFiles = append(s.replyFiles, strings.TrimSpace(fileKey))
+	s.replyTargets = append(s.replyTargets, sourceMessageID)
+	if s.replyFileErr != nil {
+		return "", s.replyFileErr
+	}
+	return "om_reply_file_direct", nil
 }
 
 func (s *senderStub) ReplyRichText(_ context.Context, sourceMessageID string, lines []string) (string, error) {
