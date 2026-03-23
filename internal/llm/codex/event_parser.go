@@ -116,6 +116,32 @@ func parseToolCallLine(line string) string {
 	return strings.Join(parts, " ")
 }
 
+func parseUsageLine(line string) Usage {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return Usage{}
+	}
+
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return Usage{}
+	}
+	eventType, _ := event["type"].(string)
+	if eventType != "turn.completed" {
+		return Usage{}
+	}
+
+	usagePayload, ok := event["usage"].(map[string]any)
+	if !ok {
+		return Usage{}
+	}
+	return Usage{
+		InputTokens:       int64(extractInt(usagePayload, "input_tokens", "prompt_tokens")),
+		CachedInputTokens: int64(extractInt(usagePayload, "cached_input_tokens")),
+		OutputTokens:      int64(extractInt(usagePayload, "output_tokens", "completion_tokens")),
+	}
+}
+
 func parseFileChangeMessage(item map[string]any) string {
 	if item == nil {
 		return ""

@@ -38,7 +38,7 @@ func newCodexBackend(cfg CodexConfig, prompts *prompting.Loader) *codexBackend {
 }
 
 func (b *codexBackend) Run(ctx context.Context, req RunRequest) (RunResult, error) {
-	reply, nextThreadID, err := b.runner.RunWithThreadAndProgress(
+	reply, nextThreadID, usage, err := b.runner.RunWithThreadAndProgressAndUsage(
 		ctx,
 		strings.TrimSpace(req.ThreadID),
 		strings.TrimSpace(req.AgentName),
@@ -55,6 +55,11 @@ func (b *codexBackend) Run(ctx context.Context, req RunRequest) (RunResult, erro
 	return RunResult{
 		Reply:        reply,
 		NextThreadID: strings.TrimSpace(nextThreadID),
+		Usage: Usage{
+			InputTokens:       usage.InputTokens,
+			CachedInputTokens: usage.CachedInputTokens,
+			OutputTokens:      usage.OutputTokens,
+		},
 	}, err
 }
 

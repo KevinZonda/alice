@@ -8,6 +8,8 @@ import (
 
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+
+	"github.com/Alice-space/alice/internal/llm"
 )
 
 func TestApp_OnMessageReceive_WorkSceneRestoresSeedRouteAfterRestartWithMention(t *testing.T) {
@@ -172,5 +174,51 @@ func TestProcessor_LoadSessionState_PreservesRotatedChatSceneSession(t *testing.
 	}
 	if threadID := processorAfterRestart.getThreadID(rotatedSessionKey); threadID != "" {
 		t.Fatalf("rotated chat session should not reuse old thread id after restart, got %q", threadID)
+	}
+}
+
+func TestProcessor_LoadSessionState_PreservesUsageStats(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "session_state.json")
+
+	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+	processor.SetStatusIdentity("alice", "Alice")
+	if err := processor.LoadSessionState(statePath); err != nil {
+		t.Fatalf("init session state failed: %v", err)
+	}
+
+	sessionKey := buildWorkSceneSessionKey("chat_id", "oc_chat", "om_root")
+	processor.recordSessionUsage(sessionKey, llm.Usage{
+		InputTokens:       120,
+		CachedInputTokens: 40,
+		OutputTokens:      12,
+	})
+
+	if err := processor.FlushSessionState(); err != nil {
+		t.Fatalf("flush session state failed: %v", err)
+	}
+
+	processorAfterRestart := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+	if err := processorAfterRestart.LoadSessionState(statePath); err != nil {
+		t.Fatalf("reload session state failed: %v", err)
+	}
+
+	state := processorAfterRestart.sessions[sessionKey]
+	if state.ScopeKey != "chat_id:oc_chat" {
+		t.Fatalf("unexpected scope key after reload: %q", state.ScopeKey)
+	}
+	if state.Usage.InputTokens != 120 {
+		t.Fatalf("unexpected input tokens after reload: %d", state.Usage.InputTokens)
+	}
+	if state.Usage.CachedInputTokens != 40 {
+		t.Fatalf("unexpected cached input tokens after reload: %d", state.Usage.CachedInputTokens)
+	}
+	if state.Usage.OutputTokens != 12 {
+		t.Fatalf("unexpected output tokens after reload: %d", state.Usage.OutputTokens)
+	}
+	if state.Usage.TotalTokens() != 132 {
+		t.Fatalf("unexpected total tokens after reload: %d", state.Usage.TotalTokens())
+	}
+	if state.Usage.Turns != 1 {
+		t.Fatalf("unexpected turns after reload: %d", state.Usage.Turns)
 	}
 }

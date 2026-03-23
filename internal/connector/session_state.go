@@ -9,17 +9,51 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
 )
 
+type sessionUsageStats struct {
+	InputTokens       int64     `json:"input_tokens,omitempty"`
+	CachedInputTokens int64     `json:"cached_input_tokens,omitempty"`
+	OutputTokens      int64     `json:"output_tokens,omitempty"`
+	Turns             int64     `json:"turns,omitempty"`
+	UpdatedAt         time.Time `json:"updated_at,omitempty"`
+}
+
+func (s sessionUsageStats) TotalTokens() int64 {
+	return s.InputTokens + s.OutputTokens
+}
+
+func (s sessionUsageStats) HasUsage() bool {
+	return s.InputTokens != 0 || s.CachedInputTokens != 0 || s.OutputTokens != 0 || s.Turns != 0
+}
+
+func (s *sessionUsageStats) AddUsage(usage llm.Usage, at time.Time) {
+	if s == nil || !usage.HasUsage() {
+		return
+	}
+	s.InputTokens += usage.InputTokens
+	s.CachedInputTokens += usage.CachedInputTokens
+	s.OutputTokens += usage.OutputTokens
+	s.Turns++
+	if !at.IsZero() {
+		s.UpdatedAt = at
+	}
+}
+
 type sessionState struct {
-	ThreadID      string    `json:"thread_id"`
-	Aliases       []string  `json:"aliases,omitempty"`
-	WorkThreadID  string    `json:"work_thread_id,omitempty"`
-	LastMessageAt time.Time `json:"last_message_at"`
+	ThreadID      string            `json:"thread_id"`
+	Aliases       []string          `json:"aliases,omitempty"`
+	WorkThreadID  string            `json:"work_thread_id,omitempty"`
+	ScopeKey      string            `json:"scope_key,omitempty"`
+	Usage         sessionUsageStats `json:"usage,omitempty"`
+	LastMessageAt time.Time         `json:"last_message_at"`
 }
 
 type sessionStateSnapshot struct {
+	BotID    string                  `json:"bot_id,omitempty"`
+	BotName  string                  `json:"bot_name,omitempty"`
 	Sessions map[string]sessionState `json:"sessions"`
 }
 
@@ -176,6 +210,9 @@ func (p *Processor) touchSessionMessage(sessionKey string, at time.Time) {
 	if !ok {
 		state = sessionState{}
 	}
+	if state.ScopeKey == "" {
+		state.ScopeKey = scopeKeyFromSessionKey(canonicalKey)
+	}
 	if state.LastMessageAt.Equal(at) {
 		return
 	}
@@ -220,9 +257,13 @@ func (p *Processor) LoadSessionState(path string) error {
 		}
 		state.ThreadID = strings.TrimSpace(state.ThreadID)
 		state.WorkThreadID = strings.TrimSpace(state.WorkThreadID)
+		state.ScopeKey = strings.TrimSpace(state.ScopeKey)
 		state.Aliases = normalizeSessionAliases(state.Aliases, key)
 		if isWorkSceneSessionKey(key) {
 			state.Aliases, state.WorkThreadID = migrateWorkThreadID(state.Aliases, state.WorkThreadID)
+		}
+		if state.ScopeKey == "" {
+			state.ScopeKey = scopeKeyFromSessionKey(key)
 		}
 		loaded[key] = state
 	}
@@ -385,6 +426,42 @@ func extractThreadIDFromAlias(alias string) string {
 	return strings.TrimSpace(alias[idx+len(threadAliasToken):])
 }
 
+func scopeKeyFromSessionKey(sessionKey string) string {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return ""
+	}
+	if idx := strings.Index(sessionKey, "|"); idx >= 0 {
+		sessionKey = strings.TrimSpace(sessionKey[:idx])
+	}
+	return sessionKey
+}
+
+func (p *Processor) recordSessionUsage(sessionKey string, usage llm.Usage) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || !usage.HasUsage() {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	canonicalKey := p.resolveCanonicalSessionKeyLocked(sessionKey)
+	if canonicalKey == "" {
+		canonicalKey = sessionKey
+	}
+	state, ok := p.sessions[canonicalKey]
+	if !ok {
+		state = sessionState{}
+	}
+	if state.ScopeKey == "" {
+		state.ScopeKey = scopeKeyFromSessionKey(canonicalKey)
+	}
+	state.Usage.AddUsage(usage, p.now())
+	p.sessions[canonicalKey] = state
+	p.markStateChangedLocked()
+}
+
 func (p *Processor) resetChatSceneSession(receiveIDType, receiveID string) (string, string) {
 	baseKey := buildChatSceneSessionKey(receiveIDType, receiveID)
 	if baseKey == "" {
@@ -415,7 +492,8 @@ func (p *Processor) resetChatSceneSession(receiveIDType, receiveID string) (stri
 		newKey = fmt.Sprintf("%s%s%d-%d", baseKey, chatSceneResetToken, p.now().UnixNano(), p.stateVersion+1)
 	}
 	p.sessions[newKey] = sessionState{
-		Aliases: []string{baseKey},
+		Aliases:  []string{baseKey},
+		ScopeKey: scopeKeyFromSessionKey(newKey),
 	}
 	p.markStateChangedLocked()
 	return currentKey, newKey
@@ -444,6 +522,8 @@ func (p *Processor) flushSessionState(force bool) error {
 	}
 
 	snapshot := sessionStateSnapshot{
+		BotID:    strings.TrimSpace(p.statusBotID),
+		BotName:  strings.TrimSpace(p.statusBotName),
 		Sessions: make(map[string]sessionState, len(p.sessions)),
 	}
 	for key, state := range p.sessions {

@@ -98,6 +98,7 @@ func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 		RuntimeAPIToken:     b.apiToken,
 		AutomationStatePath: b.paths.automationStatePath,
 		CampaignStatePath:   b.paths.campaignStatePath,
+		SessionStatePath:    b.paths.sessionStatePath,
 		PromptLoader:        b.promptLoader,
 		Config:              b.cfg,
 	}, nil
@@ -135,6 +136,12 @@ func (b *connectorRuntimeBuilder) buildProcessor() error {
 		ResolveRuntimeBinary(b.cfg.WorkspaceDir),
 	)
 	processor.SetStatusStores(b.automationStore, b.campaignStore)
+	processor.SetStatusIdentity(b.cfg.BotID, b.cfg.BotName)
+	processor.SetStatusUsageSources([]connector.StatusUsageSource{{
+		BotID:            b.cfg.BotID,
+		BotName:          b.cfg.BotName,
+		SessionStatePath: b.paths.sessionStatePath,
+	}})
 	if err := processor.SetImageGeneration(b.cfg.ImageGeneration, b.cfg.CodexEnv); err != nil {
 		return err
 	}

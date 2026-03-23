@@ -117,6 +117,29 @@ func TestIsSuccessfulCommandExecutionCompleted(t *testing.T) {
 	}
 }
 
+func TestParseUsageLine(t *testing.T) {
+	usage := parseUsageLine(`{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":40,"output_tokens":8}}`)
+	if usage.InputTokens != 120 {
+		t.Fatalf("unexpected input tokens: %d", usage.InputTokens)
+	}
+	if usage.CachedInputTokens != 40 {
+		t.Fatalf("unexpected cached input tokens: %d", usage.CachedInputTokens)
+	}
+	if usage.OutputTokens != 8 {
+		t.Fatalf("unexpected output tokens: %d", usage.OutputTokens)
+	}
+	if usage.TotalTokens() != 128 {
+		t.Fatalf("unexpected total tokens: %d", usage.TotalTokens())
+	}
+}
+
+func TestParseUsageLine_IgnoresOtherEvents(t *testing.T) {
+	usage := parseUsageLine(`{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}`)
+	if usage.HasUsage() {
+		t.Fatalf("unexpected usage for non-turn event: %#v", usage)
+	}
+}
+
 func TestBuildExecArgs_ResumeThread(t *testing.T) {
 	args := buildExecArgs("thread_123", "hello", "", "", "", "", ExecPolicyConfig{
 		Sandbox:        "workspace-write",

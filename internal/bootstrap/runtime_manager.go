@@ -7,6 +7,7 @@ import (
 	"github.com/oklog/run"
 
 	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/connector"
 )
 
 type RuntimeManager struct {
@@ -34,7 +35,32 @@ func BuildRuntimeManager(cfg config.Config) (*RuntimeManager, error) {
 		}
 		manager.Runtimes = append(manager.Runtimes, runtime)
 	}
+	manager.configureStatusUsageSources()
 	return manager, nil
+}
+
+func (m *RuntimeManager) configureStatusUsageSources() {
+	if m == nil || len(m.Runtimes) == 0 {
+		return
+	}
+
+	sources := make([]connector.StatusUsageSource, 0, len(m.Runtimes))
+	for _, runtime := range m.Runtimes {
+		if runtime == nil {
+			continue
+		}
+		sources = append(sources, connector.StatusUsageSource{
+			BotID:            runtime.Config.BotID,
+			BotName:          runtime.Config.BotName,
+			SessionStatePath: runtime.SessionStatePath,
+		})
+	}
+	for _, runtime := range m.Runtimes {
+		if runtime == nil || runtime.Processor == nil {
+			continue
+		}
+		runtime.Processor.SetStatusUsageSources(sources)
+	}
 }
 
 func (m *RuntimeManager) Run(ctx context.Context) error {

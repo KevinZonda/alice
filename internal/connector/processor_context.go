@@ -49,10 +49,10 @@ func (p *Processor) runLLM(
 	options llmRunOptions,
 	env map[string]string,
 	onAgentMessage func(message string),
-) (string, string, error) {
+) (string, string, llm.Usage, error) {
 	snapshot := p.runtimeSnapshot()
 	if snapshot.llm == nil {
-		return "", strings.TrimSpace(threadID), fmt.Errorf("llm backend is nil")
+		return "", strings.TrimSpace(threadID), llm.Usage{}, fmt.Errorf("llm backend is nil")
 	}
 	result, err := snapshot.llm.Run(ctx, llm.RunRequest{
 		ThreadID:        strings.TrimSpace(threadID),
@@ -72,7 +72,7 @@ func (p *Processor) runLLM(
 	if nextThreadID == "" {
 		nextThreadID = strings.TrimSpace(threadID)
 	}
-	return result.Reply, nextThreadID, err
+	return result.Reply, nextThreadID, result.Usage, err
 }
 
 func (p *Processor) buildPrompt(ctx context.Context, job Job, threadID string) string {

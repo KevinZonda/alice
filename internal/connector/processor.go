@@ -40,7 +40,16 @@ type Processor struct {
 	automationStore  *automation.Store
 	campaignStore    *campaign.Store
 	helpConfig       builtinHelpConfig
+	statusBotID      string
+	statusBotName    string
+	statusUsagePeers []StatusUsageSource
 	prompts          *prompting.Loader
+}
+
+type StatusUsageSource struct {
+	BotID            string
+	BotName          string
+	SessionStatePath string
 }
 
 type builtinHelpConfig struct {
@@ -127,6 +136,37 @@ func (p *Processor) SetStatusStores(automationStore *automation.Store, campaignS
 	p.campaignStore = campaignStore
 }
 
+func (p *Processor) SetStatusIdentity(botID, botName string) {
+	if p == nil {
+		return
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.statusBotID = strings.TrimSpace(botID)
+	p.statusBotName = strings.TrimSpace(botName)
+}
+
+func (p *Processor) SetStatusUsageSources(sources []StatusUsageSource) {
+	if p == nil {
+		return
+	}
+	normalized := make([]StatusUsageSource, 0, len(sources))
+	for _, source := range sources {
+		path := strings.TrimSpace(source.SessionStatePath)
+		if path == "" {
+			continue
+		}
+		normalized = append(normalized, StatusUsageSource{
+			BotID:            strings.TrimSpace(source.BotID),
+			BotName:          strings.TrimSpace(source.BotName),
+			SessionStatePath: path,
+		})
+	}
+	p.runtimeMu.Lock()
+	defer p.runtimeMu.Unlock()
+	p.statusUsagePeers = normalized
+}
+
 func (p *Processor) SetImageGeneration(cfg config.ImageGenerationConfig, env map[string]string) error {
 	if p == nil {
 		return nil
@@ -197,36 +237,42 @@ func (p *Processor) runtimeSnapshot() processorRuntimeSnapshot {
 	p.runtimeMu.RLock()
 	defer p.runtimeMu.RUnlock()
 	return processorRuntimeSnapshot{
-		llm:             p.llm,
-		failureMessage:  p.failureMessage,
-		thinkingMessage: p.thinkingMessage,
-		feedbackMode:    p.feedbackMode,
-		feedbackEmoji:   p.feedbackEmoji,
-		imageGeneration: p.imageGeneration,
-		imageProvider:   p.imageProvider,
-		runtimeAPIBase:  p.runtimeAPIBase,
-		runtimeAPIToken: p.runtimeAPIToken,
-		runtimeAPIBin:   p.runtimeAPIBin,
-		automationStore: p.automationStore,
-		campaignStore:   p.campaignStore,
-		helpConfig:      p.helpConfig,
+		llm:              p.llm,
+		failureMessage:   p.failureMessage,
+		thinkingMessage:  p.thinkingMessage,
+		feedbackMode:     p.feedbackMode,
+		feedbackEmoji:    p.feedbackEmoji,
+		imageGeneration:  p.imageGeneration,
+		imageProvider:    p.imageProvider,
+		runtimeAPIBase:   p.runtimeAPIBase,
+		runtimeAPIToken:  p.runtimeAPIToken,
+		runtimeAPIBin:    p.runtimeAPIBin,
+		automationStore:  p.automationStore,
+		campaignStore:    p.campaignStore,
+		helpConfig:       p.helpConfig,
+		statusBotID:      p.statusBotID,
+		statusBotName:    p.statusBotName,
+		statusUsagePeers: append([]StatusUsageSource(nil), p.statusUsagePeers...),
 	}
 }
 
 type processorRuntimeSnapshot struct {
-	llm             llm.Backend
-	failureMessage  string
-	thinkingMessage string
-	feedbackMode    string
-	feedbackEmoji   string
-	imageGeneration config.ImageGenerationConfig
-	imageProvider   imagegen.Provider
-	runtimeAPIBase  string
-	runtimeAPIToken string
-	runtimeAPIBin   string
-	automationStore *automation.Store
-	campaignStore   *campaign.Store
-	helpConfig      builtinHelpConfig
+	llm              llm.Backend
+	failureMessage   string
+	thinkingMessage  string
+	feedbackMode     string
+	feedbackEmoji    string
+	imageGeneration  config.ImageGenerationConfig
+	imageProvider    imagegen.Provider
+	runtimeAPIBase   string
+	runtimeAPIToken  string
+	runtimeAPIBin    string
+	automationStore  *automation.Store
+	campaignStore    *campaign.Store
+	helpConfig       builtinHelpConfig
+	statusBotID      string
+	statusBotName    string
+	statusUsagePeers []StatusUsageSource
 }
 
 func defaultBuiltinHelpConfig() builtinHelpConfig {
@@ -284,7 +330,7 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
 	promptText := p.buildPrompt(ctx, job, currentThreadID)
-	reply, nextThreadID, err := p.runLLM(
+	reply, nextThreadID, usage, err := p.runLLM(
 		ctx,
 		currentThreadID,
 		promptText,
@@ -293,6 +339,7 @@ func (p *Processor) processSendMessage(ctx context.Context, job Job) JobProcessS
 		nil,
 	)
 	p.setThreadID(sessionKey, nextThreadID)
+	p.recordSessionUsage(sessionKey, usage)
 	if errors.Is(err, context.Canceled) {
 		if wasInterruptedByNewMessage(ctx) {
 			logging.Infof("llm interrupted by newer message event_id=%s", job.EventID)
@@ -367,7 +414,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 	p.prepareJobForLLM(ctx, &job)
 	currentThreadID := p.getThreadID(sessionKey)
 	promptText := p.buildPrompt(ctx, job, currentThreadID)
-	finalReply, nextThreadID, runErr := p.runLLM(
+	finalReply, nextThreadID, usage, runErr := p.runLLM(
 		ctx,
 		currentThreadID,
 		promptText,
@@ -376,6 +423,7 @@ func (p *Processor) processReplyMessage(ctx context.Context, job Job) JobProcess
 		sendAgentMessage,
 	)
 	p.setThreadID(sessionKey, nextThreadID)
+	p.recordSessionUsage(sessionKey, usage)
 	if errors.Is(runErr, context.Canceled) {
 		if wasInterruptedByNewMessage(ctx) {
 			notifyCtx := context.WithoutCancel(ctx)

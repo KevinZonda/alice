@@ -121,7 +121,7 @@ func buildBuiltinHelpMarkdown(helpCfg builtinHelpConfig) string {
 		"- `/help`",
 		"  显示内建命令，以及普通模式 / 工作模式的当前说明。",
 		"- `/status`",
-		"  显示当前会话 scope 下的活跃自动化任务，以及非终态的 code-army campaigns。",
+		"  显示当前会话 scope 下的 token 统计、活跃自动化任务，以及非终态的 code-army campaigns。",
 		"- `/clear`",
 		"  仅在群聊 `chat` 模式下可用；切换到新的群聊会话，相当于清空当前上下文。",
 	}
@@ -180,15 +180,27 @@ func (p *Processor) buildBuiltinStatusMarkdown(job Job) string {
 
 	tasks, taskErr := activeAutomationTasksForJob(snapshot.automationStore, job, 20)
 	campaigns, campaignErr := activeCampaignsForJob(snapshot.campaignStore, job, 20)
+	totalUsage, botUsages, usageErr := p.builtinStatusUsage(job)
 
 	lines := []string{
 		"## Alice 当前状态",
 		"",
 		fmt.Sprintf("- scope: `%s`", builtinStatusScopeLabel(job)),
+		fmt.Sprintf("- 总 token：`%s`", formatBuiltinStatusTokenCount(totalUsage.TotalTokens())),
+		fmt.Sprintf(
+			"- token 明细：input `%s` | cached `%s` | output `%s` | turns `%s`",
+			formatBuiltinStatusTokenCount(totalUsage.InputTokens),
+			formatBuiltinStatusTokenCount(totalUsage.CachedInputTokens),
+			formatBuiltinStatusTokenCount(totalUsage.OutputTokens),
+			formatBuiltinStatusTokenCount(totalUsage.Turns),
+		),
 		fmt.Sprintf("- 活跃自动化任务：`%d`", len(tasks)),
 		fmt.Sprintf("- 活跃 Code Army：`%d`", len(campaigns)),
 	}
-	if taskErr != nil || campaignErr != nil {
+	if updatedAt := formatBuiltinStatusTime(newestUsageUpdate(botUsages)); updatedAt != "" {
+		lines = append(lines, fmt.Sprintf("- token 统计更新：`%s`", updatedAt))
+	}
+	if taskErr != nil || campaignErr != nil || usageErr != nil {
 		lines = append(lines, "")
 		if taskErr != nil {
 			lines = append(lines, fmt.Sprintf("- 自动化任务查询失败：`%s`", sanitizeInlineCode(taskErr.Error())))
@@ -196,7 +208,19 @@ func (p *Processor) buildBuiltinStatusMarkdown(job Job) string {
 		if campaignErr != nil {
 			lines = append(lines, fmt.Sprintf("- Code Army 查询失败：`%s`", sanitizeInlineCode(campaignErr.Error())))
 		}
+		if usageErr != nil {
+			lines = append(lines, fmt.Sprintf("- token 统计查询失败：`%s`", sanitizeInlineCode(usageErr.Error())))
+		}
 		return strings.Join(lines, "\n")
+	}
+
+	lines = append(lines, "", "### Bot Token 统计", "")
+	if len(botUsages) == 0 {
+		lines = append(lines, "- none")
+	} else {
+		for _, item := range botUsages {
+			lines = append(lines, formatBuiltinStatusUsageLine(item))
+		}
 	}
 
 	lines = append(lines, "", "### 活跃自动化任务", "")

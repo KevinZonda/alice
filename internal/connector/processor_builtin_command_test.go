@@ -3,9 +3,11 @@ package connector
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/campaign"
@@ -113,6 +115,7 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 	llmStub := &llmCallCountingStub{}
 	sender := &senderStub{}
 	processor := NewProcessor(llmStub, sender, "failed", "thinking")
+	processor.SetStatusIdentity("alice", "Alice")
 
 	automationStore := automation.NewStore(filepath.Join(t.TempDir(), "automation.db"))
 	campaignStore := campaign.NewStore(filepath.Join(t.TempDir(), "campaigns.db"))
@@ -182,6 +185,40 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 		t.Fatalf("create merged campaign failed: %v", err)
 	}
 
+	processor.recordSessionUsage(buildChatSceneSessionKey("chat_id", "oc_chat"), llm.Usage{
+		InputTokens:       120,
+		CachedInputTokens: 60,
+		OutputTokens:      15,
+	})
+	peerStatePath := filepath.Join(t.TempDir(), "mea_session_state.json")
+	peerSnapshot := sessionStateSnapshot{
+		BotID:   "mea",
+		BotName: "Mea",
+		Sessions: map[string]sessionState{
+			buildChatSceneSessionKey("chat_id", "oc_chat"): {
+				ScopeKey: "chat_id:oc_chat",
+				Usage: sessionUsageStats{
+					InputTokens:       80,
+					CachedInputTokens: 20,
+					OutputTokens:      10,
+					Turns:             2,
+					UpdatedAt:         time.Date(2026, 3, 23, 12, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				},
+			},
+		},
+	}
+	rawPeerSnapshot, err := json.Marshal(peerSnapshot)
+	if err != nil {
+		t.Fatalf("marshal peer snapshot failed: %v", err)
+	}
+	if err := os.WriteFile(peerStatePath, rawPeerSnapshot, 0o600); err != nil {
+		t.Fatalf("write peer snapshot failed: %v", err)
+	}
+	processor.SetStatusUsageSources([]StatusUsageSource{
+		{BotID: "alice", BotName: "Alice", SessionStatePath: filepath.Join(t.TempDir(), "unused-self.json")},
+		{BotID: "mea", BotName: "Mea", SessionStatePath: peerStatePath},
+	})
+
 	state := processor.ProcessJobState(context.Background(), Job{
 		ReceiveID:       "oc_chat",
 		ReceiveIDType:   "chat_id",
@@ -211,6 +248,10 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 	reply := card.Body.Elements[0].Content
 	for _, want := range []string{
 		"## Alice 当前状态",
+		"总 token：`225`",
+		"token 明细：input `200` | cached `80` | output `25` | turns `3`",
+		"`Alice` | total `135` | input `120` | cached `60` | output `15` | turns `1`",
+		"`Mea` | total `90` | input `80` | cached `20` | output `10` | turns `2`",
 		"活跃自动化任务：`1`",
 		"活跃 Code Army：`1`",
 		"`task_active`",
