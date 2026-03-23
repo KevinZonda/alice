@@ -7,9 +7,11 @@ import (
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/llm"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
+	"github.com/Alice-space/alice/internal/runtimecfg"
 )
 
 type ConfigReloadReport struct {
@@ -69,12 +71,15 @@ func (r *ConnectorRuntime) ApplyConfigReload(next config.Config) (ConfigReloadRe
 		r.RuntimeAPI.UpdateRuntimeConfig(merged)
 	}
 	if r.Processor != nil {
-		if llmChanged && backend != nil {
-			r.Processor.SetLLMBackend(backend)
-		}
-		r.Processor.SetReplyMessages(merged.FailureMessage, merged.ThinkingMessage)
-		r.Processor.SetImmediateFeedback(merged.ImmediateFeedbackMode, merged.ImmediateFeedbackReaction)
-		if err := r.Processor.SetImageGeneration(merged.ImageGeneration, merged.CodexEnv); err != nil {
+		if err := r.Processor.UpdateRuntimeConfig(connector.ProcessorRuntimeUpdate{
+			Backend:                backend,
+			FailureMessage:         merged.FailureMessage,
+			ThinkingMessage:        merged.ThinkingMessage,
+			ImmediateFeedbackMode:  merged.ImmediateFeedbackMode,
+			ImmediateFeedbackEmoji: merged.ImmediateFeedbackReaction,
+			ImageGeneration:        merged.ImageGeneration,
+			ImageEnv:               merged.CodexEnv,
+		}); err != nil {
 			return report, fmt.Errorf("reconfigure image generation failed: %w", err)
 		}
 	}
@@ -302,12 +307,5 @@ func llmProfileMapEqual(left, right map[string]config.LLMProfileConfig) bool {
 }
 
 func cloneLLMProfileMap(in map[string]config.LLMProfileConfig) map[string]config.LLMProfileConfig {
-	if len(in) == 0 {
-		return map[string]config.LLMProfileConfig{}
-	}
-	out := make(map[string]config.LLMProfileConfig, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
+	return runtimecfg.CloneLLMProfiles(in)
 }
