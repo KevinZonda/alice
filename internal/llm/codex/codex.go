@@ -45,6 +45,20 @@ type ExecPolicyConfig struct {
 	AddDirs        []string
 }
 
+type Usage struct {
+	InputTokens       int64
+	CachedInputTokens int64
+	OutputTokens      int64
+}
+
+func (u Usage) TotalTokens() int64 {
+	return u.InputTokens + u.OutputTokens
+}
+
+func (u Usage) HasUsage() bool {
+	return u.InputTokens != 0 || u.CachedInputTokens != 0 || u.OutputTokens != 0
+}
+
 type fileDiffStat struct {
 	Additions int
 	Deletions int
@@ -88,6 +102,37 @@ func (r Runner) RunWithThreadAndProgress(
 	env map[string]string,
 	onThinking func(step string),
 ) (string, string, error) {
+	reply, nextThreadID, _, err := r.RunWithThreadAndProgressAndUsage(
+		ctx,
+		threadID,
+		agentName,
+		userText,
+		scene,
+		model,
+		profile,
+		reasoningEffort,
+		personality,
+		noReplyToken,
+		env,
+		onThinking,
+	)
+	return reply, nextThreadID, err
+}
+
+func (r Runner) RunWithThreadAndProgressAndUsage(
+	ctx context.Context,
+	threadID string,
+	agentName string,
+	userText string,
+	scene string,
+	model string,
+	profile string,
+	reasoningEffort string,
+	personality string,
+	noReplyToken string,
+	env map[string]string,
+	onThinking func(step string),
+) (string, string, Usage, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = strings.TrimSpace(r.DefaultModel)
@@ -109,10 +154,10 @@ func (r Runner) RunWithThreadAndProgress(
 		prompt,
 	)
 	if err != nil {
-		return "", "", err
+		return "", "", Usage{}, err
 	}
 	if strings.TrimSpace(prompt) == "" {
-		return "", "", errors.New("empty prompt")
+		return "", "", Usage{}, errors.New("empty prompt")
 	}
 
 	timeout := r.Timeout
@@ -188,17 +233,17 @@ func (r Runner) RunWithThreadAndProgress(
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", "", fmt.Errorf("create stdout pipe failed: %w", err)
+		return "", "", Usage{}, fmt.Errorf("create stdout pipe failed: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return "", "", fmt.Errorf("create stderr pipe failed: %w", err)
+		return "", "", Usage{}, fmt.Errorf("create stderr pipe failed: %w", err)
 	}
 
 	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
 		logging.Debugf("codex start failed err=%v", err)
-		return "", "", fmt.Errorf("start codex process failed: %w", err)
+		return "", "", Usage{}, fmt.Errorf("start codex process failed: %w", err)
 	}
 	logging.Debugf("codex process started pid=%d", cmd.Process.Pid)
 
@@ -211,6 +256,7 @@ func (r Runner) RunWithThreadAndProgress(
 
 	var stdout bytes.Buffer
 	sawNativeFileChange := false
+	usage := Usage{}
 	scanner := bufio.NewScanner(stdoutPipe)
 	scanner.Buffer(make([]byte, 0, 64*1024), 5*1024*1024)
 
@@ -228,6 +274,16 @@ func (r Runner) RunWithThreadAndProgress(
 		if toolCall := parseToolCallLine(line); strings.TrimSpace(toolCall) != "" {
 			toolCalls = append(toolCalls, strings.TrimSpace(toolCall))
 			logging.Debugf("codex tool_call=%q", strings.TrimSpace(toolCall))
+		}
+		if parsedUsage := parseUsageLine(line); parsedUsage.HasUsage() {
+			usage = parsedUsage
+			logging.Debugf(
+				"codex usage input_tokens=%d cached_input_tokens=%d output_tokens=%d total_tokens=%d",
+				usage.InputTokens,
+				usage.CachedInputTokens,
+				usage.OutputTokens,
+				usage.TotalTokens(),
+			)
 		}
 		if strings.TrimSpace(reasoning) != "" {
 			logging.Debugf("codex reasoning=%q", strings.TrimSpace(reasoning))
@@ -264,17 +320,17 @@ func (r Runner) RunWithThreadAndProgress(
 			logging.Debugf("codex run timeout while scanning elapsed=%s", time.Since(startedAt))
 			timeoutErr := errors.New("codex timeout")
 			emitTrace(timeoutErr)
-			return "", activeThreadID, timeoutErr
+			return "", activeThreadID, usage, timeoutErr
 		}
 		if errors.Is(tctx.Err(), context.Canceled) {
 			logging.Debugf("codex run canceled while scanning elapsed=%s", time.Since(startedAt))
 			emitTrace(context.Canceled)
-			return "", activeThreadID, context.Canceled
+			return "", activeThreadID, usage, context.Canceled
 		}
 		logging.Debugf("codex scan failed elapsed=%s err=%v", time.Since(startedAt), scanErr)
 		runErr := fmt.Errorf("read codex output failed: %w", scanErr)
 		emitTrace(runErr)
-		return "", activeThreadID, runErr
+		return "", activeThreadID, usage, runErr
 	}
 
 	err = cmd.Wait()
@@ -287,12 +343,12 @@ func (r Runner) RunWithThreadAndProgress(
 		logging.Debugf("codex run timeout elapsed=%s", time.Since(startedAt))
 		timeoutErr := errors.New("codex timeout")
 		emitTrace(timeoutErr)
-		return "", activeThreadID, timeoutErr
+		return "", activeThreadID, usage, timeoutErr
 	}
 	if errors.Is(tctx.Err(), context.Canceled) {
 		logging.Debugf("codex run canceled elapsed=%s", time.Since(startedAt))
 		emitTrace(context.Canceled)
-		return "", activeThreadID, context.Canceled
+		return "", activeThreadID, usage, context.Canceled
 	}
 	if err != nil {
 		detail := stderrText
@@ -305,7 +361,7 @@ func (r Runner) RunWithThreadAndProgress(
 		logging.Debugf("codex run failed elapsed=%s err=%v detail=%s", time.Since(startedAt), err, detail)
 		runErr := fmt.Errorf("codex exec failed: %w (%s)", err, detail)
 		emitTrace(runErr)
-		return "", activeThreadID, runErr
+		return "", activeThreadID, usage, runErr
 	}
 
 	if onThinking != nil && !sawNativeFileChange {
@@ -318,7 +374,7 @@ func (r Runner) RunWithThreadAndProgress(
 		if parseErr != nil {
 			logging.Debugf("codex final message parse failed elapsed=%s err=%v", time.Since(startedAt), parseErr)
 			emitTrace(parseErr)
-			return "", activeThreadID, parseErr
+			return "", activeThreadID, usage, parseErr
 		}
 		finalMessage = strings.TrimSpace(message)
 	}
@@ -329,7 +385,7 @@ func (r Runner) RunWithThreadAndProgress(
 		finalMessage,
 	)
 	emitTrace(nil)
-	return finalMessage, activeThreadID, nil
+	return finalMessage, activeThreadID, usage, nil
 }
 
 func (r Runner) execPolicy(scene string, env map[string]string) ExecPolicyConfig {

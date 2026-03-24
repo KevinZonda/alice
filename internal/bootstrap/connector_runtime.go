@@ -25,6 +25,7 @@ type ConnectorRuntime struct {
 	RuntimeAPIToken     string
 	AutomationStatePath string
 	CampaignStatePath   string
+	SessionStatePath    string
 	PromptLoader        *prompting.Loader
 	Config              config.Config
 	mu                  sync.Mutex

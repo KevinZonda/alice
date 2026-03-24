@@ -4,6 +4,20 @@ import "context"
 
 type ProgressFunc func(step string)
 
+type Usage struct {
+	InputTokens       int64
+	CachedInputTokens int64
+	OutputTokens      int64
+}
+
+func (u Usage) TotalTokens() int64 {
+	return u.InputTokens + u.OutputTokens
+}
+
+func (u Usage) HasUsage() bool {
+	return u.InputTokens != 0 || u.CachedInputTokens != 0 || u.OutputTokens != 0
+}
+
 type RunRequest struct {
 	ThreadID        string
 	AgentName       string
@@ -22,6 +36,7 @@ type RunRequest struct {
 type RunResult struct {
 	Reply        string
 	NextThreadID string
+	Usage        Usage
 }
 
 type Backend interface {
