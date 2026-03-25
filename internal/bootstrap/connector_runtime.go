@@ -3,8 +3,10 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oklog/run"
 
@@ -31,41 +33,91 @@ type ConnectorRuntime struct {
 	mu                  sync.Mutex
 }
 
+// buildFactoryConfig derives per-provider FactoryConfig from llm_profiles.
+// For each provider, the first profile (alphabetically by name) that matches
+// provides the command, timeout, and default model/reasoning_effort/prompt_prefix.
 func buildFactoryConfig(cfg config.Config, prompts *prompting.Loader) llm.FactoryConfig {
 	defaultEnv := applyLLMProcessEnvDefaults(cfg.CodexEnv, cfg.CodexHome)
+
+	type providerDefaults struct {
+		command         string
+		timeout         time.Duration
+		model           string
+		reasoningEffort string
+		promptPrefix    string
+	}
+	defaults := map[string]*providerDefaults{}
+
+	// Collect sorted profile names for deterministic first-profile selection.
+	profileNames := make([]string, 0, len(cfg.LLMProfiles))
+	for name := range cfg.LLMProfiles {
+		profileNames = append(profileNames, name)
+	}
+	sort.Strings(profileNames)
+
+	for _, name := range profileNames {
+		profile := cfg.LLMProfiles[name]
+		provider := strings.ToLower(strings.TrimSpace(profile.Provider))
+		if provider == "" {
+			provider = config.DefaultLLMProvider
+		}
+		if _, exists := defaults[provider]; !exists {
+			defaults[provider] = &providerDefaults{
+				command:         profile.Command,
+				timeout:         profile.Timeout,
+				model:           profile.Model,
+				reasoningEffort: profile.ReasoningEffort,
+				promptPrefix:    profile.PromptPrefix,
+			}
+		}
+	}
+
+	get := func(provider, fallbackCmd string) providerDefaults {
+		if d, ok := defaults[provider]; ok {
+			return *d
+		}
+		return providerDefaults{
+			command: fallbackCmd,
+			timeout: time.Duration(config.DefaultLLMTimeoutSecs) * time.Second,
+		}
+	}
+
+	codex := get(config.DefaultLLMProvider, "codex")
+	claude := get(config.LLMProviderClaude, "claude")
+	gemini := get(config.LLMProviderGemini, "gemini")
+	kimi := get(config.LLMProviderKimi, "kimi")
+
 	return llm.FactoryConfig{
 		Provider: cfg.LLMProvider,
 		Prompts:  prompts,
 		Codex: llm.CodexConfig{
-			Command:         cfg.CodexCommand,
-			Timeout:         cfg.CodexTimeout,
-			Model:           cfg.CodexModel,
-			ReasoningEffort: cfg.CodexReasoningEffort,
+			Command:         codex.command,
+			Timeout:         codex.timeout,
+			Model:           codex.model,
+			ReasoningEffort: codex.reasoningEffort,
 			Env:             defaultEnv,
-			PromptPrefix:    cfg.CodexPromptPrefix,
+			PromptPrefix:    codex.promptPrefix,
 			WorkspaceDir:    cfg.WorkspaceDir,
-			ChatExecPolicy:  buildCodexExecPolicy(cfg.Permissions.Codex.Chat),
-			WorkExecPolicy:  buildCodexExecPolicy(cfg.Permissions.Codex.Work),
 		},
 		Claude: llm.ClaudeConfig{
-			Command:      cfg.ClaudeCommand,
-			Timeout:      cfg.ClaudeTimeout,
+			Command:      claude.command,
+			Timeout:      claude.timeout,
 			Env:          defaultEnv,
-			PromptPrefix: cfg.ClaudePromptPrefix,
+			PromptPrefix: claude.promptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 		Gemini: llm.GeminiConfig{
-			Command:      cfg.GeminiCommand,
-			Timeout:      cfg.GeminiTimeout,
+			Command:      gemini.command,
+			Timeout:      gemini.timeout,
 			Env:          defaultEnv,
-			PromptPrefix: cfg.GeminiPromptPrefix,
+			PromptPrefix: gemini.promptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 		Kimi: llm.KimiConfig{
-			Command:      cfg.KimiCommand,
-			Timeout:      cfg.KimiTimeout,
+			Command:      kimi.command,
+			Timeout:      kimi.timeout,
 			Env:          defaultEnv,
-			PromptPrefix: cfg.KimiPromptPrefix,
+			PromptPrefix: kimi.promptPrefix,
 			WorkspaceDir: cfg.WorkspaceDir,
 		},
 	}

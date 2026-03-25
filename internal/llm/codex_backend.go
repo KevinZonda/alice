@@ -22,28 +22,24 @@ func newCodexBackend(cfg CodexConfig, prompts *prompting.Loader) *codexBackend {
 			Env:                    cfg.Env,
 			PromptPrefix:           cfg.PromptPrefix,
 			WorkspaceDir:           cfg.WorkspaceDir,
-			ChatExecPolicy: corecodex.ExecPolicyConfig{
-				Sandbox:        strings.TrimSpace(cfg.ChatExecPolicy.Sandbox),
-				AskForApproval: strings.TrimSpace(cfg.ChatExecPolicy.AskForApproval),
-				AddDirs:        append([]string(nil), cfg.ChatExecPolicy.AddDirs...),
-			},
-			WorkExecPolicy: corecodex.ExecPolicyConfig{
-				Sandbox:        strings.TrimSpace(cfg.WorkExecPolicy.Sandbox),
-				AskForApproval: strings.TrimSpace(cfg.WorkExecPolicy.AskForApproval),
-				AddDirs:        append([]string(nil), cfg.WorkExecPolicy.AddDirs...),
-			},
-			Prompts: prompts,
+			Prompts:                prompts,
 		},
 	}
 }
 
 func (b *codexBackend) Run(ctx context.Context, req RunRequest) (RunResult, error) {
+	policy := corecodex.ExecPolicyConfig{
+		Sandbox:        strings.TrimSpace(req.ExecPolicy.Sandbox),
+		AskForApproval: strings.TrimSpace(req.ExecPolicy.AskForApproval),
+		AddDirs:        append([]string(nil), req.ExecPolicy.AddDirs...),
+	}
 	reply, nextThreadID, usage, err := b.runner.RunWithThreadAndProgressAndUsage(
 		ctx,
 		strings.TrimSpace(req.ThreadID),
 		strings.TrimSpace(req.AgentName),
 		req.UserText,
-		strings.TrimSpace(req.Scene),
+		policy,
+		strings.TrimSpace(req.PromptPrefix),
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.Profile),
 		strings.TrimSpace(req.ReasoningEffort),

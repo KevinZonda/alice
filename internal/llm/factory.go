@@ -22,12 +22,6 @@ type FactoryConfig struct {
 	Kimi     KimiConfig
 }
 
-type ExecPolicyConfig struct {
-	Sandbox        string
-	AskForApproval string
-	AddDirs        []string
-}
-
 type CodexConfig struct {
 	Command         string
 	Timeout         time.Duration
@@ -36,8 +30,6 @@ type CodexConfig struct {
 	Env             map[string]string
 	PromptPrefix    string
 	WorkspaceDir    string
-	ChatExecPolicy  ExecPolicyConfig
-	WorkExecPolicy  ExecPolicyConfig
 }
 
 type ClaudeConfig struct {

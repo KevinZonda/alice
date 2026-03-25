@@ -34,6 +34,7 @@ func (b *geminiBackend) Run(ctx context.Context, req RunRequest) (RunResult, err
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.Personality),
 		strings.TrimSpace(req.NoReplyToken),
+		strings.TrimSpace(req.PromptPrefix),
 		req.Env,
 		req.OnProgress,
 	)

@@ -499,12 +499,8 @@ func (b *connectorRuntimeBuilder) campaignRoleDefaults() campaignrepo.CampaignRo
 
 func configRoleToRepoRole(c config.CampaignRoleDefaultConfig) campaignrepo.RoleConfig {
 	return campaignrepo.RoleConfig{
-		Role:            c.Role,
-		Provider:        c.Provider,
-		Model:           c.Model,
-		Profile:         c.Profile,
-		Workflow:        c.Workflow,
-		ReasoningEffort: c.ReasoningEffort,
-		Personality:     c.Personality,
+		Role:     c.Role,
+		Profile:  c.LLMProfile,
+		Workflow: c.Workflow,
 	}
 }

@@ -154,11 +154,12 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool) error {
 		}
 
 		if runtimeUsesCodex(runtimeCfg) {
-			key := runtimeCfg.CodexCommand + "\x00" + runtimeCfg.CodexHome
+			codexCmd := resolveCodexCommand(runtimeCfg)
+			key := codexCmd + "\x00" + runtimeCfg.CodexHome
 			check, ok := authChecks[key]
 			if !ok {
 				check = &codexLoginCheck{
-					Command:   runtimeCfg.CodexCommand,
+					Command:   codexCmd,
 					CodexHome: runtimeCfg.CodexHome,
 				}
 				authChecks[key] = check
@@ -518,6 +519,25 @@ func runtimeUsesCodex(cfg config.Config) bool {
 		}
 	}
 	return false
+}
+
+// resolveCodexCommand returns the codex command from the first codex profile
+// (alphabetically), falling back to "codex".
+func resolveCodexCommand(cfg config.Config) string {
+	names := make([]string, 0, len(cfg.LLMProfiles))
+	for name, profile := range cfg.LLMProfiles {
+		if strings.ToLower(strings.TrimSpace(profile.Provider)) == config.DefaultLLMProvider ||
+			profile.Provider == "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if cmd := strings.TrimSpace(cfg.LLMProfiles[name].Command); cmd != "" {
+			return cmd
+		}
+	}
+	return "codex"
 }
 
 func formatCodexLoginOutput(command, output string) string {

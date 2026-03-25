@@ -35,6 +35,7 @@ func (b *claudeBackend) Run(ctx context.Context, req RunRequest) (RunResult, err
 		strings.TrimSpace(req.Profile),
 		strings.TrimSpace(req.Personality),
 		strings.TrimSpace(req.NoReplyToken),
+		strings.TrimSpace(req.PromptPrefix),
 		req.Env,
 		req.OnProgress,
 	)
