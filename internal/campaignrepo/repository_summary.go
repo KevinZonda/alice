@@ -25,6 +25,8 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 		CampaignID:    strings.TrimSpace(repo.Campaign.Frontmatter.CampaignID),
 		CampaignTitle: strings.TrimSpace(repo.Campaign.Frontmatter.Title),
 		CurrentPhase:  strings.TrimSpace(repo.Campaign.Frontmatter.CurrentPhase),
+		PlanRound:     repo.Campaign.Frontmatter.PlanRound,
+		PlanStatus:    strings.TrimSpace(repo.Campaign.Frontmatter.PlanStatus),
 		MaxParallel:   maxParallel,
 		TaskCount:     len(repo.Tasks),
 		GeneratedAt:   now,
@@ -167,6 +169,8 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 
 func (s Summary) SummaryLine() string {
 	parts := []string{
+		fmt.Sprintf("plan=%s", blankForSummary(s.PlanStatus)),
+		fmt.Sprintf("plan_round=%d", s.PlanRound),
 		fmt.Sprintf("phase=%s", blankForSummary(s.CurrentPhase)),
 		fmt.Sprintf("active=%d", s.ActiveCount),
 		fmt.Sprintf("ready=%d", s.ReadyCount),

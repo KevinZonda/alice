@@ -26,6 +26,24 @@ default_reviewer:
   workflow: code_army
   reasoning_effort: high
   personality: analytical
+default_planner:
+  role: planner
+  provider: claude
+  model: ""
+  profile: ""
+  workflow: code_army
+  reasoning_effort: high
+  personality: analytical
+default_planner_reviewer:
+  role: planner_reviewer
+  provider: claude
+  model: ""
+  profile: ""
+  workflow: code_army
+  reasoning_effort: high
+  personality: analytical
+plan_round: 0
+plan_status: idle
 ---
 
 # Campaign
@@ -37,32 +55,27 @@ __CAMPAIGN_OBJECTIVE__
 - path: `__CAMPAIGN_REPO_PATH__`
 
 ## Pipeline Status
-- planner proposals (manual): `pending`
-- human input: `pending`
-- merged master plan (manual): `draft`
+- plan status: `idle`
+- plan round: `0`
 - executor queue: `idle`
 - reviewer queue: `idle`
 
 ## Gates
-- 待补充
+- TBD
 
 ## Current State
 - phase: `P01`
 - status: `planned`
-- current direction: `-`
-- current winner task: `-`
-
-## Active Tasks
-- none
-
-## Blockers
-- none
 
 ## Roles
+- planner default: `planner`
+- planner reviewer default: `planner_reviewer`
 - executor default: `executor.codex`
 - reviewer default: `reviewer.claude`
 
 ## Next
-- 完成人工/交互式 proposal
-- 人工合并 master plan
-- 展开 phase/task 目录树
+- Campaign will auto-start planning phase on first reconcile
+- Planner generates proposal and draft tasks
+- Planner reviewer evaluates plan
+- Human approves plan via `/alice approve-plan`
+- Execution begins automatically after approval

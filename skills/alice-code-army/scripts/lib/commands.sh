@@ -128,6 +128,16 @@ apply_command() {
       '{current_winner_trial_id:$winner, status:$status, summary:$summary}')"
     patch_campaign "$campaign_id" "$patch_json"
     summary="Accepted ${trial_id} as current winner"
+  elif [[ "$command_text" == "/alice approve-plan" ]]; then
+    summary="Plan approved by human, starting execution"
+    patch_json="$(jq -cn --arg status "running" --arg summary "$summary" '{status:$status, summary:$summary}')"
+    patch_campaign "$campaign_id" "$patch_json"
+    # Update plan_status in campaign repo if the campaign has a repo path
+    local repo_path
+    repo_path="$(jq -r '.campaign.campaign_repo_path // ""' <<<"$payload")"
+    if [[ -n "$repo_path" && -f "${repo_path}/campaign.md" ]]; then
+      update_campaign_plan_status "$repo_path" "human_approved"
+    fi
   elif [[ "$command_text" =~ ^/alice[[:space:]]+steer[[:space:]]+(.+)$ ]]; then
     summary="Updated campaign direction: ${BASH_REMATCH[1]}"
     patch_json="$(jq -cn --arg summary "$summary" '{summary:$summary}')"
@@ -183,5 +193,36 @@ sync_all() {
   for trial_id in "${trial_ids[@]}"; do
     sync_trial "$campaign_id" "$trial_id"
   done
+}
+
+approve_plan() {
+  local campaign_id="$1"
+  apply_command "$campaign_id" "/alice approve-plan" "manual"
+}
+
+plan_status() {
+  local campaign_id="$1" payload repo_path plan_status plan_round
+  payload="$(campaign_json "$campaign_id")"
+  repo_path="$(jq -r '.campaign.campaign_repo_path // ""' <<<"$payload")"
+  if [[ -z "$repo_path" || ! -f "${repo_path}/campaign.md" ]]; then
+    jq -cn --arg status "no_repo" '{"status":"ok","plan_status":$status,"plan_round":0}'
+    return 0
+  fi
+  plan_status="$(sed -n 's/^plan_status:[[:space:]]*//p' "${repo_path}/campaign.md" | head -1 | tr -d '"' | tr -d "'")"
+  plan_round="$(sed -n 's/^plan_round:[[:space:]]*//p' "${repo_path}/campaign.md" | head -1)"
+  jq -cn \
+    --arg plan_status "${plan_status:-idle}" \
+    --argjson plan_round "${plan_round:-0}" \
+    '{"status":"ok","plan_status":$plan_status,"plan_round":$plan_round}'
+}
+
+update_campaign_plan_status() {
+  local repo_path="$1" new_status="$2"
+  local campaign_file="${repo_path}/campaign.md"
+  [[ -f "$campaign_file" ]] || return 0
+  # Use sed to update plan_status in the YAML frontmatter
+  if grep -q '^plan_status:' "$campaign_file"; then
+    sed -i "s/^plan_status:.*/plan_status: ${new_status}/" "$campaign_file"
+  fi
 }
 

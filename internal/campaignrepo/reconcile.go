@@ -37,6 +37,28 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 	}
 	changed := false
 
+	planChanged, err := reconcilePlanPhase(&repo, now, leaseDuration)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	if planChanged {
+		changed = true
+	}
+
+	if isPlanningPhase(repo.Campaign.Frontmatter.PlanStatus) {
+		summary := Summarize(repo, now, maxParallel)
+		dispatchTasks, err := buildDispatchSpecs(repo, now)
+		if err != nil {
+			return ReconcileResult{}, err
+		}
+		return ReconcileResult{
+			Repository:    repo,
+			Summary:       summary,
+			DispatchTasks: dispatchTasks,
+			Changed:       changed,
+		}, nil
+	}
+
 	appliedReviews, err := applyReviewVerdicts(&repo)
 	if err != nil {
 		return ReconcileResult{}, err

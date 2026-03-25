@@ -1,3 +1,5 @@
 # Plan Reviews
 
-把不同 proposal 的交叉审阅记录放在这里。
+Planner reviewer verdicts are stored here as `round-NNN-review.md`.
+
+Each review has YAML frontmatter with `review_id`, `plan_round`, `verdict`, and `blocking`.

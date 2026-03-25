@@ -26,9 +26,10 @@ func resolveRoleConfig(base RoleConfig, campaignDefault RoleConfig, taskOverride
 		cfg.ReasoningEffort = "high"
 	}
 	if cfg.Personality == "" {
-		if kind == "reviewer" {
+		switch kind {
+		case "reviewer", "planner", "planner_reviewer":
 			cfg.Personality = "analytical"
-		} else {
+		default:
 			cfg.Personality = "pragmatic"
 		}
 	}
@@ -79,6 +80,34 @@ func defaultReviewerRoleConfig() RoleConfig {
 		ReasoningEffort: "high",
 		Personality:     "analytical",
 	})
+}
+
+func defaultPlannerRoleConfig() RoleConfig {
+	return normalizeRoleConfig(RoleConfig{
+		Role:            "planner",
+		Provider:        "claude",
+		Workflow:        "code_army",
+		ReasoningEffort: "high",
+		Personality:     "analytical",
+	})
+}
+
+func defaultPlannerReviewerRoleConfig() RoleConfig {
+	return normalizeRoleConfig(RoleConfig{
+		Role:            "planner_reviewer",
+		Provider:        "claude",
+		Workflow:        "code_army",
+		ReasoningEffort: "high",
+		Personality:     "analytical",
+	})
+}
+
+func resolvePlannerRole(repo Repository) RoleConfig {
+	return resolveRoleConfig(defaultPlannerRoleConfig(), repo.Campaign.Frontmatter.DefaultPlanner, RoleConfig{}, "planner")
+}
+
+func resolvePlannerReviewerRole(repo Repository) RoleConfig {
+	return resolveRoleConfig(defaultPlannerReviewerRoleConfig(), repo.Campaign.Frontmatter.DefaultPlannerReviewer, RoleConfig{}, "planner_reviewer")
 }
 
 func providerFromRole(role string) string {

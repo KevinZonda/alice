@@ -27,6 +27,11 @@ func (s Summary) LiveReportMarkdown() string {
 		fmt.Sprintf("- tasks: `%d` total, `%d` active, `%d` ready, `%d` review-pending, `%d` accepted, `%d` blocked, `%d` waiting, `%d` done, `%d` rejected", s.TaskCount, s.ActiveCount, s.ReadyCount, s.ReviewPendingCount, s.AcceptedCount, s.BlockedCount, s.WaitingCount, s.DoneCount, s.RejectedCount),
 		fmt.Sprintf("- selected ready: `%d`, selected review: `%d` (max parallel `%d`)", s.SelectedReadyCount, s.SelectedReviewCount, s.MaxParallel),
 		fmt.Sprintf("- wake due: `%d`, wake pending: `%d`", len(s.WakeDue), len(s.WakePending)),
+	)
+	if s.PlanStatus != "" && s.PlanStatus != "human_approved" {
+		lines = append(lines, fmt.Sprintf("- plan status: `%s` (round %d)", s.PlanStatus, s.PlanRound))
+	}
+	lines = append(lines,
 		"",
 		"## Active Tasks",
 	)
