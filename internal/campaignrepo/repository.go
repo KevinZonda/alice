@@ -167,11 +167,11 @@ type PlanReviewFrontmatter struct {
 }
 
 type Repository struct {
-	Root          string                 `json:"root"`
-	Campaign      CampaignDocument       `json:"campaign"`
-	Phases        []PhaseDocument        `json:"phases,omitempty"`
-	Tasks         []TaskDocument         `json:"tasks,omitempty"`
-	Reviews       []ReviewDocument       `json:"reviews,omitempty"`
+	Root               string                 `json:"root"`
+	Campaign           CampaignDocument       `json:"campaign"`
+	Phases             []PhaseDocument        `json:"phases,omitempty"`
+	Tasks              []TaskDocument         `json:"tasks,omitempty"`
+	Reviews            []ReviewDocument       `json:"reviews,omitempty"`
 	PlanProposals      []PlanProposalDocument `json:"plan_proposals,omitempty"`
 	PlanReviews        []PlanReviewDocument   `json:"plan_reviews,omitempty"`
 	ConfigRoleDefaults CampaignRoleDefaults   `json:"-"`

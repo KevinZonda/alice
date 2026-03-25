@@ -171,35 +171,35 @@ type Config struct {
 	LLMProfiles map[string]LLMProfileConfig `mapstructure:"llm_profiles"`
 	GroupScenes GroupScenesConfig           `mapstructure:"group_scenes"`
 
-	CodexCommand         string                `mapstructure:"codex_command"`
-	CodexTimeout         time.Duration         `mapstructure:"-"`
-	CodexTimeoutSecs     int                   `mapstructure:"codex_timeout_secs"`
-	CodexModel           string                `mapstructure:"codex_model"`
-	CodexReasoningEffort string                `mapstructure:"codex_model_reasoning_effort"`
-	CodexEnv             map[string]string     `mapstructure:"env"`
-	CodexPromptPrefix    string                `mapstructure:"codex_prompt_prefix"`
-	ClaudeCommand        string                `mapstructure:"claude_command"`
-	ClaudeTimeout        time.Duration         `mapstructure:"-"`
-	ClaudeTimeoutSecs    int                   `mapstructure:"claude_timeout_secs"`
-	ClaudePromptPrefix   string                `mapstructure:"claude_prompt_prefix"`
-	GeminiCommand        string                `mapstructure:"gemini_command"`
-	GeminiTimeout        time.Duration         `mapstructure:"-"`
-	GeminiTimeoutSecs    int                   `mapstructure:"gemini_timeout_secs"`
-	GeminiPromptPrefix   string                `mapstructure:"gemini_prompt_prefix"`
-	KimiCommand          string                `mapstructure:"kimi_command"`
-	KimiTimeout          time.Duration         `mapstructure:"-"`
-	KimiTimeoutSecs      int                   `mapstructure:"kimi_timeout_secs"`
-	KimiPromptPrefix     string                `mapstructure:"kimi_prompt_prefix"`
-	RuntimeHTTPAddr      string                `mapstructure:"runtime_http_addr"`
-	RuntimeHTTPToken     string                `mapstructure:"runtime_http_token"`
-	FailureMessage       string                `mapstructure:"failure_message"`
-	ThinkingMessage      string                `mapstructure:"thinking_message"`
-	ImageGeneration      ImageGenerationConfig `mapstructure:"image_generation"`
-	AliceHome            string                `mapstructure:"alice_home"`
-	WorkspaceDir         string                `mapstructure:"workspace_dir"`
-	PromptDir            string                `mapstructure:"prompt_dir"`
-	CodexHome            string                `mapstructure:"codex_home"`
-	SoulPath             string                `mapstructure:"soul_path"`
+	CodexCommand         string                     `mapstructure:"codex_command"`
+	CodexTimeout         time.Duration              `mapstructure:"-"`
+	CodexTimeoutSecs     int                        `mapstructure:"codex_timeout_secs"`
+	CodexModel           string                     `mapstructure:"codex_model"`
+	CodexReasoningEffort string                     `mapstructure:"codex_model_reasoning_effort"`
+	CodexEnv             map[string]string          `mapstructure:"env"`
+	CodexPromptPrefix    string                     `mapstructure:"codex_prompt_prefix"`
+	ClaudeCommand        string                     `mapstructure:"claude_command"`
+	ClaudeTimeout        time.Duration              `mapstructure:"-"`
+	ClaudeTimeoutSecs    int                        `mapstructure:"claude_timeout_secs"`
+	ClaudePromptPrefix   string                     `mapstructure:"claude_prompt_prefix"`
+	GeminiCommand        string                     `mapstructure:"gemini_command"`
+	GeminiTimeout        time.Duration              `mapstructure:"-"`
+	GeminiTimeoutSecs    int                        `mapstructure:"gemini_timeout_secs"`
+	GeminiPromptPrefix   string                     `mapstructure:"gemini_prompt_prefix"`
+	KimiCommand          string                     `mapstructure:"kimi_command"`
+	KimiTimeout          time.Duration              `mapstructure:"-"`
+	KimiTimeoutSecs      int                        `mapstructure:"kimi_timeout_secs"`
+	KimiPromptPrefix     string                     `mapstructure:"kimi_prompt_prefix"`
+	RuntimeHTTPAddr      string                     `mapstructure:"runtime_http_addr"`
+	RuntimeHTTPToken     string                     `mapstructure:"runtime_http_token"`
+	FailureMessage       string                     `mapstructure:"failure_message"`
+	ThinkingMessage      string                     `mapstructure:"thinking_message"`
+	ImageGeneration      ImageGenerationConfig      `mapstructure:"image_generation"`
+	AliceHome            string                     `mapstructure:"alice_home"`
+	WorkspaceDir         string                     `mapstructure:"workspace_dir"`
+	PromptDir            string                     `mapstructure:"prompt_dir"`
+	CodexHome            string                     `mapstructure:"codex_home"`
+	SoulPath             string                     `mapstructure:"soul_path"`
 	Permissions          BotPermissionsConfig       `mapstructure:"permissions"`
 	CampaignRoleDefaults CampaignRoleDefaultsConfig `mapstructure:"campaign_role_defaults"`
 	Bots                 map[string]BotConfig       `mapstructure:"bots"`
