@@ -76,7 +76,7 @@ __CAMPAIGN_OBJECTIVE__
 
 ## Next
 - Campaign will auto-start planning phase on first reconcile
-- Planner generates proposal and draft tasks
+- Planner generates proposal, phase docs, and refined task packages
 - Planner reviewer evaluates plan
-- Human approves plan via `/alice approve-plan`
+- Human approves plan via `/alice approve-plan` only after `repo-lint --for-approval` passes
 - Execution begins automatically after approval

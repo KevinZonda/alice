@@ -84,12 +84,21 @@ type PhaseFrontmatter struct {
 }
 
 type TaskDocument struct {
-	Path        string          `json:"path"`
-	Dir         string          `json:"dir"`
-	Body        string          `json:"body,omitempty"`
-	Frontmatter TaskFrontmatter `json:"frontmatter"`
-	LeaseUntil  time.Time       `json:"lease_until,omitempty"`
-	WakeAt      time.Time       `json:"wake_at,omitempty"`
+	Path         string          `json:"path"`
+	Dir          string          `json:"dir"`
+	Body         string          `json:"body,omitempty"`
+	ContextPath  string          `json:"context_path,omitempty"`
+	ContextBody  string          `json:"context_body,omitempty"`
+	PlanPath     string          `json:"plan_path,omitempty"`
+	PlanBody     string          `json:"plan_body,omitempty"`
+	ProgressPath string          `json:"progress_path,omitempty"`
+	ProgressBody string          `json:"progress_body,omitempty"`
+	ResultsDir   string          `json:"results_dir,omitempty"`
+	ReviewsDir   string          `json:"reviews_dir,omitempty"`
+	LegacyPath   string          `json:"legacy_path,omitempty"`
+	Frontmatter  TaskFrontmatter `json:"frontmatter"`
+	LeaseUntil   time.Time       `json:"lease_until,omitempty"`
+	WakeAt       time.Time       `json:"wake_at,omitempty"`
 }
 
 type TaskFrontmatter struct {
@@ -122,9 +131,27 @@ type TaskFrontmatter struct {
 
 type ReviewDocument struct {
 	Path        string            `json:"path"`
+	Dir         string            `json:"dir,omitempty"`
+	TaskDir     string            `json:"task_dir,omitempty"`
 	Body        string            `json:"body,omitempty"`
 	Frontmatter ReviewFrontmatter `json:"frontmatter"`
 	CreatedAt   time.Time         `json:"created_at,omitempty"`
+}
+
+type SourceRepoDocument struct {
+	Path        string                `json:"path"`
+	Body        string                `json:"body,omitempty"`
+	Frontmatter SourceRepoFrontmatter `json:"frontmatter"`
+}
+
+type SourceRepoFrontmatter struct {
+	RepoID         string   `yaml:"repo_id" json:"repo_id,omitempty"`
+	RemoteURL      string   `yaml:"remote_url" json:"remote_url,omitempty"`
+	LocalPath      string   `yaml:"local_path" json:"local_path,omitempty"`
+	DefaultBranch  string   `yaml:"default_branch" json:"default_branch,omitempty"`
+	ActiveBranches []string `yaml:"active_branches" json:"active_branches,omitempty"`
+	BaseCommit     string   `yaml:"base_commit" json:"base_commit,omitempty"`
+	Role           string   `yaml:"role" json:"role,omitempty"`
 }
 
 type ReviewFrontmatter struct {
@@ -172,6 +199,7 @@ type Repository struct {
 	Phases             []PhaseDocument        `json:"phases,omitempty"`
 	Tasks              []TaskDocument         `json:"tasks,omitempty"`
 	Reviews            []ReviewDocument       `json:"reviews,omitempty"`
+	SourceRepos        []SourceRepoDocument   `json:"source_repos,omitempty"`
 	PlanProposals      []PlanProposalDocument `json:"plan_proposals,omitempty"`
 	PlanReviews        []PlanReviewDocument   `json:"plan_reviews,omitempty"`
 	ConfigRoleDefaults CampaignRoleDefaults   `json:"-"`
@@ -183,6 +211,7 @@ type TaskSummary struct {
 	Phase          string    `json:"phase,omitempty"`
 	Status         string    `json:"status"`
 	Path           string    `json:"path"`
+	Dir            string    `json:"dir,omitempty"`
 	OwnerAgent     string    `json:"owner_agent,omitempty"`
 	LeaseUntil     time.Time `json:"lease_until,omitempty"`
 	WakeAt         time.Time `json:"wake_at,omitempty"`
@@ -280,6 +309,10 @@ func Load(root string) (Repository, error) {
 		return Repository{}, err
 	}
 	repo.Reviews, err = loadReviewDocuments(absRoot)
+	if err != nil {
+		return Repository{}, err
+	}
+	repo.SourceRepos, err = loadSourceRepoDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}

@@ -49,30 +49,12 @@ type CreateCampaignRequest struct {
 	Objective         string              `json:"objective"`
 	Repo              string              `json:"repo,omitempty"`
 	CampaignRepoPath  string              `json:"campaign_repo_path,omitempty"`
-	IssueIID          string              `json:"issue_iid,omitempty"`
-	IssueURL          string              `json:"issue_url,omitempty"`
 	ManageMode        campaign.ManageMode `json:"manage_mode,omitempty"`
 	MaxParallelTrials int                 `json:"max_parallel_trials,omitempty"`
 	Summary           string              `json:"summary,omitempty"`
 	Baseline          []campaign.Metric   `json:"baseline,omitempty"`
 	Gates             []campaign.Gate     `json:"gates,omitempty"`
 	Tags              []string            `json:"tags,omitempty"`
-}
-
-type UpsertTrialRequest struct {
-	Trial campaign.Trial `json:"trial"`
-}
-
-type AddGuidanceRequest struct {
-	Guidance campaign.Guidance `json:"guidance"`
-}
-
-type AddReviewRequest struct {
-	Review campaign.Review `json:"review"`
-}
-
-type AddPitfallRequest struct {
-	Pitfall campaign.Pitfall `json:"pitfall"`
 }
 
 func BaseURL(addr string) string {

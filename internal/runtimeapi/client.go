@@ -155,58 +155,6 @@ func (c *Client) DeleteCampaign(
 	return c.delete(ctx, session, "/api/v1/campaigns/"+campaignID, query)
 }
 
-func (c *Client) UpsertTrial(
-	ctx context.Context,
-	session mcpbridge.SessionContext,
-	campaignID string,
-	req UpsertTrialRequest,
-) (map[string]any, error) {
-	campaignID = strings.TrimSpace(campaignID)
-	if campaignID == "" {
-		return nil, fmt.Errorf("campaign id is required")
-	}
-	return c.post(ctx, session, "/api/v1/campaigns/"+campaignID+"/trials", req)
-}
-
-func (c *Client) AddGuidance(
-	ctx context.Context,
-	session mcpbridge.SessionContext,
-	campaignID string,
-	req AddGuidanceRequest,
-) (map[string]any, error) {
-	campaignID = strings.TrimSpace(campaignID)
-	if campaignID == "" {
-		return nil, fmt.Errorf("campaign id is required")
-	}
-	return c.post(ctx, session, "/api/v1/campaigns/"+campaignID+"/guidance", req)
-}
-
-func (c *Client) AddReview(
-	ctx context.Context,
-	session mcpbridge.SessionContext,
-	campaignID string,
-	req AddReviewRequest,
-) (map[string]any, error) {
-	campaignID = strings.TrimSpace(campaignID)
-	if campaignID == "" {
-		return nil, fmt.Errorf("campaign id is required")
-	}
-	return c.post(ctx, session, "/api/v1/campaigns/"+campaignID+"/reviews", req)
-}
-
-func (c *Client) AddPitfall(
-	ctx context.Context,
-	session mcpbridge.SessionContext,
-	campaignID string,
-	req AddPitfallRequest,
-) (map[string]any, error) {
-	campaignID = strings.TrimSpace(campaignID)
-	if campaignID == "" {
-		return nil, fmt.Errorf("campaign id is required")
-	}
-	return c.post(ctx, session, "/api/v1/campaigns/"+campaignID+"/pitfalls", req)
-}
-
 func (c *Client) get(
 	ctx context.Context,
 	session mcpbridge.SessionContext,

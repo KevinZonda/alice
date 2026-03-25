@@ -14,4 +14,8 @@ human_approved: false
 
 ## Task Expansion
 - 目标：按实际计划展开任务，不预设固定 phase 数量或 task 总数
-- 要求：写清依赖、write scope、target repos、唤醒信息
+- 要求：每个 task 都展开成 `phases/Pxx/tasks/Txxx/` 文件夹
+- `task.md` 必须写清 Goal / Background / Acceptance / Deliverables
+- `context.md` 必须写清 repo、关键文件、依赖和背景信息
+- `plan.md` 必须写清执行步骤、验证和 handoff
+- executor 应只靠 task 文件夹即可开工，不再回聊天补上下文

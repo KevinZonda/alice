@@ -51,27 +51,8 @@ func TestValidateCampaign(t *testing.T) {
 		Session:           SessionRoute{ScopeKey: "chat_id:oc_thread|thread:omt_1"},
 		Creator:           Actor{UserID: "ou_user"},
 		MaxParallelTrials: 3,
-		Trials: []Trial{
-			{ID: "trial_1", Status: TrialStatusRunning},
-			{ID: "trial_2", Status: TrialStatusCandidate},
-		},
-		CurrentWinnerTrialID: "trial_2",
 	}
 	if err := ValidateCampaign(item); err != nil {
 		t.Fatalf("expected campaign to be valid, got %v", err)
-	}
-}
-
-func TestValidateCampaign_RejectsUnknownWinner(t *testing.T) {
-	item := Campaign{
-		ID:                   "camp_1",
-		Objective:            "improve speed and quality",
-		Session:              SessionRoute{ScopeKey: "chat_id:oc_thread|thread:omt_1"},
-		Creator:              Actor{UserID: "ou_user"},
-		MaxParallelTrials:    3,
-		CurrentWinnerTrialID: "missing",
-	}
-	if err := ValidateCampaign(item); err == nil {
-		t.Fatal("expected missing winner trial to be rejected")
 	}
 }

@@ -155,21 +155,14 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 	}
 
 	if _, err := campaignStore.CreateCampaign(campaign.Campaign{
-		ID:                   "camp_active",
-		Title:                "Optimize Model-X",
-		Objective:            "improve latency",
-		Repo:                 "lizhihao/fastecalsim",
-		IssueIID:             "218",
-		Session:              campaign.SessionRoute{ScopeKey: "chat_id:oc_chat|thread:omt_1", ReceiveIDType: "chat_id", ReceiveID: "oc_chat", ChatType: "group"},
-		Creator:              campaign.Actor{OpenID: "ou_actor"},
-		Status:               campaign.StatusRunning,
-		MaxParallelTrials:    3,
-		CurrentWinnerTrialID: "trial-1",
-		Trials: []campaign.Trial{
-			{ID: "trial-1", Status: campaign.TrialStatusRunning},
-			{ID: "trial-2", Status: campaign.TrialStatusHold},
-			{ID: "trial-3", Status: campaign.TrialStatusMerged},
-		},
+		ID:                "camp_active",
+		Title:             "Optimize Model-X",
+		Objective:         "improve latency",
+		Repo:              "lizhihao/fastecalsim",
+		Session:           campaign.SessionRoute{ScopeKey: "chat_id:oc_chat|thread:omt_1", ReceiveIDType: "chat_id", ReceiveID: "oc_chat", ChatType: "group"},
+		Creator:           campaign.Actor{OpenID: "ou_actor"},
+		Status:            campaign.StatusRunning,
+		MaxParallelTrials: 3,
 	}); err != nil {
 		t.Fatalf("create active campaign failed: %v", err)
 	}
@@ -259,7 +252,6 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 		"state_key `camp_active`",
 		"`camp_active`",
 		"status `running`",
-		"active trials `trial-1, trial-2`",
 	} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("expected status reply to contain %q, got %q", want, reply)
@@ -268,7 +260,6 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasksAndCampaigns(t *testi
 	for _, unwanted := range []string{
 		"task_paused",
 		"camp_done",
-		"trial-3",
 	} {
 		if strings.Contains(reply, unwanted) {
 			t.Fatalf("expected status reply not to contain %q, got %q", unwanted, reply)

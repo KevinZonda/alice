@@ -37,7 +37,6 @@ func TestCampaignHandlers_CreateListAndMutate(t *testing.T) {
 		Title:             "Optimize Model-X",
 		Objective:         "improve speed and quality",
 		Repo:              "lizhihao/fastecalsim",
-		IssueIID:          "218",
 		MaxParallelTrials: 3,
 	})
 	if err != nil {
@@ -74,33 +73,6 @@ func TestCampaignHandlers_CreateListAndMutate(t *testing.T) {
 	}
 	if fetched["campaign"] == nil {
 		t.Fatalf("expected campaign payload, got %#v", fetched)
-	}
-
-	updated, err := client.UpsertTrial(t.Context(), otherThread, campaignID, UpsertTrialRequest{
-		Trial: campaign.Trial{
-			ID:         "trial-1",
-			Hypothesis: "distill smaller model",
-			Status:     campaign.TrialStatusRunning,
-		},
-	})
-	if err != nil {
-		t.Fatalf("upsert trial failed: %v", err)
-	}
-	if updated["trial"] == nil {
-		t.Fatalf("expected trial in response, got %#v", updated)
-	}
-
-	guidance, err := client.AddGuidance(t.Context(), otherThread, campaignID, AddGuidanceRequest{
-		Guidance: campaign.Guidance{
-			Source:  "feishu",
-			Command: "/alice hold",
-		},
-	})
-	if err != nil {
-		t.Fatalf("add guidance failed: %v", err)
-	}
-	if guidance["guidance"] == nil {
-		t.Fatalf("expected guidance in response, got %#v", guidance)
 	}
 
 	repoDir := filepath.Join(t.TempDir(), "campaign-repo")

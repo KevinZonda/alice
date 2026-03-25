@@ -45,14 +45,11 @@ result_paths: []
 ## Goal
 - 待补充
 
-## Plan
+## Background
 - 待补充
 
-## Progress
+## Acceptance
 - 待补充
 
-## Review
-- 待补充
-
-## Decision
+## Deliverables
 - 待补充

@@ -193,6 +193,8 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGen
 	for _, path := range []string{
 		filepath.Join(skillRoot, "campaign.md"),
 		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task.md"),
+		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task-context.md"),
+		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task-plan.md"),
 		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "review.md"),
 	} {
 		raw, err := os.ReadFile(path)
@@ -203,9 +205,16 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGen
 		if strings.Contains(content, "executor.codex") || strings.Contains(content, "reviewer.claude") {
 			t.Fatalf("template %s should not hardcode model-bound roles, got %q", path, content)
 		}
+		if strings.HasSuffix(path, "task-context.md") || strings.HasSuffix(path, "task-plan.md") {
+			continue
+		}
 		if !strings.Contains(content, "role: executor") && !strings.Contains(content, "role: reviewer") && !strings.Contains(content, "role: planner") {
 			t.Fatalf("template %s should use generic runtime-dispatched roles, got %q", path, content)
 		}
+	}
+
+	if _, err := os.Stat(filepath.Join(skillRoot, "reviews", "README.md")); !os.IsNotExist(err) {
+		t.Fatalf("top-level reviews README should be absent in repo-first task-package scaffold, err=%v", err)
 	}
 }
 
@@ -240,6 +249,10 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyScriptIsRepoBasedOnly(t *testing
 		"sync-issue",
 		"sync-trial",
 		"sync-all",
+		"upsert-trial",
+		"add-guidance",
+		"add-review",
+		"add-pitfall",
 		"time-stats",
 		"time-estimate",
 		"time-spend",

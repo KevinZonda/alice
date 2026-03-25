@@ -59,9 +59,10 @@ current_phase: P01
 			mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
 phase: P01
 status: active
+goal: "Ship the first phase"
 ---
 `)
-			mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001.md"), `---
+			mustWriteTestTaskPackage(t, root, "P01", "T001", `---
 task_id: T001
 title: "Needs verdict"
 phase: P01
@@ -71,7 +72,7 @@ owner_agent: reviewer.claude
 lease_until: "2026-03-24T12:00:00+08:00"
 ---
 `)
-			mustWriteTestFile(t, filepath.Join(root, "reviews", "T001", "R001.md"), `---
+			mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R001.md"), `---
 review_id: R001
 target_task: T001
 review_round: 1
@@ -155,9 +156,10 @@ default_reviewer:
 	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
 phase: P01
 status: active
+goal: "Ship the first phase"
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
 task_id: T001
 title: "Execute me"
 phase: P01
@@ -168,7 +170,7 @@ working_branches: [feat/t001]
 write_scope: [src/core]
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T002.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T002", `---
 task_id: T002
 title: "Review me"
 phase: P01
@@ -178,6 +180,7 @@ head_commit: "abc123"
 last_run_path: "results/summary.md"
 ---
 `)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T002", "results", "summary.md"), "# Summary\n")
 
 	repo, err := Load(root)
 	if err != nil {
@@ -209,7 +212,7 @@ last_run_path: "results/summary.md"
 	if executorSpec.RunAt != now {
 		t.Fatalf("unexpected executor run_at: %s", executorSpec.RunAt.Format(time.RFC3339))
 	}
-	if executorSpec.TaskPath != "phases/P01/tasks/T001.md" {
+	if executorSpec.TaskPath != "phases/P01/tasks/T001" {
 		t.Fatalf("unexpected executor task path: %q", executorSpec.TaskPath)
 	}
 	if !containsAll(executorSpec.Prompt, "Task id: T001", "Executor role: executor.gemini", "Reviewer role: reviewer.kimi", "Write scope: src/core") {
@@ -226,7 +229,7 @@ last_run_path: "results/summary.md"
 	if reviewerSpec.Role.Provider != "kimi" || reviewerSpec.Role.Model != "kimi-k2" || reviewerSpec.Role.Profile != "review-profile" {
 		t.Fatalf("unexpected reviewer role: %+v", reviewerSpec.Role)
 	}
-	expectedReviewFile := filepath.Join(root, "reviews", "T002", "R001.md")
+	expectedReviewFile := filepath.Join(root, "phases", "P01", "tasks", "T002", "reviews", "R001.md")
 	if !containsAll(reviewerSpec.Prompt, "Task id: T002", "Target commit: abc123", "Last run path: results/summary.md", "Suggested review file: "+expectedReviewFile) {
 		t.Fatalf("unexpected reviewer prompt: %q", reviewerSpec.Prompt)
 	}
@@ -241,7 +244,9 @@ func TestLatestRelevantReview_RoundAndTimeOrdering(t *testing.T) {
 	}
 	reviews := []ReviewDocument{
 		{
-			Path:      "reviews/T001/R001.md",
+			Path:      "phases/P01/tasks/T001/reviews/R001.md",
+			Dir:       "phases/P01/tasks/T001/reviews",
+			TaskDir:   "phases/P01/tasks/T001",
 			CreatedAt: time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
 			Frontmatter: ReviewFrontmatter{
 				TargetTask:  "T001",
@@ -250,7 +255,9 @@ func TestLatestRelevantReview_RoundAndTimeOrdering(t *testing.T) {
 			},
 		},
 		{
-			Path:      "reviews/T001/R002.md",
+			Path:      "phases/P01/tasks/T001/reviews/R002.md",
+			Dir:       "phases/P01/tasks/T001/reviews",
+			TaskDir:   "phases/P01/tasks/T001",
 			CreatedAt: time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
 			Frontmatter: ReviewFrontmatter{
 				TargetTask:  "T001",
@@ -259,7 +266,9 @@ func TestLatestRelevantReview_RoundAndTimeOrdering(t *testing.T) {
 			},
 		},
 		{
-			Path:      "reviews/T001/R003.md",
+			Path:      "phases/P01/tasks/T001/reviews/R003.md",
+			Dir:       "phases/P01/tasks/T001/reviews",
+			TaskDir:   "phases/P01/tasks/T001",
 			CreatedAt: time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC),
 			Frontmatter: ReviewFrontmatter{
 				TargetTask:  "T001",
@@ -273,7 +282,7 @@ func TestLatestRelevantReview_RoundAndTimeOrdering(t *testing.T) {
 	if !ok {
 		t.Fatal("expected latest relevant review to be found")
 	}
-	if chosen.Path != "reviews/T001/R003.md" {
+	if chosen.Path != "phases/P01/tasks/T001/reviews/R003.md" {
 		t.Fatalf("unexpected chosen review: %q", chosen.Path)
 	}
 	if chosen.Frontmatter.ReviewRound != 2 {

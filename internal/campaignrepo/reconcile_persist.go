@@ -2,6 +2,7 @@ package campaignrepo
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -86,6 +87,37 @@ func normalizeTaskDocument(task TaskDocument) TaskDocument {
 	task.Frontmatter.LastReviewPath = filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath))
 	task.Frontmatter.WakePrompt = strings.TrimSpace(task.Frontmatter.WakePrompt)
 	task.Frontmatter.ReportSnippetPath = strings.TrimSpace(task.Frontmatter.ReportSnippetPath)
+	task.Path = filepath.ToSlash(strings.TrimSpace(task.Path))
+	task.Dir = filepath.ToSlash(strings.TrimSpace(task.Dir))
+	if task.Dir == "" {
+		task.Dir = canonicalTaskDir(task.Frontmatter.Phase, task.Frontmatter.TaskID, filepath.Dir(task.Path))
+	}
+	if task.Path == "" || filepath.Base(task.Path) != "task.md" {
+		if task.Path != "" && strings.Contains(task.Path, "/tasks/") && strings.EqualFold(filepath.Ext(task.Path), ".md") && !strings.EqualFold(filepath.Base(task.Path), "task.md") {
+			task.LegacyPath = filepath.ToSlash(task.Path)
+		}
+		task.Path = filepath.ToSlash(filepath.Join(task.Dir, "task.md"))
+	}
+	task.ContextPath = filepath.ToSlash(strings.TrimSpace(task.ContextPath))
+	task.PlanPath = filepath.ToSlash(strings.TrimSpace(task.PlanPath))
+	task.ProgressPath = filepath.ToSlash(strings.TrimSpace(task.ProgressPath))
+	task.ResultsDir = filepath.ToSlash(strings.TrimSpace(task.ResultsDir))
+	task.ReviewsDir = filepath.ToSlash(strings.TrimSpace(task.ReviewsDir))
+	if task.ContextPath == "" {
+		task.ContextPath = filepath.ToSlash(filepath.Join(task.Dir, "context.md"))
+	}
+	if task.PlanPath == "" {
+		task.PlanPath = filepath.ToSlash(filepath.Join(task.Dir, "plan.md"))
+	}
+	if task.ProgressPath == "" {
+		task.ProgressPath = filepath.ToSlash(filepath.Join(task.Dir, "progress.md"))
+	}
+	if task.ResultsDir == "" {
+		task.ResultsDir = filepath.ToSlash(filepath.Join(task.Dir, "results"))
+	}
+	if task.ReviewsDir == "" {
+		task.ReviewsDir = filepath.ToSlash(filepath.Join(task.Dir, "reviews"))
+	}
 	task.Frontmatter.LeaseUntilRaw = formatOptionalTime(task.LeaseUntil)
 	task.Frontmatter.WakeAtRaw = formatOptionalTime(task.WakeAt)
 	return task
@@ -104,7 +136,26 @@ func writeTaskDocument(root string, task TaskDocument) error {
 		rendered += "\n" + body + "\n"
 	}
 	path := filepath.Join(root, filepath.FromSlash(task.Path))
-	return writeFileIfChanged(path, []byte(rendered))
+	if err := writeFileIfChanged(path, []byte(rendered)); err != nil {
+		return err
+	}
+	for _, dir := range []string{task.Dir, task.ResultsDir, task.ReviewsDir} {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755); err != nil {
+			return err
+		}
+	}
+	if legacy := filepath.ToSlash(strings.TrimSpace(task.LegacyPath)); legacy != "" && legacy != filepath.ToSlash(task.Path) {
+		legacyPath := filepath.Join(root, filepath.FromSlash(legacy))
+		if _, err := os.Stat(legacyPath); err == nil {
+			if removeErr := os.Remove(legacyPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				return removeErr
+			}
+		}
+	}
+	return nil
 }
 
 func renderCampaignPrompt(name string, data any) (string, error) {

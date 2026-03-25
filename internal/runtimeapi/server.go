@@ -89,10 +89,6 @@ func NewServer(
 	api.GET("/campaigns/:campaignID", srv.handleCampaignGet)
 	api.PATCH("/campaigns/:campaignID", srv.handleCampaignPatch)
 	api.DELETE("/campaigns/:campaignID", srv.handleCampaignDelete)
-	api.POST("/campaigns/:campaignID/trials", srv.handleCampaignTrialUpsert)
-	api.POST("/campaigns/:campaignID/guidance", srv.handleCampaignGuidanceAdd)
-	api.POST("/campaigns/:campaignID/reviews", srv.handleCampaignReviewAdd)
-	api.POST("/campaigns/:campaignID/pitfalls", srv.handleCampaignPitfallAdd)
 	return srv
 }
 

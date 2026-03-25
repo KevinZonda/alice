@@ -63,18 +63,6 @@ func (b *connectorRuntimeBuilder) handleReplanSignal(item campaign.Campaign, rep
 			logging.Warnf("reset plan for replan failed campaign=%s: %v", item.ID, err)
 		}
 	}
-	// Record guidance in campaign store
-	if b.campaignStore != nil {
-		_, _, err := b.campaignStore.AppendGuidance(item.ID, campaign.Guidance{
-			Source:  "executor_replan",
-			Command: "/alice replan " + reason,
-			Summary: "Executor requested replanning: " + reason,
-			Applied: true,
-		})
-		if err != nil {
-			logging.Warnf("append replan guidance failed campaign=%s: %v", item.ID, err)
-		}
-	}
 	// Send notification
 	b.sendCampaignSignalNotification(item, campaignrepo.ReconcileEvent{
 		Kind:       campaignrepo.EventReplanRequested,
@@ -95,18 +83,6 @@ func (b *connectorRuntimeBuilder) handleBlockedSignal(item campaign.Campaign, re
 	if repoPath != "" && taskID != "" {
 		if err := campaignrepo.MarkTaskBlocked(repoPath, taskID, reason); err != nil {
 			logging.Warnf("mark task blocked failed campaign=%s task=%s: %v", item.ID, taskID, err)
-		}
-	}
-	// Record guidance in campaign store
-	if b.campaignStore != nil {
-		_, _, err := b.campaignStore.AppendGuidance(item.ID, campaign.Guidance{
-			Source:  "executor_blocked",
-			Command: "/alice blocked " + reason,
-			Summary: "Task blocked: " + reason,
-			Applied: true,
-		})
-		if err != nil {
-			logging.Warnf("append blocked guidance failed campaign=%s: %v", item.ID, err)
 		}
 	}
 	// Send notification
@@ -134,16 +110,6 @@ func (b *connectorRuntimeBuilder) handleDiscoverySignal(item campaign.Campaign, 
 			logging.Warnf("append discovery to findings failed campaign=%s: %v", item.ID, err)
 		}
 	}
-	// Record as pitfall in campaign store
-	if b.campaignStore != nil {
-		_, _, err := b.campaignStore.AppendPitfall(item.ID, campaign.Pitfall{
-			Summary: finding,
-			Reason:  fmt.Sprintf("Reported by executor task %s", taskID),
-		})
-		if err != nil {
-			logging.Warnf("append discovery pitfall failed campaign=%s: %v", item.ID, err)
-		}
-	}
 	// Send notification
 	b.sendCampaignSignalNotification(item, campaignrepo.ReconcileEvent{
 		Kind:       campaignrepo.EventDiscoveryReported,
@@ -160,11 +126,12 @@ func (b *connectorRuntimeBuilder) sendCampaignSignalNotification(item campaign.C
 }
 
 func extractTaskIDFromStateKey(stateKey string) string {
-	// State keys follow the pattern: campaign_dispatch:{campaignID}:executor:{taskID}:x{round}
-	// or: campaign_dispatch:{campaignID}:reviewer:{taskID}:r{round}
 	parts := strings.Split(strings.TrimSpace(stateKey), ":")
-	if len(parts) >= 4 {
+	if len(parts) >= 4 && parts[0] == strings.TrimSuffix(campaignDispatchStatePrefix, ":") {
 		return parts[3]
+	}
+	if len(parts) >= 3 && parts[0] == strings.TrimSuffix(campaignWakeStatePrefix, ":") {
+		return parts[2]
 	}
 	return ""
 }

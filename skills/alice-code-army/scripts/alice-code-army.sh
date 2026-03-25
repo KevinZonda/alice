@@ -55,25 +55,14 @@ main() {
       shift
       run_campaigns repo-reconcile "$@"
       ;;
+    repo-lint)
+      [[ $# -ge 2 && $# -le 3 ]] || die "usage: $PROGRAM repo-lint CAMPAIGN_ID [--for-approval]"
+      shift
+      run_campaigns repo-lint "$@"
+      ;;
     patch)
       [[ $# -eq 3 ]] || die "usage: $PROGRAM patch CAMPAIGN_ID PATCH_JSON"
       mutate_campaign_and_return "patch" "$2" "$3"
-      ;;
-    upsert-trial)
-      [[ $# -eq 3 ]] || die "usage: $PROGRAM upsert-trial CAMPAIGN_ID TRIAL_PAYLOAD_JSON"
-      upsert_trial_and_return "$2" "$3"
-      ;;
-    add-guidance)
-      [[ $# -eq 3 ]] || die "usage: $PROGRAM add-guidance CAMPAIGN_ID GUIDANCE_PAYLOAD_JSON"
-      mutate_campaign_and_return "add-guidance" "$2" "$3"
-      ;;
-    add-review)
-      [[ $# -eq 3 ]] || die "usage: $PROGRAM add-review CAMPAIGN_ID REVIEW_PAYLOAD_JSON"
-      mutate_campaign_and_return "add-review" "$2" "$3"
-      ;;
-    add-pitfall)
-      [[ $# -eq 3 ]] || die "usage: $PROGRAM add-pitfall CAMPAIGN_ID PITFALL_PAYLOAD_JSON"
-      mutate_campaign_and_return "add-pitfall" "$2" "$3"
       ;;
     approve-plan)
       [[ $# -eq 2 ]] || die "usage: $PROGRAM approve-plan CAMPAIGN_ID"

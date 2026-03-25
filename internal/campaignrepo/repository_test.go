@@ -21,16 +21,17 @@ current_phase: P01
 	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
 phase: P01
 status: active
+goal: "Ship the first phase"
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
 task_id: T001
 title: "Baseline"
 phase: P01
 status: done
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T002.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T002", `---
 task_id: T002
 title: "Ready task"
 phase: P01
@@ -40,7 +41,7 @@ target_repos: [repo-a]
 write_scope: [src/core]
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T003.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T003", `---
 task_id: T003
 title: "Conflicting task"
 phase: P01
@@ -50,16 +51,18 @@ target_repos: [repo-a]
 write_scope: [src/core/api]
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T004.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T004", `---
 task_id: T004
 title: "Running task"
 phase: P01
 status: in_progress
+owner_agent: executor
+lease_until: "2026-03-24T12:00:00+08:00"
 target_repos: [repo-b]
 write_scope: [src/train]
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T005.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T005", `---
 task_id: T005
 title: "Wake me"
 phase: P01
@@ -124,9 +127,10 @@ current_phase: P01
 	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
 phase: P01
 status: active
+goal: "Ship the first phase"
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
 task_id: T001
 title: "Ready task"
 phase: P01
@@ -135,14 +139,16 @@ target_repos: [repo-a]
 write_scope: [src/core]
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T002.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T002", `---
 task_id: T002
 title: "Needs review"
 phase: P01
 status: review_pending
 head_commit: "abc123"
+last_run_path: "results/summary.md"
 ---
 `)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T002", "results", "summary.md"), "# Summary\n")
 
 	repo, summary, err := ReconcileFromPath(root, now, 2)
 	if err != nil {
@@ -196,9 +202,10 @@ current_phase: P01
 	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
 phase: P01
 status: active
+goal: "Ship the first phase"
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001.md"), `---
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
 task_id: T001
 title: "Needs review verdict"
 phase: P01
@@ -208,7 +215,7 @@ owner_agent: reviewer.claude
 lease_until: "2026-03-24T12:00:00+08:00"
 ---
 `)
-	mustWriteTestFile(t, filepath.Join(root, "reviews", "T001", "R001.md"), `---
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R001.md"), `---
 review_id: R001
 target_task: T001
 review_round: 1
@@ -251,4 +258,53 @@ func mustWriteTestFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s failed: %v", path, err)
 	}
+}
+
+func mustWriteTestTaskPackage(t *testing.T, root, phase, taskID, taskMarkdown string) string {
+	t.Helper()
+	taskDir := filepath.Join(root, "phases", phase, "tasks", taskID)
+	mustWriteTestFile(t, filepath.Join(taskDir, "task.md"), taskMarkdown)
+	mustWriteTestFile(t, filepath.Join(taskDir, "context.md"), `# Context
+
+## Context
+- concrete task context
+
+## Relevant Repos
+- repo-a
+
+## Relevant Files
+- src/example.go
+
+## Dependencies
+- none
+`)
+	mustWriteTestFile(t, filepath.Join(taskDir, "plan.md"), `# Execution Plan
+
+## Execution Steps
+1. do the work
+
+## Validation
+- run focused checks
+
+## Handoff
+- hand off to reviewer
+`)
+	mustWriteTestFile(t, filepath.Join(taskDir, "progress.md"), `# Progress
+
+## Timeline
+- initialized
+
+## Updates
+- none
+
+## Blockers
+- none
+`)
+	if err := os.MkdirAll(filepath.Join(taskDir, "results"), 0o755); err != nil {
+		t.Fatalf("mkdir results dir failed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(taskDir, "reviews"), 0o755); err != nil {
+		t.Fatalf("mkdir reviews dir failed: %v", err)
+	}
+	return taskDir
 }

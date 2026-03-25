@@ -49,17 +49,17 @@ func (s Summary) LiveReportMarkdown() string {
 	lines = append(lines, "", "## Next")
 	if len(s.WakeDue) > 0 {
 		for _, task := range s.WakeDue {
-			lines = append(lines, fmt.Sprintf("- wake `%s` at `%s` from `%s`", task.TaskID, task.WakeAt.Format(time.RFC3339), task.Path))
+			lines = append(lines, fmt.Sprintf("- wake `%s` at `%s` from `%s`", task.TaskID, task.WakeAt.Format(time.RFC3339), blankTaskLocation(task)))
 		}
 	}
 	if len(s.SelectedReady) > 0 {
 		for _, task := range s.SelectedReady {
-			lines = append(lines, fmt.Sprintf("- dispatch executor for `%s` from `%s`", task.TaskID, task.Path))
+			lines = append(lines, fmt.Sprintf("- dispatch executor for `%s` from `%s`", task.TaskID, blankTaskLocation(task)))
 		}
 	}
 	if len(s.SelectedReview) > 0 {
 		for _, task := range s.SelectedReview {
-			lines = append(lines, fmt.Sprintf("- dispatch reviewer for `%s` from `%s`", task.TaskID, task.Path))
+			lines = append(lines, fmt.Sprintf("- dispatch reviewer for `%s` from `%s`", task.TaskID, blankTaskLocation(task)))
 		}
 	}
 	if len(s.WakeDue) == 0 && len(s.SelectedReady) == 0 && len(s.SelectedReview) == 0 {
@@ -133,7 +133,7 @@ func appendTaskList(lines []string, tasks []TaskSummary, extra string) []string 
 		return append(lines, "- none")
 	}
 	for _, task := range tasks {
-		item := fmt.Sprintf("- `%s` [%s] %s", blankForSummary(task.TaskID), blankForSummary(task.Phase), blankForSummary(task.Path))
+		item := fmt.Sprintf("- `%s` [%s] %s", blankForSummary(task.TaskID), blankForSummary(task.Phase), blankForSummary(blankTaskLocation(task)))
 		if title := strings.TrimSpace(task.Title); title != "" {
 			item += " " + title
 		}
@@ -143,6 +143,13 @@ func appendTaskList(lines []string, tasks []TaskSummary, extra string) []string 
 		lines = append(lines, item)
 	}
 	return lines
+}
+
+func blankTaskLocation(task TaskSummary) string {
+	if dir := strings.TrimSpace(task.Dir); dir != "" {
+		return dir
+	}
+	return task.Path
 }
 
 func liveReportStatus(summary Summary) string {

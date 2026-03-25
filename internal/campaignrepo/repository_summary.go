@@ -95,7 +95,7 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 					StateKey: wakeTaskStateKey(summary.CampaignID, task),
 					TaskID:   view.TaskID,
 					Title:    fmt.Sprintf("campaign wake %s %s", blankForKey(summary.CampaignID), blankForKey(view.TaskID)),
-					TaskPath: view.Path,
+					TaskPath: blankTaskLocation(view),
 					RunAt:    task.WakeAt,
 					Prompt:   buildWakePrompt(repo, task),
 				})
@@ -192,6 +192,7 @@ func taskSummary(task TaskDocument) TaskSummary {
 		Phase:          strings.TrimSpace(task.Frontmatter.Phase),
 		Status:         normalizeTaskStatus(task.Frontmatter.Status),
 		Path:           filepath.ToSlash(task.Path),
+		Dir:            filepath.ToSlash(task.Dir),
 		OwnerAgent:     strings.TrimSpace(task.Frontmatter.OwnerAgent),
 		LeaseUntil:     task.LeaseUntil,
 		WakeAt:         task.WakeAt,
