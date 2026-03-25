@@ -30,14 +30,14 @@ const (
 )
 
 type LLMProfileConfig struct {
-	Provider        string                `mapstructure:"provider"`
-	Command         string                `mapstructure:"command"`
-	TimeoutSecs     int                   `mapstructure:"timeout_secs"`
-	Model           string                `mapstructure:"model"`
-	Profile         string                `mapstructure:"profile"`
-	ReasoningEffort string                `mapstructure:"reasoning_effort"`
-	Personality     string                `mapstructure:"personality"`
-	PromptPrefix    string                `mapstructure:"prompt_prefix"`
+	Provider        string                 `mapstructure:"provider"`
+	Command         string                 `mapstructure:"command"`
+	TimeoutSecs     int                    `mapstructure:"timeout_secs"`
+	Model           string                 `mapstructure:"model"`
+	Profile         string                 `mapstructure:"profile"`
+	ReasoningEffort string                 `mapstructure:"reasoning_effort"`
+	Personality     string                 `mapstructure:"personality"`
+	PromptPrefix    string                 `mapstructure:"prompt_prefix"`
 	Permissions     *CodexExecPolicyConfig `mapstructure:"permissions"`
 
 	// Computed at finalization, not from YAML.
@@ -164,14 +164,14 @@ type Config struct {
 	FailureMessage   string `mapstructure:"failure_message"`
 	ThinkingMessage  string `mapstructure:"thinking_message"`
 
-	ImageGeneration ImageGenerationConfig      `mapstructure:"image_generation"`
-	AliceHome       string                     `mapstructure:"alice_home"`
-	WorkspaceDir    string                     `mapstructure:"workspace_dir"`
-	PromptDir       string                     `mapstructure:"prompt_dir"`
-	SoulPath        string                     `mapstructure:"soul_path"`
-	Permissions     BotPermissionsConfig       `mapstructure:"permissions"`
+	ImageGeneration      ImageGenerationConfig      `mapstructure:"image_generation"`
+	AliceHome            string                     `mapstructure:"alice_home"`
+	WorkspaceDir         string                     `mapstructure:"workspace_dir"`
+	PromptDir            string                     `mapstructure:"prompt_dir"`
+	SoulPath             string                     `mapstructure:"soul_path"`
+	Permissions          BotPermissionsConfig       `mapstructure:"permissions"`
 	CampaignRoleDefaults CampaignRoleDefaultsConfig `mapstructure:"campaign_role_defaults"`
-	Bots            map[string]BotConfig       `mapstructure:"bots"`
+	Bots                 map[string]BotConfig       `mapstructure:"bots"`
 
 	QueueCapacity             int           `mapstructure:"queue_capacity"`
 	WorkerConcurrency         int           `mapstructure:"worker_concurrency"`
