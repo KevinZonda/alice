@@ -9,31 +9,51 @@ import (
 )
 
 type codexBackend struct {
-	runner corecodex.Runner
+	runner         corecodex.Runner
+	profileRunners map[string]corecodex.Runner
 }
 
 func newCodexBackend(cfg CodexConfig, prompts *prompting.Loader) *codexBackend {
-	return &codexBackend{
-		runner: corecodex.Runner{
-			Command:                cfg.Command,
-			Timeout:                cfg.Timeout,
-			DefaultModel:           cfg.Model,
-			DefaultReasoningEffort: cfg.ReasoningEffort,
-			Env:                    cfg.Env,
-			PromptPrefix:           cfg.PromptPrefix,
-			WorkspaceDir:           cfg.WorkspaceDir,
-			Prompts:                prompts,
-		},
+	defaultRunner := corecodex.Runner{
+		Command:                cfg.Command,
+		Timeout:                cfg.Timeout,
+		DefaultModel:           cfg.Model,
+		DefaultReasoningEffort: cfg.ReasoningEffort,
+		Env:                    cfg.Env,
+		PromptPrefix:           cfg.PromptPrefix,
+		WorkspaceDir:           cfg.WorkspaceDir,
+		Prompts:                prompts,
 	}
+	profileRunners := make(map[string]corecodex.Runner, len(cfg.ProfileOverrides))
+	for name, override := range cfg.ProfileOverrides {
+		r := defaultRunner
+		if strings.TrimSpace(override.Command) != "" {
+			r.Command = strings.TrimSpace(override.Command)
+		}
+		if override.Timeout > 0 {
+			r.Timeout = override.Timeout
+		}
+		if strings.TrimSpace(override.PromptPrefix) != "" {
+			r.PromptPrefix = strings.TrimSpace(override.PromptPrefix)
+		}
+		profileRunners[name] = r
+	}
+	return &codexBackend{runner: defaultRunner, profileRunners: profileRunners}
 }
 
 func (b *codexBackend) Run(ctx context.Context, req RunRequest) (RunResult, error) {
+	runner := b.runner
+	if profile := strings.TrimSpace(req.Profile); profile != "" {
+		if r, ok := b.profileRunners[profile]; ok {
+			runner = r
+		}
+	}
 	policy := corecodex.ExecPolicyConfig{
 		Sandbox:        strings.TrimSpace(req.ExecPolicy.Sandbox),
 		AskForApproval: strings.TrimSpace(req.ExecPolicy.AskForApproval),
 		AddDirs:        append([]string(nil), req.ExecPolicy.AddDirs...),
 	}
-	reply, nextThreadID, usage, err := b.runner.RunWithThreadAndProgressAndUsage(
+	reply, nextThreadID, usage, err := runner.RunWithThreadAndProgressAndUsage(
 		ctx,
 		strings.TrimSpace(req.ThreadID),
 		strings.TrimSpace(req.AgentName),

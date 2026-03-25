@@ -182,4 +182,3 @@ func appendToFile(path, content string) error {
 	_, err = f.WriteString(content)
 	return err
 }
-

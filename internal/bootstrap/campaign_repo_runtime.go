@@ -56,8 +56,17 @@ func (b *connectorRuntimeBuilder) handleCampaignRepoAutomationTaskCompletion(tas
 	if !ok {
 		return
 	}
+	if b == nil || b.campaignStore == nil {
+		return
+	}
+	campaignID = strings.TrimSpace(campaignID)
+	if campaignID == "" {
+		return
+	}
+	b.campaignRepoMu.Lock()
+	defer b.campaignRepoMu.Unlock()
 	b.handleCampaignRepoTaskSignals(campaignID, task)
-	b.runCampaignRepoReconcileCampaign(campaignID)
+	b.reconcileCampaignRepoLocked(campaignID)
 }
 
 func (b *connectorRuntimeBuilder) runCampaignRepoReconcileCampaign(campaignID string) {
@@ -68,10 +77,13 @@ func (b *connectorRuntimeBuilder) runCampaignRepoReconcileCampaign(campaignID st
 	if campaignID == "" {
 		return
 	}
-
 	b.campaignRepoMu.Lock()
 	defer b.campaignRepoMu.Unlock()
+	b.reconcileCampaignRepoLocked(campaignID)
+}
 
+// reconcileCampaignRepoLocked runs a single-campaign reconcile assuming campaignRepoMu is held.
+func (b *connectorRuntimeBuilder) reconcileCampaignRepoLocked(campaignID string) {
 	item, err := b.campaignStore.GetCampaign(campaignID)
 	if err != nil {
 		logging.Warnf("load campaign for event-driven reconcile failed campaign=%s: %v", campaignID, err)

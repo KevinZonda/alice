@@ -87,6 +87,7 @@ type Action struct {
 	SessionKey      string     `json:"session_key,omitempty"`
 	ReasoningEffort string     `json:"reasoning_effort,omitempty"`
 	Personality     string     `json:"personality,omitempty"`
+	PromptPrefix    string     `json:"prompt_prefix,omitempty"`
 	MentionUserIDs  []string   `json:"mention_user_ids,omitempty"`
 }
 

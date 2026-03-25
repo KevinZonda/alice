@@ -22,6 +22,14 @@ type FactoryConfig struct {
 	Kimi     KimiConfig
 }
 
+// ProfileRunnerConfig carries per-profile overrides for command, timeout, and prompt prefix.
+// Keyed by the outer llm_profiles map name (e.g. "executor", "reviewer").
+type ProfileRunnerConfig struct {
+	Command      string
+	Timeout      time.Duration
+	PromptPrefix string
+}
+
 type CodexConfig struct {
 	Command         string
 	Timeout         time.Duration
@@ -30,6 +38,8 @@ type CodexConfig struct {
 	Env             map[string]string
 	PromptPrefix    string
 	WorkspaceDir    string
+	// ProfileOverrides maps outer profile name -> per-profile command/timeout/prompt_prefix.
+	ProfileOverrides map[string]ProfileRunnerConfig
 }
 
 type ClaudeConfig struct {
@@ -38,6 +48,8 @@ type ClaudeConfig struct {
 	Env          map[string]string
 	PromptPrefix string
 	WorkspaceDir string
+	// ProfileOverrides maps outer profile name -> per-profile command/timeout/prompt_prefix.
+	ProfileOverrides map[string]ProfileRunnerConfig
 }
 
 type GeminiConfig struct {
@@ -46,6 +58,8 @@ type GeminiConfig struct {
 	Env          map[string]string
 	PromptPrefix string
 	WorkspaceDir string
+	// ProfileOverrides maps outer profile name -> per-profile command/timeout/prompt_prefix.
+	ProfileOverrides map[string]ProfileRunnerConfig
 }
 
 type KimiConfig struct {
@@ -54,6 +68,8 @@ type KimiConfig struct {
 	Env          map[string]string
 	PromptPrefix string
 	WorkspaceDir string
+	// ProfileOverrides maps outer profile name -> per-profile command/timeout/prompt_prefix.
+	ProfileOverrides map[string]ProfileRunnerConfig
 }
 
 type providerBundle struct {

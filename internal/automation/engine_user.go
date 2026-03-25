@@ -170,6 +170,7 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			Profile:         task.Action.Profile,
 			ReasoningEffort: task.Action.ReasoningEffort,
 			Personality:     task.Action.Personality,
+			PromptPrefix:    task.Action.PromptPrefix,
 			Env:             e.buildTaskRunEnv(task),
 		})
 		if err != nil {
@@ -220,6 +221,7 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			Profile:         task.Action.Profile,
 			ReasoningEffort: task.Action.ReasoningEffort,
 			Personality:     task.Action.Personality,
+			PromptPrefix:    task.Action.PromptPrefix,
 			Env:             e.buildTaskRunEnv(task),
 		})
 		if err != nil {
