@@ -100,6 +100,14 @@ main() {
       [[ $# -eq 2 ]] || die "usage: $PROGRAM sync-all CAMPAIGN_ID"
       sync_all "$2"
       ;;
+    approve-plan)
+      [[ $# -eq 2 ]] || die "usage: $PROGRAM approve-plan CAMPAIGN_ID"
+      approve_plan "$2"
+      ;;
+    plan-status)
+      [[ $# -eq 2 ]] || die "usage: $PROGRAM plan-status CAMPAIGN_ID"
+      plan_status "$2"
+      ;;
     apply-command)
       [[ $# -ge 3 && $# -le 4 ]] || die "usage: $PROGRAM apply-command CAMPAIGN_ID COMMAND [SOURCE]"
       apply_command "$2" "$3" "${4:-manual}"

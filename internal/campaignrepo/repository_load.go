@@ -319,6 +319,129 @@ func parseFlexibleTime(raw string) (time.Time, error) {
 	return time.Time{}, lastErr
 }
 
+func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, error) {
+	var proposals []PlanProposalDocument
+	err := filepath.WalkDir(filepath.Join(root, "plans", "proposals"), func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d == nil || d.IsDir() {
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		if strings.ToLower(filepath.Base(path)) == "readme.md" {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		parsed := parseMarkdownFrontmatter(string(raw))
+		if !parsed.Found {
+			return nil
+		}
+		var frontmatter PlanProposalFrontmatter
+		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
+			return fmt.Errorf("parse plan proposal frontmatter %s: %w", path, err)
+		}
+		frontmatter.ProposalID = strings.TrimSpace(frontmatter.ProposalID)
+		frontmatter.Status = strings.ToLower(strings.TrimSpace(frontmatter.Status))
+		if frontmatter.PlanRound < 0 {
+			frontmatter.PlanRound = 0
+		}
+		proposals = append(proposals, PlanProposalDocument{
+			Path:        relativePath(root, path),
+			Body:        parsed.Body,
+			Frontmatter: frontmatter,
+		})
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(proposals, func(i, j int) bool {
+		if proposals[i].Frontmatter.PlanRound != proposals[j].Frontmatter.PlanRound {
+			return proposals[i].Frontmatter.PlanRound < proposals[j].Frontmatter.PlanRound
+		}
+		return proposals[i].Path < proposals[j].Path
+	})
+	return proposals, nil
+}
+
+func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
+	var reviews []PlanReviewDocument
+	err := filepath.WalkDir(filepath.Join(root, "plans", "reviews"), func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d == nil || d.IsDir() {
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		if strings.ToLower(filepath.Base(path)) == "readme.md" {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		parsed := parseMarkdownFrontmatter(string(raw))
+		if !parsed.Found {
+			return nil
+		}
+		var frontmatter PlanReviewFrontmatter
+		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
+			return fmt.Errorf("parse plan review frontmatter %s: %w", path, err)
+		}
+		frontmatter.ReviewID = strings.TrimSpace(frontmatter.ReviewID)
+		frontmatter.Reviewer = normalizeRoleConfig(frontmatter.Reviewer)
+		frontmatter.Verdict = normalizeReviewVerdict(frontmatter.Verdict, frontmatter.Blocking)
+		frontmatter.CreatedAtRaw = strings.TrimSpace(frontmatter.CreatedAtRaw)
+		if frontmatter.PlanRound < 0 {
+			frontmatter.PlanRound = 0
+		}
+		createdAt, err := parseFlexibleTime(frontmatter.CreatedAtRaw)
+		if err != nil {
+			return fmt.Errorf("parse plan review created_at %s: %w", path, err)
+		}
+		if createdAt.IsZero() {
+			if info, statErr := os.Stat(path); statErr == nil {
+				createdAt = info.ModTime().Local()
+			}
+		}
+		reviews = append(reviews, PlanReviewDocument{
+			Path:        relativePath(root, path),
+			Body:        parsed.Body,
+			Frontmatter: frontmatter,
+			CreatedAt:   createdAt,
+		})
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(reviews, func(i, j int) bool {
+		if reviews[i].Frontmatter.PlanRound != reviews[j].Frontmatter.PlanRound {
+			return reviews[i].Frontmatter.PlanRound < reviews[j].Frontmatter.PlanRound
+		}
+		if !reviews[i].CreatedAt.Equal(reviews[j].CreatedAt) {
+			return reviews[i].CreatedAt.Before(reviews[j].CreatedAt)
+		}
+		return reviews[i].Path < reviews[j].Path
+	})
+	return reviews, nil
+}
+
 func relativePath(root, path string) string {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {

@@ -53,8 +53,12 @@ type CampaignFrontmatter struct {
 	SourceRepos       []string   `yaml:"source_repos" json:"source_repos,omitempty"`
 	ReviewMode        string     `yaml:"review_mode" json:"review_mode,omitempty"`
 	ReportMode        string     `yaml:"report_mode" json:"report_mode,omitempty"`
-	DefaultExecutor   RoleConfig `yaml:"default_executor" json:"default_executor,omitempty"`
-	DefaultReviewer   RoleConfig `yaml:"default_reviewer" json:"default_reviewer,omitempty"`
+	DefaultExecutor        RoleConfig `yaml:"default_executor" json:"default_executor,omitempty"`
+	DefaultReviewer        RoleConfig `yaml:"default_reviewer" json:"default_reviewer,omitempty"`
+	DefaultPlanner         RoleConfig `yaml:"default_planner" json:"default_planner,omitempty"`
+	DefaultPlannerReviewer RoleConfig `yaml:"default_planner_reviewer" json:"default_planner_reviewer,omitempty"`
+	PlanRound              int        `yaml:"plan_round" json:"plan_round,omitempty"`
+	PlanStatus             string     `yaml:"plan_status" json:"plan_status,omitempty"`
 }
 
 type PhaseDocument struct {
@@ -127,12 +131,42 @@ type ReviewFrontmatter struct {
 	CreatedAtRaw string     `yaml:"created_at" json:"created_at,omitempty"`
 }
 
+type PlanProposalDocument struct {
+	Path        string                  `json:"path"`
+	Body        string                  `json:"body,omitempty"`
+	Frontmatter PlanProposalFrontmatter `json:"frontmatter"`
+}
+
+type PlanProposalFrontmatter struct {
+	ProposalID string `yaml:"proposal_id" json:"proposal_id,omitempty"`
+	PlanRound  int    `yaml:"plan_round" json:"plan_round,omitempty"`
+	Status     string `yaml:"status" json:"status,omitempty"`
+}
+
+type PlanReviewDocument struct {
+	Path        string                `json:"path"`
+	Body        string                `json:"body,omitempty"`
+	Frontmatter PlanReviewFrontmatter `json:"frontmatter"`
+	CreatedAt   time.Time             `json:"created_at,omitempty"`
+}
+
+type PlanReviewFrontmatter struct {
+	ReviewID     string     `yaml:"review_id" json:"review_id,omitempty"`
+	PlanRound    int        `yaml:"plan_round" json:"plan_round,omitempty"`
+	Reviewer     RoleConfig `yaml:"reviewer" json:"reviewer,omitempty"`
+	Verdict      string     `yaml:"verdict" json:"verdict,omitempty"`
+	Blocking     bool       `yaml:"blocking" json:"blocking,omitempty"`
+	CreatedAtRaw string     `yaml:"created_at" json:"created_at,omitempty"`
+}
+
 type Repository struct {
-	Root     string           `json:"root"`
-	Campaign CampaignDocument `json:"campaign"`
-	Phases   []PhaseDocument  `json:"phases,omitempty"`
-	Tasks    []TaskDocument   `json:"tasks,omitempty"`
-	Reviews  []ReviewDocument `json:"reviews,omitempty"`
+	Root          string                 `json:"root"`
+	Campaign      CampaignDocument       `json:"campaign"`
+	Phases        []PhaseDocument        `json:"phases,omitempty"`
+	Tasks         []TaskDocument         `json:"tasks,omitempty"`
+	Reviews       []ReviewDocument       `json:"reviews,omitempty"`
+	PlanProposals []PlanProposalDocument  `json:"plan_proposals,omitempty"`
+	PlanReviews   []PlanReviewDocument    `json:"plan_reviews,omitempty"`
 }
 
 type TaskSummary struct {
@@ -171,6 +205,8 @@ type Summary struct {
 	CampaignID          string         `json:"campaign_id,omitempty"`
 	CampaignTitle       string         `json:"campaign_title,omitempty"`
 	CurrentPhase        string         `json:"current_phase,omitempty"`
+	PlanRound           int            `json:"plan_round,omitempty"`
+	PlanStatus          string         `json:"plan_status,omitempty"`
 	MaxParallel         int            `json:"max_parallel"`
 	TaskCount           int            `json:"task_count"`
 	DraftCount          int            `json:"draft_count"`
@@ -236,6 +272,14 @@ func Load(root string) (Repository, error) {
 		return Repository{}, err
 	}
 	repo.Reviews, err = loadReviewDocuments(absRoot)
+	if err != nil {
+		return Repository{}, err
+	}
+	repo.PlanProposals, err = loadPlanProposalDocuments(absRoot)
+	if err != nil {
+		return Repository{}, err
+	}
+	repo.PlanReviews, err = loadPlanReviewDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}

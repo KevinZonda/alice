@@ -8,15 +8,19 @@ import (
 )
 
 const (
-	campaignRepoPromptExecutorDispatch = "campaignrepo/executor_dispatch.md.tmpl"
-	campaignRepoPromptReviewerDispatch = "campaignrepo/reviewer_dispatch.md.tmpl"
+	campaignRepoPromptExecutorDispatch        = "campaignrepo/executor_dispatch.md.tmpl"
+	campaignRepoPromptReviewerDispatch        = "campaignrepo/reviewer_dispatch.md.tmpl"
+	campaignRepoPromptPlannerDispatch         = "campaignrepo/planner_dispatch.md.tmpl"
+	campaignRepoPromptPlannerReviewerDispatch = "campaignrepo/planner_reviewer_dispatch.md.tmpl"
 )
 
 type DispatchKind string
 
 const (
-	DispatchKindExecutor DispatchKind = "executor"
-	DispatchKindReviewer DispatchKind = "reviewer"
+	DispatchKindExecutor        DispatchKind = "executor"
+	DispatchKindReviewer        DispatchKind = "reviewer"
+	DispatchKindPlanner         DispatchKind = "planner"
+	DispatchKindPlannerReviewer DispatchKind = "planner_reviewer"
 )
 
 type DispatchTaskSpec struct {
@@ -35,6 +39,47 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 		now = time.Now().Local()
 	}
 	var specs []DispatchTaskSpec
+
+	campaignID := blankForKey(repo.Campaign.Frontmatter.CampaignID)
+	planStatus := normalizePlanStatus(repo.Campaign.Frontmatter.PlanStatus)
+	planRound := repo.Campaign.Frontmatter.PlanRound
+
+	if planStatus == PlanStatusPlanning && !hasSubmittedProposal(repo.PlanProposals, planRound) {
+		role := resolvePlannerRole(repo)
+		prompt, err := buildPlannerDispatchPrompt(repo, role)
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, DispatchTaskSpec{
+			StateKey: fmt.Sprintf("campaign_dispatch:%s:planner:r%d", campaignID, planRound),
+			Kind:     DispatchKindPlanner,
+			TaskID:   fmt.Sprintf("plan-r%d", planRound),
+			Title:    fmt.Sprintf("campaign planner %s r%d", campaignID, planRound),
+			RunAt:    now,
+			Prompt:   prompt,
+			Role:     role,
+		})
+	}
+
+	if planStatus == PlanStatusPlanReviewPending {
+		if _, ok := latestPlanReviewForRound(repo.PlanReviews, planRound); !ok {
+			role := resolvePlannerReviewerRole(repo)
+			prompt, err := buildPlannerReviewerDispatchPrompt(repo, role)
+			if err != nil {
+				return nil, err
+			}
+			specs = append(specs, DispatchTaskSpec{
+				StateKey: fmt.Sprintf("campaign_dispatch:%s:planner_reviewer:r%d", campaignID, planRound),
+				Kind:     DispatchKindPlannerReviewer,
+				TaskID:   fmt.Sprintf("plan-review-r%d", planRound),
+				Title:    fmt.Sprintf("campaign planner reviewer %s r%d", campaignID, planRound),
+				RunAt:    now,
+				Prompt:   prompt,
+				Role:     role,
+			})
+		}
+	}
+
 	for _, task := range repo.Tasks {
 		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
 		if taskID == "" {
@@ -139,6 +184,37 @@ func reviewDispatchStateKey(repo Repository, task TaskDocument) string {
 
 func reviewDocumentPath(task TaskDocument) string {
 	return filepath.ToSlash(filepath.Join("reviews", task.Frontmatter.TaskID, fmt.Sprintf("R%03d.md", maxInt(task.Frontmatter.ReviewRound, 1))))
+}
+
+func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error) {
+	prevProposal, prevReview := previousProposalAndReview(repo)
+	proposalOutputPath := filepath.Join(repo.Root, "plans", "proposals", fmt.Sprintf("round-%03d-plan.md", maxInt(repo.Campaign.Frontmatter.PlanRound, 1)))
+	return renderCampaignPrompt(campaignRepoPromptPlannerDispatch, map[string]any{
+		"CampaignRepo":         repo.Root,
+		"CampaignFile":         filepath.Join(repo.Root, filepath.FromSlash(repo.Campaign.Path)),
+		"Objective":            repo.Campaign.Frontmatter.Objective,
+		"SourceRepos":          repo.Campaign.Frontmatter.SourceRepos,
+		"PlanRound":            repo.Campaign.Frontmatter.PlanRound,
+		"PlannerRole":          roleLabel(role),
+		"PlannerReviewerRole":  roleLabel(resolvePlannerReviewerRole(repo)),
+		"PreviousProposalPath": prevProposal,
+		"PreviousReviewPath":   prevReview,
+		"ProposalOutputPath":   proposalOutputPath,
+	})
+}
+
+func buildPlannerReviewerDispatchPrompt(repo Repository, role RoleConfig) (string, error) {
+	reviewOutputPath := filepath.Join(repo.Root, "plans", "reviews", fmt.Sprintf("round-%03d-review.md", maxInt(repo.Campaign.Frontmatter.PlanRound, 1)))
+	return renderCampaignPrompt(campaignRepoPromptPlannerReviewerDispatch, map[string]any{
+		"CampaignRepo":     repo.Root,
+		"CampaignFile":     filepath.Join(repo.Root, filepath.FromSlash(repo.Campaign.Path)),
+		"Objective":        repo.Campaign.Frontmatter.Objective,
+		"SourceRepos":      repo.Campaign.Frontmatter.SourceRepos,
+		"PlanRound":        repo.Campaign.Frontmatter.PlanRound,
+		"ProposalPath":     currentProposalPath(repo),
+		"ReviewerRole":     roleLabel(role),
+		"ReviewOutputPath": reviewOutputPath,
+	})
 }
 
 func maxInt(left, right int) int {

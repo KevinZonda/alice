@@ -4,6 +4,8 @@ usage() {
   cat <<EOF
 Usage:
   $PROGRAM list|get|create|init-repo|repo-scan|repo-reconcile|patch|upsert-trial|add-guidance|add-review|add-pitfall ...
+  $PROGRAM approve-plan CAMPAIGN_ID
+  $PROGRAM plan-status CAMPAIGN_ID
   $PROGRAM apply-command CAMPAIGN_ID COMMAND [SOURCE]
   $PROGRAM render-issue-note CAMPAIGN_ID
   $PROGRAM render-trial-note CAMPAIGN_ID TRIAL_ID
