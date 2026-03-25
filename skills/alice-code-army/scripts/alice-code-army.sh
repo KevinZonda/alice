@@ -31,6 +31,11 @@ main() {
       shift
       exec "$ALICE_BIN" runtime campaigns "$cmd" "$@"
       ;;
+    delete)
+      [[ $# -ge 2 && $# -le 3 ]] || die "usage: $PROGRAM delete CAMPAIGN_ID [--delete-repo]"
+      shift
+      exec "$ALICE_BIN" runtime campaigns delete "$@"
+      ;;
     create)
       [[ $# -eq 2 ]] || die "usage: $PROGRAM create CREATE_JSON"
       create_repo_first "$2"
