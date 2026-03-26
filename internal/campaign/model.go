@@ -160,30 +160,23 @@ type Pitfall struct {
 }
 
 type Campaign struct {
-	ID                   string         `json:"id"`
-	Title                string         `json:"title,omitempty"`
-	Objective            string         `json:"objective"`
-	Repo                 string         `json:"repo,omitempty"`
-	CampaignRepoPath     string         `json:"campaign_repo_path,omitempty"`
-	IssueIID             string         `json:"issue_iid,omitempty"`
-	IssueURL             string         `json:"issue_url,omitempty"`
-	Session              SessionRoute   `json:"session"`
-	Creator              Actor          `json:"creator"`
-	ManageMode           ManageMode     `json:"manage_mode"`
-	Status               CampaignStatus `json:"status"`
-	MaxParallelTrials    int            `json:"max_parallel_trials,omitempty"`
-	Summary              string         `json:"summary,omitempty"`
-	CurrentWinnerTrialID string         `json:"current_winner_trial_id,omitempty"`
-	Baseline             []Metric       `json:"baseline,omitempty"`
-	Gates                []Gate         `json:"gates,omitempty"`
-	Trials               []Trial        `json:"trials,omitempty"`
-	Guidance             []Guidance     `json:"guidance,omitempty"`
-	Reviews              []Review       `json:"reviews,omitempty"`
-	Pitfalls             []Pitfall      `json:"pitfalls,omitempty"`
-	Tags                 []string       `json:"tags,omitempty"`
-	CreatedAt            time.Time      `json:"created_at"`
-	UpdatedAt            time.Time      `json:"updated_at"`
-	Revision             int64          `json:"revision"`
+	ID                string         `json:"id"`
+	Title             string         `json:"title,omitempty"`
+	Objective         string         `json:"objective"`
+	Repo              string         `json:"repo,omitempty"`
+	CampaignRepoPath  string         `json:"campaign_repo_path,omitempty"`
+	Session           SessionRoute   `json:"session"`
+	Creator           Actor          `json:"creator"`
+	ManageMode        ManageMode     `json:"manage_mode"`
+	Status            CampaignStatus `json:"status"`
+	MaxParallelTrials int            `json:"max_parallel_trials,omitempty"`
+	Summary           string         `json:"summary,omitempty"`
+	Baseline          []Metric       `json:"baseline,omitempty"`
+	Gates             []Gate         `json:"gates,omitempty"`
+	Tags              []string       `json:"tags,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	Revision          int64          `json:"revision"`
 }
 
 type Snapshot struct {
@@ -197,8 +190,6 @@ func NormalizeCampaign(c Campaign) Campaign {
 	c.Objective = strings.TrimSpace(c.Objective)
 	c.Repo = strings.TrimSpace(c.Repo)
 	c.CampaignRepoPath = strings.TrimSpace(c.CampaignRepoPath)
-	c.IssueIID = strings.TrimSpace(c.IssueIID)
-	c.IssueURL = strings.TrimSpace(c.IssueURL)
 	c.Session.ScopeKey = strings.TrimSpace(c.Session.ScopeKey)
 	c.Session.ReceiveIDType = strings.TrimSpace(c.Session.ReceiveIDType)
 	c.Session.ReceiveID = strings.TrimSpace(c.Session.ReceiveID)
@@ -209,7 +200,6 @@ func NormalizeCampaign(c Campaign) Campaign {
 	c.ManageMode = ManageMode(strings.ToLower(strings.TrimSpace(string(c.ManageMode))))
 	c.Status = CampaignStatus(strings.ToLower(strings.TrimSpace(string(c.Status))))
 	c.Summary = strings.TrimSpace(c.Summary)
-	c.CurrentWinnerTrialID = strings.TrimSpace(c.CurrentWinnerTrialID)
 	c.Tags = storeutil.UniqueNonEmptyStrings(c.Tags)
 	if c.ManageMode == "" {
 		c.ManageMode = ManageModeCreatorOnly
@@ -222,10 +212,6 @@ func NormalizeCampaign(c Campaign) Campaign {
 	}
 	c.Baseline = normalizeMetrics(c.Baseline)
 	c.Gates = normalizeGates(c.Gates)
-	c.Trials = normalizeTrials(c.Trials)
-	c.Guidance = normalizeGuidanceEntries(c.Guidance)
-	c.Reviews = normalizeReviews(c.Reviews)
-	c.Pitfalls = normalizePitfalls(c.Pitfalls)
 	return c
 }
 
@@ -256,21 +242,6 @@ func ValidateCampaign(c Campaign) error {
 	}
 	if c.MaxParallelTrials > 32 {
 		return errors.New("max_parallel_trials must be <= 32")
-	}
-	seenTrials := make(map[string]struct{}, len(c.Trials))
-	for _, trial := range c.Trials {
-		if err := validateTrial(trial); err != nil {
-			return err
-		}
-		if _, exists := seenTrials[trial.ID]; exists {
-			return fmt.Errorf("duplicate trial id %q", trial.ID)
-		}
-		seenTrials[trial.ID] = struct{}{}
-	}
-	if c.CurrentWinnerTrialID != "" {
-		if _, exists := seenTrials[c.CurrentWinnerTrialID]; !exists {
-			return fmt.Errorf("current winner trial %q not found", c.CurrentWinnerTrialID)
-		}
 	}
 	return nil
 }

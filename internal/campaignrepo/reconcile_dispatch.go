@@ -100,7 +100,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 				Kind:     DispatchKindExecutor,
 				TaskID:   taskID,
 				Title:    fmt.Sprintf("campaign executor %s %s x%d", blankForKey(repo.Campaign.Frontmatter.CampaignID), blankForKey(taskID), task.Frontmatter.ExecutionRound),
-				TaskPath: filepath.ToSlash(task.Path),
+				TaskPath: filepath.ToSlash(task.Dir),
 				RunAt:    now,
 				Prompt:   prompt,
 				Role:     role,
@@ -119,7 +119,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 				Kind:     DispatchKindReviewer,
 				TaskID:   taskID,
 				Title:    fmt.Sprintf("campaign reviewer %s %s r%d", blankForKey(repo.Campaign.Frontmatter.CampaignID), blankForKey(taskID), task.Frontmatter.ReviewRound),
-				TaskPath: filepath.ToSlash(task.Path),
+				TaskPath: filepath.ToSlash(task.Dir),
 				RunAt:    now,
 				Prompt:   prompt,
 				Role:     role,
@@ -183,7 +183,11 @@ func reviewDispatchStateKey(repo Repository, task TaskDocument) string {
 }
 
 func reviewDocumentPath(task TaskDocument) string {
-	return filepath.ToSlash(filepath.Join("reviews", task.Frontmatter.TaskID, fmt.Sprintf("R%03d.md", maxInt(task.Frontmatter.ReviewRound, 1))))
+	reviewsDir := strings.TrimSpace(task.ReviewsDir)
+	if reviewsDir == "" {
+		reviewsDir = filepath.ToSlash(filepath.Join(task.Dir, "reviews"))
+	}
+	return filepath.ToSlash(filepath.Join(reviewsDir, fmt.Sprintf("R%03d.md", maxInt(task.Frontmatter.ReviewRound, 1))))
 }
 
 func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error) {

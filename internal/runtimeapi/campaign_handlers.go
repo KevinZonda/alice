@@ -160,98 +160,6 @@ func (s *Server) handleCampaignDelete(c *gin.Context) {
 	})
 }
 
-func (s *Server) handleCampaignTrialUpsert(c *gin.Context) {
-	scopeCtx, ok := s.resolveCampaignRequestScope(c)
-	if !ok {
-		return
-	}
-	campaignID := strings.TrimSpace(c.Param("campaignID"))
-	if _, ok := s.loadScopedCampaign(c, scopeCtx, campaignID, "trial update"); !ok {
-		return
-	}
-	var req UpsertTrialRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	updated, trial, err := s.campaigns.UpsertTrial(campaignID, req.Trial)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	logging.Infof("runtime api audit action=campaign_trial_upsert actor=%s campaign=%s trial=%s", scopeCtx.actorID, updated.ID, trial.ID)
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "campaign": updated, "trial": trial})
-}
-
-func (s *Server) handleCampaignGuidanceAdd(c *gin.Context) {
-	scopeCtx, ok := s.resolveCampaignRequestScope(c)
-	if !ok {
-		return
-	}
-	campaignID := strings.TrimSpace(c.Param("campaignID"))
-	if _, ok := s.loadScopedCampaign(c, scopeCtx, campaignID, "guidance update"); !ok {
-		return
-	}
-	var req AddGuidanceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	updated, guidance, err := s.campaigns.AppendGuidance(campaignID, req.Guidance)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	logging.Infof("runtime api audit action=campaign_guidance_add actor=%s campaign=%s guidance=%s", scopeCtx.actorID, updated.ID, guidance.ID)
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "campaign": updated, "guidance": guidance})
-}
-
-func (s *Server) handleCampaignReviewAdd(c *gin.Context) {
-	scopeCtx, ok := s.resolveCampaignRequestScope(c)
-	if !ok {
-		return
-	}
-	campaignID := strings.TrimSpace(c.Param("campaignID"))
-	if _, ok := s.loadScopedCampaign(c, scopeCtx, campaignID, "review update"); !ok {
-		return
-	}
-	var req AddReviewRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	updated, review, err := s.campaigns.AppendReview(campaignID, req.Review)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	logging.Infof("runtime api audit action=campaign_review_add actor=%s campaign=%s review=%s", scopeCtx.actorID, updated.ID, review.ID)
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "campaign": updated, "review": review})
-}
-
-func (s *Server) handleCampaignPitfallAdd(c *gin.Context) {
-	scopeCtx, ok := s.resolveCampaignRequestScope(c)
-	if !ok {
-		return
-	}
-	campaignID := strings.TrimSpace(c.Param("campaignID"))
-	if _, ok := s.loadScopedCampaign(c, scopeCtx, campaignID, "pitfall update"); !ok {
-		return
-	}
-	var req AddPitfallRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	updated, pitfall, err := s.campaigns.AppendPitfall(campaignID, req.Pitfall)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	logging.Infof("runtime api audit action=campaign_pitfall_add actor=%s campaign=%s pitfall=%s", scopeCtx.actorID, updated.ID, pitfall.ID)
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "campaign": updated, "pitfall": pitfall})
-}
-
 func (s *Server) deleteCampaignAutomationTasks(scopeCtx campaignScopeContext, campaignID string) ([]string, error) {
 	if s == nil || s.automation == nil {
 		return nil, nil
@@ -375,8 +283,6 @@ func buildCampaignFromRequest(req CreateCampaignRequest, scopeCtx campaignScopeC
 		Objective:         strings.TrimSpace(req.Objective),
 		Repo:              strings.TrimSpace(req.Repo),
 		CampaignRepoPath:  strings.TrimSpace(req.CampaignRepoPath),
-		IssueIID:          strings.TrimSpace(req.IssueIID),
-		IssueURL:          strings.TrimSpace(req.IssueURL),
 		Session:           scopeCtx.session,
 		Creator:           scopeCtx.creator,
 		ManageMode:        req.ManageMode,

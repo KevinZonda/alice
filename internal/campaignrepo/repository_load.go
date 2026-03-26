@@ -100,11 +100,15 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		if strings.ToLower(filepath.Ext(path)) != ".md" {
 			return nil
 		}
-		if strings.EqualFold(filepath.Base(path), "README.md") {
+		base := filepath.Base(path)
+		if strings.EqualFold(base, "README.md") {
 			return nil
 		}
 		rel := filepath.ToSlash(relativePath(root, path))
 		if !strings.Contains(rel, "/tasks/") {
+			return nil
+		}
+		if base != "task.md" && !isLegacyTaskFilePath(rel) {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
@@ -159,13 +163,44 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		if err != nil {
 			return fmt.Errorf("parse wake_at %s: %w", path, err)
 		}
+		taskDirRel := relativeTaskDir(root, path, frontmatter)
+		contextPath := filepath.ToSlash(filepath.Join(taskDirRel, "context.md"))
+		contextBody, err := loadMarkdownBodyIfExists(filepath.Join(root, filepath.FromSlash(contextPath)))
+		if err != nil {
+			return err
+		}
+		planPath := filepath.ToSlash(filepath.Join(taskDirRel, "plan.md"))
+		planBody, err := loadMarkdownBodyIfExists(filepath.Join(root, filepath.FromSlash(planPath)))
+		if err != nil {
+			return err
+		}
+		progressPath := filepath.ToSlash(filepath.Join(taskDirRel, "progress.md"))
+		progressBody, err := loadMarkdownBodyIfExists(filepath.Join(root, filepath.FromSlash(progressPath)))
+		if err != nil {
+			return err
+		}
+		taskPath := filepath.ToSlash(relativePath(root, path))
+		legacyPath := ""
+		if isLegacyTaskFilePath(taskPath) {
+			legacyPath = taskPath
+			taskPath = filepath.ToSlash(filepath.Join(taskDirRel, "task.md"))
+		}
 		tasks = append(tasks, TaskDocument{
-			Path:        relativePath(root, path),
-			Dir:         relativePath(root, filepath.Dir(path)),
-			Body:        parsed.Body,
-			Frontmatter: frontmatter,
-			LeaseUntil:  leaseUntil,
-			WakeAt:      wakeAt,
+			Path:         taskPath,
+			Dir:          taskDirRel,
+			Body:         parsed.Body,
+			ContextPath:  contextPath,
+			ContextBody:  contextBody,
+			PlanPath:     planPath,
+			PlanBody:     planBody,
+			ProgressPath: progressPath,
+			ProgressBody: progressBody,
+			ResultsDir:   filepath.ToSlash(filepath.Join(taskDirRel, "results")),
+			ReviewsDir:   filepath.ToSlash(filepath.Join(taskDirRel, "reviews")),
+			LegacyPath:   legacyPath,
+			Frontmatter:  frontmatter,
+			LeaseUntil:   leaseUntil,
+			WakeAt:       wakeAt,
 		})
 		return nil
 	})
@@ -189,7 +224,7 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 
 func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 	var reviews []ReviewDocument
-	err := filepath.WalkDir(filepath.Join(root, "reviews"), func(path string, d os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -197,6 +232,13 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 			return nil
 		}
 		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		rel := filepath.ToSlash(relativePath(root, path))
+		if strings.EqualFold(filepath.Base(path), "README.md") {
+			return nil
+		}
+		if !isReviewFilePath(rel) {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
@@ -234,6 +276,8 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 		}
 		reviews = append(reviews, ReviewDocument{
 			Path:        relativePath(root, path),
+			Dir:         relativePath(root, filepath.Dir(path)),
+			TaskDir:     taskDirForReviewPath(rel),
 			Body:        parsed.Body,
 			Frontmatter: frontmatter,
 			CreatedAt:   createdAt,
@@ -263,6 +307,65 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 	return reviews, nil
 }
 
+func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, error) {
+	var docs []SourceRepoDocument
+	err := filepath.WalkDir(filepath.Join(root, "repos"), func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d == nil || d.IsDir() {
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		if strings.EqualFold(filepath.Base(path), "README.md") {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		parsed := parseMarkdownFrontmatter(string(raw))
+		if !parsed.Found {
+			return nil
+		}
+		var frontmatter SourceRepoFrontmatter
+		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
+			return fmt.Errorf("parse source repo frontmatter %s: %w", path, err)
+		}
+		frontmatter.RepoID = strings.TrimSpace(frontmatter.RepoID)
+		frontmatter.RemoteURL = strings.TrimSpace(frontmatter.RemoteURL)
+		frontmatter.LocalPath = strings.TrimSpace(frontmatter.LocalPath)
+		frontmatter.DefaultBranch = strings.TrimSpace(frontmatter.DefaultBranch)
+		frontmatter.ActiveBranches = normalizeStringList(frontmatter.ActiveBranches)
+		frontmatter.BaseCommit = strings.TrimSpace(frontmatter.BaseCommit)
+		frontmatter.Role = strings.TrimSpace(frontmatter.Role)
+		if frontmatter.RepoID == "" {
+			return nil
+		}
+		docs = append(docs, SourceRepoDocument{
+			Path:        relativePath(root, path),
+			Body:        parsed.Body,
+			Frontmatter: frontmatter,
+		})
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(docs, func(i, j int) bool {
+		if docs[i].Frontmatter.RepoID != docs[j].Frontmatter.RepoID {
+			return docs[i].Frontmatter.RepoID < docs[j].Frontmatter.RepoID
+		}
+		return docs[i].Path < docs[j].Path
+	})
+	return docs, nil
+}
+
 func parseMarkdownFrontmatter(raw string) markdownFrontmatterResult {
 	text := strings.TrimSpace(raw)
 	if text == "" {
@@ -289,6 +392,17 @@ func parseMarkdownFrontmatter(raw string) markdownFrontmatterResult {
 	}
 }
 
+func loadMarkdownBodyIfExists(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(raw)), nil
+}
+
 func parseFlexibleTime(raw string) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -312,7 +426,7 @@ func parseFlexibleTime(raw string) (time.Time, error) {
 			parsed, err = time.ParseInLocation(layout, raw, time.Local)
 		}
 		if err == nil {
-			return parsed.Local(), nil
+			return parsed, nil
 		}
 		lastErr = err
 	}
@@ -448,6 +562,62 @@ func relativePath(root, path string) string {
 		return filepath.ToSlash(path)
 	}
 	return filepath.ToSlash(rel)
+}
+
+func relativeTaskDir(root, taskPath string, frontmatter TaskFrontmatter) string {
+	rel := filepath.ToSlash(relativePath(root, filepath.Dir(taskPath)))
+	if filepath.Base(taskPath) == "task.md" {
+		return rel
+	}
+	return canonicalTaskDir(frontmatter.Phase, frontmatter.TaskID, rel)
+}
+
+func canonicalTaskDir(phase, taskID, fallback string) string {
+	phase = strings.TrimSpace(phase)
+	taskID = strings.TrimSpace(taskID)
+	if phase != "" && taskID != "" {
+		return filepath.ToSlash(filepath.Join("phases", phase, "tasks", taskID))
+	}
+	return filepath.ToSlash(fallback)
+}
+
+func isLegacyTaskFilePath(path string) bool {
+	if !strings.Contains(path, "/tasks/") {
+		return false
+	}
+	if !strings.HasSuffix(filepath.ToSlash(filepath.Dir(path)), "/tasks") {
+		return false
+	}
+	if strings.EqualFold(filepath.Base(path), "task.md") {
+		return false
+	}
+	if strings.EqualFold(filepath.Base(path), "README.md") {
+		return false
+	}
+	return strings.EqualFold(filepath.Ext(path), ".md")
+}
+
+func isReviewFilePath(path string) bool {
+	switch {
+	case strings.HasPrefix(path, "reviews/"):
+		return true
+	case strings.Contains(path, "/tasks/") && strings.Contains(path, "/reviews/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func taskDirForReviewPath(path string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		return ""
+	}
+	if strings.Contains(path, "/tasks/") {
+		dir := filepath.ToSlash(filepath.Dir(path))
+		return filepath.ToSlash(filepath.Dir(dir))
+	}
+	return ""
 }
 
 func writeFileIfChanged(path string, content []byte) error {

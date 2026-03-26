@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/campaign"
@@ -21,7 +22,24 @@ func (b *connectorRuntimeBuilder) guardCampaignRepoWorkflowTask(_ context.Contex
 	}
 
 	stateKey := strings.TrimSpace(task.Action.StateKey)
-	if strings.HasPrefix(stateKey, campaignDispatchStatePrefix) || strings.HasPrefix(stateKey, campaignWakeStatePrefix) {
+	if strings.HasPrefix(stateKey, campaignWakeStatePrefix) {
+		campaignID, ok := campaignIDFromAutomationStateKey(stateKey)
+		if !ok || b == nil || b.campaignStore == nil {
+			return automation.WorkflowPreflightDecision{}, nil
+		}
+		item, err := b.campaignStore.GetCampaign(campaignID)
+		if err != nil {
+			return automation.WorkflowPreflightDecision{}, nil
+		}
+		taskID := extractTaskIDFromStateKey(stateKey)
+		if strings.TrimSpace(item.CampaignRepoPath) != "" && taskID != "" {
+			if _, err := campaignrepo.ResumeWakeTask(item.CampaignRepoPath, taskID, time.Now().Local(), campaignRepoDispatchLease, b.campaignRoleDefaults()); err != nil {
+				return automation.WorkflowPreflightDecision{}, err
+			}
+		}
+		return automation.WorkflowPreflightDecision{}, nil
+	}
+	if strings.HasPrefix(stateKey, campaignDispatchStatePrefix) {
 		return automation.WorkflowPreflightDecision{}, nil
 	}
 

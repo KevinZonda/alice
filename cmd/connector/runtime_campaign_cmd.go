@@ -22,12 +22,10 @@ func newRuntimeCampaignCmd() *cobra.Command {
 		newRuntimeCampaignGetCmd(),
 		newRuntimeCampaignPatchCmd(),
 		newRuntimeCampaignDeleteCmd(),
+		newRuntimeCampaignApprovePlanCmd(),
 		newRuntimeCampaignRepoScanCmd(),
+		newRuntimeCampaignRepoLintCmd(),
 		newRuntimeCampaignRepoReconcileCmd(),
-		newRuntimeCampaignTrialUpsertCmd(),
-		newRuntimeCampaignGuidanceAddCmd(),
-		newRuntimeCampaignReviewAddCmd(),
-		newRuntimeCampaignPitfallAddCmd(),
 	)
 	return cmd
 }
@@ -165,136 +163,4 @@ func newRuntimeCampaignPatchCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&contentType, "content-type", "application/merge-patch+json", "HTTP content type for patch body")
 	return cmd
-}
-
-func newRuntimeCampaignTrialUpsertCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "upsert-trial CAMPAIGN_ID [json]",
-		Short: "Create or update one trial under a campaign",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: withRuntimeClient(func(
-			ctx context.Context,
-			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
-			_ *cobra.Command,
-			args []string,
-		) error {
-			bodyArgs := []string{}
-			if len(args) == 2 {
-				bodyArgs = []string{args[1]}
-			}
-			body, err := readRuntimeBodyArgOrStdin(bodyArgs)
-			if err != nil {
-				return err
-			}
-			var req runtimeapi.UpsertTrialRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				return err
-			}
-			result, err := client.UpsertTrial(ctx, session, args[0], req)
-			if err != nil {
-				return err
-			}
-			return printRuntimeJSON(result)
-		}),
-	}
-}
-
-func newRuntimeCampaignGuidanceAddCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "add-guidance CAMPAIGN_ID [json]",
-		Short: "Append one guidance record to a campaign",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: withRuntimeClient(func(
-			ctx context.Context,
-			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
-			_ *cobra.Command,
-			args []string,
-		) error {
-			bodyArgs := []string{}
-			if len(args) == 2 {
-				bodyArgs = []string{args[1]}
-			}
-			body, err := readRuntimeBodyArgOrStdin(bodyArgs)
-			if err != nil {
-				return err
-			}
-			var req runtimeapi.AddGuidanceRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				return err
-			}
-			result, err := client.AddGuidance(ctx, session, args[0], req)
-			if err != nil {
-				return err
-			}
-			return printRuntimeJSON(result)
-		}),
-	}
-}
-
-func newRuntimeCampaignReviewAddCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "add-review CAMPAIGN_ID [json]",
-		Short: "Append one reviewer result to a campaign",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: withRuntimeClient(func(
-			ctx context.Context,
-			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
-			_ *cobra.Command,
-			args []string,
-		) error {
-			bodyArgs := []string{}
-			if len(args) == 2 {
-				bodyArgs = []string{args[1]}
-			}
-			body, err := readRuntimeBodyArgOrStdin(bodyArgs)
-			if err != nil {
-				return err
-			}
-			var req runtimeapi.AddReviewRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				return err
-			}
-			result, err := client.AddReview(ctx, session, args[0], req)
-			if err != nil {
-				return err
-			}
-			return printRuntimeJSON(result)
-		}),
-	}
-}
-
-func newRuntimeCampaignPitfallAddCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "add-pitfall CAMPAIGN_ID [json]",
-		Short: "Append one pitfall record to a campaign",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: withRuntimeClient(func(
-			ctx context.Context,
-			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
-			_ *cobra.Command,
-			args []string,
-		) error {
-			bodyArgs := []string{}
-			if len(args) == 2 {
-				bodyArgs = []string{args[1]}
-			}
-			body, err := readRuntimeBodyArgOrStdin(bodyArgs)
-			if err != nil {
-				return err
-			}
-			var req runtimeapi.AddPitfallRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				return err
-			}
-			result, err := client.AddPitfall(ctx, session, args[0], req)
-			if err != nil {
-				return err
-			}
-			return printRuntimeJSON(result)
-		}),
-	}
 }

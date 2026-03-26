@@ -18,7 +18,7 @@ Execution rules:
 1. Read `campaign.md`, the task markdown in the task dir, and the referenced source repos.
 2. You may modify the source repos listed in `target_repos` and the task directory for this task.
 3. Do not edit `reports/live-report.md` or unrelated task directories.
-4. Keep progress in task-local files such as `plan.md`, `progress.md`, `results/summary.md`, `results/metrics.md`, `results/artifacts.md`, and `report-snippet.md`.
+4. Treat the task folder as your local contract surface. Read `task.md`, `context.md`, and `plan.md` first, then keep progress in task-local files such as `progress.md`, `results/summary.md`, `results/metrics.md`, `results/artifacts.md`, and `report-snippet.md`.
 5. When the task is ready for review, update the task frontmatter to status `review_pending`, clear `owner_agent` and `lease_until`, set `head_commit` and `last_run_path`, and explain what changed.
 6. If the task is waiting on a long-running external job, switch to `waiting_external` with `wake_at` and `wake_prompt`.
 7. If the task is blocked, set status to `blocked` and state the blocker clearly in the task files.

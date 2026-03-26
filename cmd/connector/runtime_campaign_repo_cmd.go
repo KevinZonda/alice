@@ -44,6 +44,91 @@ func newRuntimeCampaignRepoScanCmd() *cobra.Command {
 	}
 }
 
+func newRuntimeCampaignRepoLintCmd() *cobra.Command {
+	var forApproval bool
+
+	cmd := &cobra.Command{
+		Use:   "repo-lint CAMPAIGN_ID",
+		Short: "Validate one campaign repo against the repo-first contract",
+		Args:  cobra.ExactArgs(1),
+		RunE: withRuntimeClient(func(
+			ctx context.Context,
+			client *runtimeapi.Client,
+			session mcpbridge.SessionContext,
+			_ *cobra.Command,
+			args []string,
+		) error {
+			item, err := loadRuntimeCampaign(ctx, client, session, args[0])
+			if err != nil {
+				return err
+			}
+			repo, validation, err := validateRuntimeCampaignRepo(item, forApproval)
+			if err != nil {
+				return err
+			}
+			if !validation.Valid {
+				return validation.Error()
+			}
+			return printRuntimeJSON(map[string]any{
+				"status":     "ok",
+				"campaign":   item,
+				"repository": repo,
+				"validation": validation,
+			})
+		}),
+	}
+	cmd.Flags().BoolVar(&forApproval, "for-approval", false, "require plan review/master plan/refined task tree approval gates")
+	return cmd
+}
+
+func newRuntimeCampaignApprovePlanCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "approve-plan CAMPAIGN_ID",
+		Short: "Approve a plan only after repo lint, plan review, and merged plan checks all pass",
+		Args:  cobra.ExactArgs(1),
+		RunE: withRuntimeClient(func(
+			ctx context.Context,
+			client *runtimeapi.Client,
+			session mcpbridge.SessionContext,
+			_ *cobra.Command,
+			args []string,
+		) error {
+			item, err := loadRuntimeCampaign(ctx, client, session, args[0])
+			if err != nil {
+				return err
+			}
+			repo, validation, err := campaignrepo.ApprovePlan(item.CampaignRepoPath)
+			if err != nil {
+				return err
+			}
+			if !validation.Valid {
+				return validation.Error()
+			}
+			_, summary, err := campaignrepo.ScanFromPath(item.CampaignRepoPath, currentTime(), item.MaxParallelTrials)
+			if err != nil {
+				return err
+			}
+			patchBody, err := json.Marshal(map[string]string{
+				"status":  string(campaign.StatusRunning),
+				"summary": summary.SummaryLine(),
+			})
+			if err != nil {
+				return err
+			}
+			result, err := client.PatchCampaign(ctx, session, item.ID, "application/merge-patch+json", patchBody)
+			if err != nil {
+				return err
+			}
+			return printRuntimeJSON(map[string]any{
+				"status":     "ok",
+				"campaign":   result["campaign"],
+				"repository": repo,
+				"validation": validation,
+			})
+		}),
+	}
+}
+
 func newRuntimeCampaignRepoReconcileCmd() *cobra.Command {
 	var writeReport bool
 	var updateRuntime bool
@@ -149,4 +234,11 @@ func decodeRuntimeCampaign(payload map[string]any) (campaign.Campaign, error) {
 
 func currentTime() time.Time {
 	return time.Now().Local()
+}
+
+func validateRuntimeCampaignRepo(item campaign.Campaign, forApproval bool) (campaignrepo.Repository, campaignrepo.ValidationResult, error) {
+	if forApproval {
+		return campaignrepo.ValidateForApproval(item.CampaignRepoPath)
+	}
+	return campaignrepo.Validate(item.CampaignRepoPath)
 }

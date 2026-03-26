@@ -242,15 +242,6 @@ func (p *Processor) buildBuiltinStatusMarkdown(job Job) string {
 	return strings.Join(lines, "\n")
 }
 
-func isBuiltinStatusActiveTrial(status campaign.TrialStatus) bool {
-	switch status {
-	case campaign.TrialStatusPlanned, campaign.TrialStatusRunning, campaign.TrialStatusCandidate, campaign.TrialStatusHold:
-		return true
-	default:
-		return false
-	}
-}
-
 func formatBuiltinStatusTaskLine(task automation.Task) string {
 	parts := []string{fmt.Sprintf("- `%s`", sanitizeInlineCode(task.ID))}
 	if title := strings.TrimSpace(task.Title); title != "" {
@@ -297,35 +288,10 @@ func formatBuiltinStatusCampaignLine(item campaign.Campaign) string {
 	if campaignRepoPath := strings.TrimSpace(item.CampaignRepoPath); campaignRepoPath != "" {
 		parts = append(parts, fmt.Sprintf("campaign_repo `%s`", sanitizeInlineCode(campaignRepoPath)))
 	}
-	if issueIID := strings.TrimSpace(item.IssueIID); issueIID != "" {
-		parts = append(parts, fmt.Sprintf("issue `#%s`", sanitizeInlineCode(issueIID)))
-	}
-	if winner := strings.TrimSpace(item.CurrentWinnerTrialID); winner != "" {
-		parts = append(parts, fmt.Sprintf("winner `%s`", sanitizeInlineCode(winner)))
-	}
-	if activeTrials := builtinStatusActiveTrialIDs(item.Trials); len(activeTrials) > 0 {
-		parts = append(parts, fmt.Sprintf("active trials `%s`", sanitizeInlineCode(strings.Join(activeTrials, ", "))))
-	}
 	if updatedAt := formatBuiltinStatusTime(item.UpdatedAt); updatedAt != "" {
 		parts = append(parts, fmt.Sprintf("updated `%s`", updatedAt))
 	}
 	return strings.Join(parts, " | ")
-}
-
-func builtinStatusActiveTrialIDs(trials []campaign.Trial) []string {
-	if len(trials) == 0 {
-		return nil
-	}
-	active := make([]string, 0, len(trials))
-	for _, trial := range trials {
-		if !isBuiltinStatusActiveTrial(trial.Status) {
-			continue
-		}
-		if id := strings.TrimSpace(trial.ID); id != "" {
-			active = append(active, id)
-		}
-	}
-	return active
 }
 
 func formatBuiltinStatusTime(ts time.Time) string {

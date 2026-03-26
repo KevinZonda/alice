@@ -11,16 +11,16 @@ source_repos: []
 review_mode: repo_first
 report_mode: live_and_periodic
 default_executor:
-  role: executor.codex
-  provider: codex
+  role: executor
+  provider: ""
   model: ""
   profile: ""
   workflow: code_army
   reasoning_effort: high
   personality: pragmatic
 default_reviewer:
-  role: reviewer.claude
-  provider: claude
+  role: reviewer
+  provider: ""
   model: ""
   profile: ""
   workflow: code_army
@@ -28,7 +28,7 @@ default_reviewer:
   personality: analytical
 default_planner:
   role: planner
-  provider: claude
+  provider: ""
   model: ""
   profile: ""
   workflow: code_army
@@ -36,7 +36,7 @@ default_planner:
   personality: analytical
 default_planner_reviewer:
   role: planner_reviewer
-  provider: claude
+  provider: ""
   model: ""
   profile: ""
   workflow: code_army
@@ -70,12 +70,13 @@ __CAMPAIGN_OBJECTIVE__
 ## Roles
 - planner default: `planner`
 - planner reviewer default: `planner_reviewer`
-- executor default: `executor.codex`
-- reviewer default: `reviewer.claude`
+- executor default: `executor`
+- reviewer default: `reviewer`
+- concrete provider / model / profile are dispatched by Alice runtime unless explicitly overridden in frontmatter
 
 ## Next
 - Campaign will auto-start planning phase on first reconcile
-- Planner generates proposal and draft tasks
+- Planner generates proposal, phase docs, and refined task packages
 - Planner reviewer evaluates plan
-- Human approves plan via `/alice approve-plan`
+- Human approves plan via `/alice approve-plan` only after `repo-lint --for-approval` passes
 - Execution begins automatically after approval
