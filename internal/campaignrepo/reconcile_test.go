@@ -314,12 +314,73 @@ role: source
 		"`alice-code-army repo-lint camp_demo`",
 		"$ALICE_RUNTIME_BIN runtime campaigns repo-lint camp_demo",
 		"Keep proposal/master-plan/phases/tasks consistent",
+		"must keep `status: draft`",
+		"must not emit `planned`, `ready`, `executing`, or any `review_*` status during planning",
 		"Keep validation inside each task's `write_scope`",
 		"Verify claims from files or command output",
 		"Never add `default_*` to `campaign.md`",
 		"give a short public summary",
 	) {
 		t.Fatalf("unexpected planner prompt: %q", spec.Prompt)
+	}
+}
+
+func TestReconcileAndPrepare_HumanApprovedPromotesPlannedTasksToDispatch(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 3, 29, 19, 0, 0, 0, time.FixedZone("CST", 8*3600))
+
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+objective: "Start execution after approval"
+current_phase: P01
+source_repos: [repo-a]
+plan_round: 2
+plan_status: human_approved
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship phase one"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "repos", "repo-a.md"), `---
+repo_id: repo-a
+local_path: "/tmp/repo-a"
+default_branch: main
+role: source
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Legacy planned task"
+phase: P01
+status: planned
+target_repos: [repo-a]
+write_scope: [src/**]
+---
+`)
+
+	result, err := ReconcileAndPrepare(root, now, 1, time.Hour)
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if result.ClaimedExecutors != 1 {
+		t.Fatalf("expected 1 claimed executor, got %d", result.ClaimedExecutors)
+	}
+	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindExecutor {
+		t.Fatalf("expected one executor dispatch, got %+v", result.DispatchTasks)
+	}
+	task := result.Repository.Tasks[0]
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusExecuting {
+		t.Fatalf("expected task to move to executing, got %s", got)
+	}
+	if task.Frontmatter.DispatchState != "executor_dispatched" {
+		t.Fatalf("expected executor_dispatched, got %q", task.Frontmatter.DispatchState)
+	}
+	if task.Frontmatter.ExecutionRound != 1 {
+		t.Fatalf("expected execution round 1, got %d", task.Frontmatter.ExecutionRound)
 	}
 }
 

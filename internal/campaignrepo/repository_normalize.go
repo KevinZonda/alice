@@ -11,7 +11,7 @@ func normalizeTaskStatus(raw string) string {
 	value = strings.ReplaceAll(value, "-", "_")
 	value = strings.ReplaceAll(value, " ", "_")
 	switch value {
-	case "", "todo":
+	case "", "todo", "draft", "planned":
 		return TaskStatusDraft
 	case "ready", "queued":
 		return TaskStatusReady

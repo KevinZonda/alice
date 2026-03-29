@@ -12,6 +12,7 @@ Write:
 Rules:
 - Keep proposal/master-plan/phases/tasks consistent on phase goals, task IDs, depends_on, target_repos, write_scope, acceptance, and parallelism.
 - Preserve required headings from `_templates/`: `task.md` Goal/Background/Acceptance/Deliverables, `context.md` Context/Relevant Repos/Relevant Files/Dependencies, `plan.md` Execution Steps/Validation/Handoff.
+- Preserve task frontmatter defaults from `_templates/task.md`: planner-written task packages must keep `status: draft` and must not emit `planned`, `ready`, `executing`, or any `review_*` status during planning.
 - Task packages must be executor-ready. Keep validation inside each task's `write_scope`. Verify claims from files or command output.
 - Standard executor/reviewer blocks use `workflow: code_army`. Keep task/review role blocks to `role` + `workflow` unless a local override is intentional. Never add `default_*` to `campaign.md`.
 - Do not modify source repos, `campaign.md`, or `reports/live-report.md`.

@@ -59,7 +59,7 @@ func newRuntimeCampaignRepoLintCmd() *cobra.Command {
 			ctx context.Context,
 			client *runtimeapi.Client,
 			session mcpbridge.SessionContext,
-			_ *cobra.Command,
+			cmd *cobra.Command,
 			args []string,
 		) error {
 			item, err := loadRuntimeCampaign(ctx, client, session, args[0])
@@ -94,40 +94,59 @@ func newRuntimeCampaignApprovePlanCmd() *cobra.Command {
 			ctx context.Context,
 			client *runtimeapi.Client,
 			session mcpbridge.SessionContext,
-			_ *cobra.Command,
+			cmd *cobra.Command,
 			args []string,
 		) error {
 			item, err := loadRuntimeCampaign(ctx, client, session, args[0])
 			if err != nil {
 				return err
 			}
-			repo, validation, err := campaignrepo.ApprovePlan(item.CampaignRepoPath)
+			_, validation, err := campaignrepo.ApprovePlan(item.CampaignRepoPath)
 			if err != nil {
 				return err
 			}
 			if !validation.Valid {
 				return validation.Error()
 			}
-			_, summary, err := campaignrepo.ScanFromPath(item.CampaignRepoPath, currentTime(), item.MaxParallelTrials)
+			roleDefaults, err := currentRuntimeCampaignRoleDefaults(cmd)
+			if err != nil {
+				return err
+			}
+			result, err := campaignrepo.ReconcileAndPrepare(item.CampaignRepoPath, currentTime(), item.MaxParallelTrials, 0, roleDefaults)
+			if err != nil {
+				return err
+			}
+			liveReportPath, err := campaignrepo.WriteLiveReport(item.CampaignRepoPath, result.Summary)
 			if err != nil {
 				return err
 			}
 			patchBody, err := json.Marshal(map[string]string{
 				"status":  string(campaign.StatusRunning),
-				"summary": summary.SummaryLine(),
+				"summary": result.Summary.SummaryLine(),
 			})
 			if err != nil {
 				return err
 			}
-			result, err := client.PatchCampaign(ctx, session, item.ID, "application/merge-patch+json", patchBody)
+			patchResult, err := client.PatchCampaign(ctx, session, item.ID, "application/merge-patch+json", patchBody)
+			if err != nil {
+				return err
+			}
+			if updated, err := decodeRuntimeCampaign(patchResult); err == nil {
+				item = updated
+			}
+			syncedDispatchTasks, err := syncRuntimeDispatchTasks(ctx, client, session, item, result.DispatchTasks)
 			if err != nil {
 				return err
 			}
 			return printRuntimeJSON(map[string]any{
-				"status":     "ok",
-				"campaign":   result["campaign"],
-				"repository": repo,
-				"validation": validation,
+				"status":                "ok",
+				"campaign":              item,
+				"repository":            result.Repository,
+				"validation":            validation,
+				"summary":               result.Summary,
+				"dispatch_tasks":        result.DispatchTasks,
+				"synced_dispatch_tasks": syncedDispatchTasks,
+				"live_report_path":      liveReportPath,
 			})
 		}),
 	}
