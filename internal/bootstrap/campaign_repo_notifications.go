@@ -23,14 +23,15 @@ func (b *connectorRuntimeBuilder) sendCampaignNotifications(item campaign.Campai
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for _, event := range events {
-		cardContent, err := buildCampaignEventCard(event)
+		title := campaignEventCardTitle(item.Title, item.ID, event)
+		cardContent, err := buildCampaignEventCard(title, event)
 		if err != nil {
 			logging.Warnf("build campaign event card failed campaign=%s kind=%s: %v", item.ID, event.Kind, err)
 			continue
 		}
 		if err := b.sender.SendCard(ctx, target.Route.ReceiveIDType, target.Route.ReceiveID, cardContent); err != nil {
 			// Fallback to text
-			text := fmt.Sprintf("**%s**\n%s", event.Title, event.Detail)
+			text := fmt.Sprintf("**%s**\n%s", title, event.Detail)
 			if sendErr := b.sender.SendText(ctx, target.Route.ReceiveIDType, target.Route.ReceiveID, text); sendErr != nil {
 				logging.Warnf("send campaign notification failed campaign=%s kind=%s: %v", item.ID, event.Kind, sendErr)
 			}
@@ -38,12 +39,9 @@ func (b *connectorRuntimeBuilder) sendCampaignNotifications(item campaign.Campai
 	}
 }
 
-func buildCampaignEventCard(event campaignrepo.ReconcileEvent) (string, error) {
+func buildCampaignEventCard(title string, event campaignrepo.ReconcileEvent) (string, error) {
 	colorTemplate := severityToCardTemplate(event.Severity)
-	title := strings.TrimSpace(event.Title)
-	if title == "" {
-		title = string(event.Kind)
-	}
+	title = strings.TrimSpace(title)
 	detail := strings.TrimSpace(event.Detail)
 	if detail == "" {
 		detail = " "
@@ -79,6 +77,21 @@ func buildCampaignEventCard(event campaignrepo.ReconcileEvent) (string, error) {
 		return "", fmt.Errorf("marshal campaign event card failed: %w", err)
 	}
 	return string(raw), nil
+}
+
+func campaignEventCardTitle(campaignTitle, campaignID string, event campaignrepo.ReconcileEvent) string {
+	base := strings.TrimSpace(event.Title)
+	if base == "" {
+		base = string(event.Kind)
+	}
+	campaignLabel := strings.TrimSpace(campaignTitle)
+	if campaignLabel == "" {
+		campaignLabel = strings.TrimSpace(campaignID)
+	}
+	if campaignLabel == "" {
+		return base
+	}
+	return fmt.Sprintf("%s · %s", campaignLabel, base)
 }
 
 func severityToCardTemplate(severity string) string {

@@ -100,7 +100,7 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 				summary.WakeTasks = append(summary.WakeTasks, WakeTaskSpec{
 					StateKey: wakeTaskStateKey(summary.CampaignID, task),
 					TaskID:   view.TaskID,
-					Title:    fmt.Sprintf("campaign wake %s %s", blankForKey(summary.CampaignID), blankForKey(view.TaskID)),
+					Title:    wakeNotificationTitle(summary.CampaignTitle, summary.CampaignID, view.TaskID),
 					TaskPath: blankTaskLocation(view),
 					RunAt:    task.WakeAt,
 					Prompt:   buildWakePrompt(repo, task),

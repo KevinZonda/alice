@@ -49,6 +49,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 	var specs []DispatchTaskSpec
 
 	campaignID := blankForKey(repo.Campaign.Frontmatter.CampaignID)
+	campaignTitle := strings.TrimSpace(repo.Campaign.Frontmatter.Title)
 	planStatus := normalizePlanStatus(repo.Campaign.Frontmatter.PlanStatus)
 	planRound := repo.Campaign.Frontmatter.PlanRound
 
@@ -62,7 +63,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 			StateKey: fmt.Sprintf("campaign_dispatch:%s:planner:r%d", campaignID, planRound),
 			Kind:     DispatchKindPlanner,
 			TaskID:   fmt.Sprintf("plan-r%d", planRound),
-			Title:    fmt.Sprintf("campaign planner %s r%d", campaignID, planRound),
+			Title:    dispatchTaskTitle(campaignTitle, repo.Campaign.Frontmatter.CampaignID, DispatchKindPlanner, "", planRound),
 			RunAt:    now,
 			Prompt:   prompt,
 			Role:     role,
@@ -80,7 +81,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 				StateKey: fmt.Sprintf("campaign_dispatch:%s:planner_reviewer:r%d", campaignID, planRound),
 				Kind:     DispatchKindPlannerReviewer,
 				TaskID:   fmt.Sprintf("plan-review-r%d", planRound),
-				Title:    fmt.Sprintf("campaign planner reviewer %s r%d", campaignID, planRound),
+				Title:    dispatchTaskTitle(campaignTitle, repo.Campaign.Frontmatter.CampaignID, DispatchKindPlannerReviewer, "", planRound),
 				RunAt:    now,
 				Prompt:   prompt,
 				Role:     role,
@@ -107,7 +108,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 				StateKey: executionDispatchStateKey(repo, task),
 				Kind:     DispatchKindExecutor,
 				TaskID:   taskID,
-				Title:    fmt.Sprintf("campaign executor %s %s x%d", blankForKey(repo.Campaign.Frontmatter.CampaignID), blankForKey(taskID), task.Frontmatter.ExecutionRound),
+				Title:    dispatchTaskTitle(campaignTitle, repo.Campaign.Frontmatter.CampaignID, DispatchKindExecutor, taskID, task.Frontmatter.ExecutionRound),
 				TaskPath: filepath.ToSlash(task.Dir),
 				RunAt:    now,
 				Prompt:   prompt,
@@ -126,7 +127,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 				StateKey: reviewDispatchStateKey(repo, task),
 				Kind:     DispatchKindReviewer,
 				TaskID:   taskID,
-				Title:    fmt.Sprintf("campaign reviewer %s %s r%d", blankForKey(repo.Campaign.Frontmatter.CampaignID), blankForKey(taskID), task.Frontmatter.ReviewRound),
+				Title:    dispatchTaskTitle(campaignTitle, repo.Campaign.Frontmatter.CampaignID, DispatchKindReviewer, taskID, task.Frontmatter.ReviewRound),
 				TaskPath: filepath.ToSlash(task.Dir),
 				RunAt:    now,
 				Prompt:   prompt,
