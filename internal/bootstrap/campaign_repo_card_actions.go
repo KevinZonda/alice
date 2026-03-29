@@ -9,19 +9,19 @@ import (
 	"github.com/Alice-space/alice/internal/campaign"
 	"github.com/Alice-space/alice/internal/campaignrepo"
 	"github.com/Alice-space/alice/internal/connector"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 func (b *connectorRuntimeBuilder) HandleCardAction(ctx context.Context, req connector.CardActionRequest) (connector.CardActionResult, error) {
-	_ = ctx
 	switch req.Kind {
 	case connector.CardActionKindCampaignPlanApproval:
-		return b.handleCampaignPlanApprovalCardAction(req)
+		return b.handleCampaignPlanApprovalCardAction(ctx, req)
 	default:
 		return connector.CardActionResult{}, errors.New("暂不支持这个卡片动作")
 	}
 }
 
-func (b *connectorRuntimeBuilder) handleCampaignPlanApprovalCardAction(req connector.CardActionRequest) (connector.CardActionResult, error) {
+func (b *connectorRuntimeBuilder) handleCampaignPlanApprovalCardAction(ctx context.Context, req connector.CardActionRequest) (connector.CardActionResult, error) {
 	if b == nil || b.campaignStore == nil {
 		return connector.CardActionResult{}, errors.New("campaign store 不可用，无法处理审批")
 	}
@@ -50,15 +50,19 @@ func (b *connectorRuntimeBuilder) handleCampaignPlanApprovalCardAction(req conne
 
 	switch req.Decision {
 	case connector.CardActionDecisionApprove:
-		return b.approveCampaignPlanFromCard(item)
+		return b.approveCampaignPlanFromCard(ctx, item, req.OpenMessageID)
 	case connector.CardActionDecisionReject:
-		return b.rejectCampaignPlanFromCard(item)
+		return b.rejectCampaignPlanFromCard(ctx, item, req.OpenMessageID)
 	default:
 		return connector.CardActionResult{}, errors.New("不支持的审批动作")
 	}
 }
 
-func (b *connectorRuntimeBuilder) approveCampaignPlanFromCard(item campaign.Campaign) (connector.CardActionResult, error) {
+func (b *connectorRuntimeBuilder) approveCampaignPlanFromCard(
+	ctx context.Context,
+	item campaign.Campaign,
+	openMessageID string,
+) (connector.CardActionResult, error) {
 	if _, _, err := campaignrepo.ApprovePlan(item.CampaignRepoPath); err != nil {
 		return connector.CardActionResult{}, err
 	}
@@ -68,14 +72,24 @@ func (b *connectorRuntimeBuilder) approveCampaignPlanFromCard(item campaign.Camp
 	}); err != nil {
 		return connector.CardActionResult{}, err
 	}
-	b.reconcileCampaignRepoLocked(item.ID)
-	return connector.CardActionResult{
+	result := connector.CardActionResult{
 		ToastType: "success",
 		Toast:     "已批准当前计划，Alice 将继续派发执行任务。",
-	}, nil
+	}
+	if err := b.patchCampaignPlanDecisionCard(ctx, openMessageID, item, true, 0); err != nil {
+		logging.Warnf("patch approved campaign plan card failed campaign=%s message=%s: %v", item.ID, openMessageID, err)
+		result.ToastType = "warning"
+		result.Toast = "已批准当前计划，但更新审批卡片失败，请刷新群消息确认。"
+	}
+	b.reconcileCampaignRepoLocked(item.ID)
+	return result, nil
 }
 
-func (b *connectorRuntimeBuilder) rejectCampaignPlanFromCard(item campaign.Campaign) (connector.CardActionResult, error) {
+func (b *connectorRuntimeBuilder) rejectCampaignPlanFromCard(
+	ctx context.Context,
+	item campaign.Campaign,
+	openMessageID string,
+) (connector.CardActionResult, error) {
 	repo, err := campaignrepo.RejectPlan(item.CampaignRepoPath)
 	if err != nil {
 		return connector.CardActionResult{}, err
@@ -86,6 +100,15 @@ func (b *connectorRuntimeBuilder) rejectCampaignPlanFromCard(item campaign.Campa
 		item = updatedItem
 	}
 	nextRound := repo.Campaign.Frontmatter.PlanRound
+	result := connector.CardActionResult{
+		ToastType: "success",
+		Toast:     fmt.Sprintf("已不批准当前计划，Alice 已退回第 %d 轮规划。", nextRound),
+	}
+	if err := b.patchCampaignPlanDecisionCard(ctx, openMessageID, item, false, nextRound); err != nil {
+		logging.Warnf("patch rejected campaign plan card failed campaign=%s message=%s: %v", item.ID, openMessageID, err)
+		result.ToastType = "warning"
+		result.Toast = fmt.Sprintf("已不批准当前计划，并已退回第 %d 轮规划，但更新审批卡片失败，请刷新群消息确认。", nextRound)
+	}
 	title := strings.TrimSpace(item.Title)
 	if title == "" {
 		title = item.ID
@@ -98,10 +121,28 @@ func (b *connectorRuntimeBuilder) rejectCampaignPlanFromCard(item campaign.Campa
 		Detail:     fmt.Sprintf("Campaign **%s** 当前方案未获人工批准，已回到第 %d 轮规划。", title, nextRound),
 		Severity:   "warning",
 	}})
-	return connector.CardActionResult{
-		ToastType: "success",
-		Toast:     fmt.Sprintf("已不批准当前计划，Alice 已退回第 %d 轮规划。", nextRound),
-	}, nil
+	return result, nil
+}
+
+func (b *connectorRuntimeBuilder) patchCampaignPlanDecisionCard(
+	ctx context.Context,
+	openMessageID string,
+	item campaign.Campaign,
+	approved bool,
+	nextRound int,
+) error {
+	if b == nil || b.sender == nil {
+		return errors.New("sender 不可用，无法更新审批卡片")
+	}
+	openMessageID = strings.TrimSpace(openMessageID)
+	if openMessageID == "" {
+		return errors.New("卡片消息 ID 为空，无法更新审批卡片")
+	}
+	cardContent, err := buildCampaignPlanDecisionCard(item.Title, item.ID, approved, nextRound)
+	if err != nil {
+		return err
+	}
+	return b.sender.PatchCard(ctx, openMessageID, cardContent)
 }
 
 func preferredCardActionActorID(req connector.CardActionRequest) string {
