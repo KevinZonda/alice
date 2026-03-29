@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alice-space/alice/internal/campaign"
 	"github.com/Alice-space/alice/internal/campaignrepo"
+	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/logging"
 )
 
@@ -54,6 +55,9 @@ func buildCampaignEventCard(title string, event campaignrepo.ReconcileEvent) (st
 			campaignEventCardMarkdown(fmt.Sprintf("**任务**: %s", taskID)),
 			campaignEventCardMarkdown(detail),
 		}
+	}
+	if action := campaignEventActionElement(event); action != nil {
+		elements = append(elements, action)
 	}
 	card := map[string]any{
 		"schema": "2.0",
@@ -112,4 +116,63 @@ func campaignEventCardMarkdown(content string) map[string]any {
 		"tag":     "markdown",
 		"content": content,
 	}
+}
+
+func campaignEventActionElement(event campaignrepo.ReconcileEvent) map[string]any {
+	if event.Kind != campaignrepo.EventHumanApprovalNeeded || strings.TrimSpace(event.CampaignID) == "" {
+		return nil
+	}
+	value := map[string]any{
+		"alice_action": connector.CardActionKindCampaignPlanApproval,
+		"campaign_id":  strings.TrimSpace(event.CampaignID),
+		"plan_round":   event.PlanRound,
+	}
+	approveValue := cloneCardActionValue(value)
+	approveValue["decision"] = connector.CardActionDecisionApprove
+	rejectValue := cloneCardActionValue(value)
+	rejectValue["decision"] = connector.CardActionDecisionReject
+	return map[string]any{
+		"tag":    "action",
+		"layout": "bisected",
+		"actions": []any{
+			campaignEventActionButton("批准", "primary", approveValue,
+				"确认批准当前计划？", "批准后会把计划切到执行阶段，并继续派发任务。"),
+			campaignEventActionButton("不批准", "danger", rejectValue,
+				"确认不批准当前计划？", "不批准后会退回 planning，并进入下一轮规划。"),
+		},
+	}
+}
+
+func campaignEventActionButton(label, buttonType string, value map[string]any, confirmTitle, confirmText string) map[string]any {
+	button := map[string]any{
+		"tag":   "button",
+		"type":  strings.TrimSpace(buttonType),
+		"text":  campaignEventPlainText(strings.TrimSpace(label)),
+		"value": value,
+	}
+	if strings.TrimSpace(confirmTitle) != "" || strings.TrimSpace(confirmText) != "" {
+		button["confirm"] = map[string]any{
+			"title": campaignEventPlainText(strings.TrimSpace(confirmTitle)),
+			"text":  campaignEventPlainText(strings.TrimSpace(confirmText)),
+		}
+	}
+	return button
+}
+
+func campaignEventPlainText(content string) map[string]any {
+	return map[string]any{
+		"tag":     "plain_text",
+		"content": strings.TrimSpace(content),
+	}
+}
+
+func cloneCardActionValue(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
