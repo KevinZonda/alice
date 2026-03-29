@@ -307,8 +307,7 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 		if !ok {
 			continue
 		}
-		if filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath)) == filepath.ToSlash(review.Path) &&
-			strings.EqualFold(strings.TrimSpace(task.Frontmatter.DispatchState), "judge_applied") {
+		if filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath)) == filepath.ToSlash(review.Path) {
 			continue
 		}
 		verdict := normalizeReviewVerdict(review.Frontmatter.Verdict, review.Frontmatter.Blocking)
