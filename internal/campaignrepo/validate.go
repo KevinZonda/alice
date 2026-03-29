@@ -276,6 +276,7 @@ func validateTaskDocument(root string, task TaskDocument, phases map[string]Phas
 			})
 		}
 	}
+	validateTaskStatusValue(root, task, issues)
 	validateTaskStateContract(root, task, repos, issues)
 	validateTaskRoleWorkflows(task, issues)
 	validateTaskWriteScopeCoverage(task, issues)
@@ -375,6 +376,53 @@ func validateTaskStateContract(root string, task TaskDocument, repos map[string]
 			})
 		}
 	}
+}
+
+func validateTaskStatusValue(root string, task TaskDocument, issues *[]ValidationIssue) {
+	raw := rawTaskStatusValue(root, task)
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return
+	}
+	if raw == "planned" {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_status_planned_deprecated",
+			Path:    task.Path,
+			Message: fmt.Sprintf("task %s uses deprecated status %q; planner-generated task packages must use status %q", task.Frontmatter.TaskID, raw, TaskStatusDraft),
+		})
+		return
+	}
+
+	switch normalizeTaskStatus(task.Frontmatter.Status) {
+	case TaskStatusDraft, TaskStatusReady, TaskStatusExecuting, TaskStatusReviewPending, TaskStatusReviewing,
+		TaskStatusRework, TaskStatusAccepted, TaskStatusBlocked, TaskStatusWaitingExternal, TaskStatusDone, TaskStatusRejected:
+		return
+	default:
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_status_unknown",
+			Path:    task.Path,
+			Message: fmt.Sprintf("task %s uses unsupported status %q", task.Frontmatter.TaskID, task.Frontmatter.Status),
+		})
+	}
+}
+
+func rawTaskStatusValue(root string, task TaskDocument) string {
+	path := filepath.Join(root, filepath.FromSlash(task.Path))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return task.Frontmatter.Status
+	}
+	parsed := parseMarkdownFrontmatter(string(raw))
+	if !parsed.Found {
+		return task.Frontmatter.Status
+	}
+	for _, line := range strings.Split(parsed.Frontmatter, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "status:") {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "status:")), `"'`)
+	}
+	return task.Frontmatter.Status
 }
 
 func taskExecutionArtifactIssues(root string, task TaskDocument, repos map[string]SourceRepoDocument) []ValidationIssue {
