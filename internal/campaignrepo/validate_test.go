@@ -186,6 +186,59 @@ human_approved: false
 	}
 }
 
+func TestRejectPlan_ResetsPlanningRoundAndMarksMasterPlanRejected(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+objective: "Ship the workflow"
+current_phase: P01
+source_repos: [repo-a]
+plan_round: 3
+plan_status: plan_approved
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "proposals", "round-003-plan.md"), `---
+proposal_id: "plan-r3"
+plan_round: 3
+status: submitted
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
+status: draft
+human_approved: false
+---
+
+# Master Plan
+
+- ready
+`)
+
+	repo, err := RejectPlan(root)
+	if err != nil {
+		t.Fatalf("reject plan failed: %v", err)
+	}
+	if repo.Campaign.Frontmatter.PlanStatus != PlanStatusPlanning {
+		t.Fatalf("expected planning, got %s", repo.Campaign.Frontmatter.PlanStatus)
+	}
+	if repo.Campaign.Frontmatter.PlanRound != 4 {
+		t.Fatalf("expected plan_round=4, got %d", repo.Campaign.Frontmatter.PlanRound)
+	}
+	if repo.PlanProposals[0].Frontmatter.Status != "superseded" {
+		t.Fatalf("expected proposal superseded, got %s", repo.PlanProposals[0].Frontmatter.Status)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "plans", "merged", "master-plan.md"))
+	if err != nil {
+		t.Fatalf("read master plan failed: %v", err)
+	}
+	if !strings.Contains(string(raw), "status: rejected") {
+		t.Fatalf("expected master plan rejected, got %s", string(raw))
+	}
+	if !strings.Contains(string(raw), "human_rejected: true") {
+		t.Fatalf("expected human_rejected flag, got %s", string(raw))
+	}
+}
+
 func TestValidateRepositoryForApproval_MasterPlanMayMentionHistoricalPlaceholder(t *testing.T) {
 	root := t.TempDir()
 	initGitRepo(t, root)

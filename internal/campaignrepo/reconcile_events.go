@@ -20,6 +20,7 @@ const (
 type ReconcileEvent struct {
 	Kind       ReconcileEventKind
 	CampaignID string
+	PlanRound  int
 	TaskID     string // empty for campaign-level events
 	Title      string
 	Detail     string

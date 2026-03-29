@@ -155,6 +155,7 @@ func (b *connectorRuntimeBuilder) buildProcessor() error {
 func (b *connectorRuntimeBuilder) buildApp() error {
 	app := connector.NewApp(b.cfg, b.processor)
 	app.SetPromptLoader(b.promptLoader)
+	app.SetCardActionHandler(b)
 	loadOptionalState("runtime state", b.paths.runtimeStatePath, app.LoadRuntimeState)
 	b.app = app
 	return nil

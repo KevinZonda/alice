@@ -30,6 +30,8 @@ type App struct {
 	now              func() time.Time
 	automationMu     sync.Mutex
 	automationRunner AutomationRunner
+	cardActionMu     sync.RWMutex
+	cardAction       CardActionHandler
 	prompts          *prompting.Loader
 }
 
@@ -135,7 +137,9 @@ func (a *App) run(ctx context.Context, runtimeOnly bool) error {
 		return nil
 	}
 
-	eventHandler := larkdispatcher.NewEventDispatcher("", "").OnP2MessageReceiveV1(a.onMessageReceive)
+	eventHandler := larkdispatcher.NewEventDispatcher("", "").
+		OnP2MessageReceiveV1(a.onMessageReceive).
+		OnP2CardActionTrigger(a.onCardActionTrigger)
 	wsClient := larkws.NewClient(
 		a.cfg.FeishuAppID,
 		a.cfg.FeishuAppSecret,

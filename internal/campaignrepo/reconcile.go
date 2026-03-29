@@ -177,6 +177,7 @@ func planTransitionEvent(campaignID, campaignTitle, prevStatus, newStatus string
 		return ReconcileEvent{
 			Kind:       EventPlanningStarted,
 			CampaignID: campaignID,
+			PlanRound:  planRound,
 			Title:      "规划启动",
 			Detail:     fmt.Sprintf("Campaign **%s** 开始规划（%s）", campaignTitle, roundStr),
 			Severity:   "info",
@@ -185,14 +186,16 @@ func planTransitionEvent(campaignID, campaignTitle, prevStatus, newStatus string
 		return ReconcileEvent{
 			Kind:       EventProposalSubmitted,
 			CampaignID: campaignID,
+			PlanRound:  planRound,
 			Title:      "规划方案已提交",
 			Detail:     fmt.Sprintf("Campaign **%s** 规划方案已提交，等待评审（%s）", campaignTitle, roundStr),
 			Severity:   "info",
 		}, true
 	case (prevStatus == PlanStatusPlanReviewPending || prevStatus == PlanStatusPlanReviewing) && newStatus == PlanStatusPlanApproved:
 		return ReconcileEvent{
-			Kind:       EventPlanReviewVerdict,
+			Kind:       EventHumanApprovalNeeded,
 			CampaignID: campaignID,
+			PlanRound:  planRound,
 			Title:      "方案评审通过",
 			Detail:     fmt.Sprintf("Campaign **%s** 规划方案评审通过，等待人工批准（%s）", campaignTitle, roundStr),
 			Severity:   "success",
@@ -201,6 +204,7 @@ func planTransitionEvent(campaignID, campaignTitle, prevStatus, newStatus string
 		return ReconcileEvent{
 			Kind:       EventPlanReviewVerdict,
 			CampaignID: campaignID,
+			PlanRound:  planRound,
 			Title:      "方案评审未通过，重新规划",
 			Detail:     fmt.Sprintf("Campaign **%s** 规划方案评审未通过，进入第 %d 轮规划", campaignTitle, planRound),
 			Severity:   "warning",
@@ -209,6 +213,7 @@ func planTransitionEvent(campaignID, campaignTitle, prevStatus, newStatus string
 		return ReconcileEvent{
 			Kind:       EventPlanApproved,
 			CampaignID: campaignID,
+			PlanRound:  planRound,
 			Title:      "方案已批准，开始执行",
 			Detail:     fmt.Sprintf("Campaign **%s** 规划方案已批准，任务即将分配执行", campaignTitle),
 			Severity:   "success",
