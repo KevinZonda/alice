@@ -745,7 +745,7 @@ phases/P01/tasks/T001/reviews/R001.md
 | `patch CAMP_ID JSON` | 改 runtime campaign 字段 | 改 summary、状态、path 等 |
 | `apply-command CAMP_ID '/alice ...'` | 应用高频指导命令 | hold、needs-human、approve-plan、replan 等 |
 
-如果当前 campaign 已到“等待人工批准”阶段，飞书里的对应通知卡片现在也会直接提供“批准 / 不批准”按钮；按钮会校验 `plan_round`，旧卡不会误操作新一轮规划。
+如果当前 campaign 已到“等待人工批准”阶段，飞书里的对应通知卡片现在也会直接提供“批准 / 不批准”按钮；按钮会校验 `plan_round`，旧卡不会误操作新一轮规划。点击之后，Alice 会把原卡片更新成“已批准 / 已拒绝”的终态显示，避免同一张卡重复操作。
 
 ### `repo-reconcile` 的三个调试开关
 

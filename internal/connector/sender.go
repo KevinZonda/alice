@@ -103,6 +103,31 @@ func (s *LarkSender) SendCard(ctx context.Context, receiveIDType, receiveID, car
 	})
 }
 
+func (s *LarkSender) PatchCard(ctx context.Context, messageID, cardContent string) error {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return errors.New("message id is empty")
+	}
+
+	req := larkim.NewPatchMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewPatchMessageReqBodyBuilder().
+			Content(cardContent).
+			Build()).
+		Build()
+
+	return s.withFeishuRetry(ctx, func() error {
+		resp, err := s.client.Im.V1.Message.Patch(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Success() {
+			return &feishuAPIError{Code: resp.Code, Msg: resp.Msg, RequestID: resp.RequestId()}
+		}
+		return nil
+	})
+}
+
 func (s *LarkSender) ReplyText(ctx context.Context, sourceMessageID, text string) (string, error) {
 	return s.replyMessagePreferThread(ctx, sourceMessageID, "text", textMessageContent(text), "reply success but response message_id is empty")
 }

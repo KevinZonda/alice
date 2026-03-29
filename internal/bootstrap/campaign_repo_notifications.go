@@ -47,17 +47,19 @@ func buildCampaignEventCard(title string, event campaignrepo.ReconcileEvent) (st
 	if detail == "" {
 		detail = " "
 	}
-	elements := []any{
-		campaignEventCardMarkdown(detail),
-	}
+	blocks := []string{detail}
 	if taskID := strings.TrimSpace(event.TaskID); taskID != "" {
-		elements = []any{
-			campaignEventCardMarkdown(fmt.Sprintf("**任务**: %s", taskID)),
-			campaignEventCardMarkdown(detail),
+		blocks = []string{
+			fmt.Sprintf("**任务**: %s", taskID),
+			detail,
 		}
 	}
 	if action := campaignEventActionElement(event); action != nil {
-		elements = append(elements, action)
+		return buildLegacyCampaignEventCard(title, colorTemplate, blocks, action)
+	}
+	elements := make([]any, 0, len(blocks))
+	for _, block := range blocks {
+		elements = append(elements, campaignEventCardMarkdown(block))
 	}
 	card := map[string]any{
 		"schema": "2.0",
@@ -83,19 +85,72 @@ func buildCampaignEventCard(title string, event campaignrepo.ReconcileEvent) (st
 	return string(raw), nil
 }
 
+func buildLegacyCampaignEventCard(title, colorTemplate string, blocks []string, action map[string]any) (string, error) {
+	elements := make([]any, 0, len(blocks)+1)
+	for _, block := range blocks {
+		elements = append(elements, campaignEventLegacyMarkdown(block))
+	}
+	if action != nil {
+		elements = append(elements, action)
+	}
+	card := map[string]any{
+		"config": map[string]any{
+			"wide_screen_mode": true,
+			"enable_forward":   true,
+		},
+		"header": map[string]any{
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": title,
+			},
+			"template": colorTemplate,
+		},
+		"elements": elements,
+	}
+	raw, err := json.Marshal(card)
+	if err != nil {
+		return "", fmt.Errorf("marshal legacy campaign event card failed: %w", err)
+	}
+	return string(raw), nil
+}
+
+func buildCampaignPlanDecisionCard(campaignTitle, campaignID string, approved bool, nextRound int) (string, error) {
+	title := "方案已批准"
+	detail := fmt.Sprintf("Campaign **%s** 当前方案已获人工批准，Alice 将继续派发执行任务。", campaignDisplayTitle(campaignTitle, campaignID))
+	status := "**审批结果**：已批准"
+	colorTemplate := "green"
+	if !approved {
+		title = "方案未批准"
+		detail = fmt.Sprintf("Campaign **%s** 当前方案未获人工批准，已回到第 %d 轮规划。", campaignDisplayTitle(campaignTitle, campaignID), nextRound)
+		status = "**审批结果**：已拒绝"
+		colorTemplate = "orange"
+	}
+	return buildLegacyCampaignEventCard(
+		campaignEventCardTitle(campaignTitle, campaignID, campaignrepo.ReconcileEvent{Title: title}),
+		colorTemplate,
+		[]string{detail, status},
+		nil,
+	)
+}
+
 func campaignEventCardTitle(campaignTitle, campaignID string, event campaignrepo.ReconcileEvent) string {
 	base := strings.TrimSpace(event.Title)
 	if base == "" {
 		base = string(event.Kind)
 	}
-	campaignLabel := strings.TrimSpace(campaignTitle)
-	if campaignLabel == "" {
-		campaignLabel = strings.TrimSpace(campaignID)
-	}
+	campaignLabel := campaignDisplayTitle(campaignTitle, campaignID)
 	if campaignLabel == "" {
 		return base
 	}
 	return fmt.Sprintf("%s · %s", campaignLabel, base)
+}
+
+func campaignDisplayTitle(campaignTitle, campaignID string) string {
+	campaignLabel := strings.TrimSpace(campaignTitle)
+	if campaignLabel == "" {
+		campaignLabel = strings.TrimSpace(campaignID)
+	}
+	return campaignLabel
 }
 
 func severityToCardTemplate(severity string) string {
@@ -115,6 +170,16 @@ func campaignEventCardMarkdown(content string) map[string]any {
 	return map[string]any{
 		"tag":     "markdown",
 		"content": content,
+	}
+}
+
+func campaignEventLegacyMarkdown(content string) map[string]any {
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": content,
+		},
 	}
 }
 

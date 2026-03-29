@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/Alice-space/alice/internal/campaignrepo"
@@ -31,17 +32,18 @@ func TestBuildCampaignEventCard_HumanApprovalAddsButtons(t *testing.T) {
 	}
 
 	var card struct {
-		Body struct {
-			Elements []map[string]any `json:"elements"`
-		} `json:"body"`
+		Elements []map[string]any `json:"elements"`
 	}
 	if err := json.Unmarshal([]byte(cardContent), &card); err != nil {
 		t.Fatalf("unmarshal card failed: %v", err)
 	}
-	if len(card.Body.Elements) != 2 {
-		t.Fatalf("expected markdown + action elements, got %d", len(card.Body.Elements))
+	if len(card.Elements) != 2 {
+		t.Fatalf("expected legacy markdown + action elements, got %d", len(card.Elements))
 	}
-	action := card.Body.Elements[1]
+	if got := card.Elements[0]["tag"]; got != "div" {
+		t.Fatalf("expected legacy div element, got %#v", got)
+	}
+	action := card.Elements[1]
 	if got := action["tag"]; got != "action" {
 		t.Fatalf("expected action element, got %#v", got)
 	}
@@ -69,4 +71,91 @@ func TestBuildCampaignEventCard_HumanApprovalAddsButtons(t *testing.T) {
 	if value["plan_round"] != float64(3) {
 		t.Fatalf("unexpected plan round: %#v", value["plan_round"])
 	}
+}
+
+func TestBuildCampaignEventCard_NonApprovalKeepsSchemaV2(t *testing.T) {
+	cardContent, err := buildCampaignEventCard("Demo Campaign · 任务派发", campaignrepo.ReconcileEvent{
+		Kind:     campaignrepo.EventTaskDispatched,
+		Title:    "任务已派发执行",
+		Detail:   "任务已进入执行阶段",
+		Severity: "info",
+	})
+	if err != nil {
+		t.Fatalf("build campaign event card failed: %v", err)
+	}
+
+	var card struct {
+		Schema string `json:"schema"`
+		Body   struct {
+			Elements []map[string]any `json:"elements"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(cardContent), &card); err != nil {
+		t.Fatalf("unmarshal card failed: %v", err)
+	}
+	if card.Schema != "2.0" {
+		t.Fatalf("expected schema 2.0, got %q", card.Schema)
+	}
+	if len(card.Body.Elements) != 1 {
+		t.Fatalf("expected single markdown element, got %d", len(card.Body.Elements))
+	}
+	if got := card.Body.Elements[0]["tag"]; got != "markdown" {
+		t.Fatalf("expected markdown element, got %#v", got)
+	}
+}
+
+func TestBuildCampaignPlanDecisionCard_ApprovedRemovesActions(t *testing.T) {
+	cardContent, err := buildCampaignPlanDecisionCard("Demo Campaign", "camp_demo", true, 0)
+	if err != nil {
+		t.Fatalf("build campaign plan decision card failed: %v", err)
+	}
+
+	var card struct {
+		Elements []map[string]any `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(cardContent), &card); err != nil {
+		t.Fatalf("unmarshal card failed: %v", err)
+	}
+	if len(card.Elements) != 2 {
+		t.Fatalf("expected two legacy markdown elements, got %d", len(card.Elements))
+	}
+	for idx, element := range card.Elements {
+		if got := element["tag"]; got != "div" {
+			t.Fatalf("expected div element at %d, got %#v", idx, got)
+		}
+	}
+}
+
+func TestBuildCampaignPlanDecisionCard_RejectedShowsNextRound(t *testing.T) {
+	cardContent, err := buildCampaignPlanDecisionCard("Demo Campaign", "camp_demo", false, 4)
+	if err != nil {
+		t.Fatalf("build campaign plan decision card failed: %v", err)
+	}
+
+	var card struct {
+		Header struct {
+			Template string `json:"template"`
+		} `json:"header"`
+		Elements []map[string]any `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(cardContent), &card); err != nil {
+		t.Fatalf("unmarshal card failed: %v", err)
+	}
+	if card.Header.Template != "orange" {
+		t.Fatalf("expected orange template, got %q", card.Header.Template)
+	}
+	if len(card.Elements) == 0 {
+		t.Fatalf("expected terminal card elements, got none")
+	}
+	text, ok := card.Elements[0]["text"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected legacy text payload, got %#v", card.Elements[0]["text"])
+	}
+	if content, _ := text["content"].(string); content == "" || !containsRound(content, 4) {
+		t.Fatalf("expected next round in content, got %#v", text["content"])
+	}
+}
+
+func containsRound(content string, round int) bool {
+	return content == fmt.Sprintf("Campaign **Demo Campaign** 当前方案未获人工批准，已回到第 %d 轮规划。", round)
 }
