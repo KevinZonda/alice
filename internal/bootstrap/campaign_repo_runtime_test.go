@@ -57,7 +57,7 @@ func TestShouldKeepExistingDispatchTask_RespectsFailureCooldown(t *testing.T) {
 	spec := campaignrepo.DispatchTaskSpec{
 		StateKey: "campaign_dispatch:camp_demo:planner:r1",
 		TaskID:   "plan-r1",
-		Title:    "campaign planner camp_demo r1",
+		Title:    "Demo Campaign · 规划 · 第 1 轮",
 		Prompt:   "plan this campaign",
 		Role: campaignrepo.RoleConfig{
 			Provider:        "claude",
@@ -67,7 +67,7 @@ func TestShouldKeepExistingDispatchTask_RespectsFailureCooldown(t *testing.T) {
 		},
 	}
 	active := automation.Task{
-		Title: "campaign planner camp_demo r1",
+		Title: "Demo Campaign · 规划 · 第 1 轮",
 		Action: automation.Action{
 			Prompt:          "plan this campaign",
 			Provider:        "claude",
@@ -116,7 +116,7 @@ func TestBuildDispatchAutomationTask_PreservesRunAt(t *testing.T) {
 			StateKey: "campaign_dispatch:camp_demo:planner:r1",
 			Kind:     campaignrepo.DispatchKindPlanner,
 			TaskID:   "plan-r1",
-			Title:    "campaign planner camp_demo r1",
+			Title:    "Demo Campaign · 规划 · 第 1 轮",
 			RunAt:    runAt,
 			Prompt:   "plan this campaign",
 			Role: campaignrepo.RoleConfig{
@@ -177,7 +177,7 @@ func TestUpsertDispatchTask_ReactivatesCompletedTask(t *testing.T) {
 			StateKey: "campaign_dispatch:camp_demo:planner:r1",
 			Kind:     campaignrepo.DispatchKindPlanner,
 			TaskID:   "plan-r1",
-			Title:    "campaign planner camp_demo r1",
+			Title:    "Demo Campaign · 规划 · 第 1 轮",
 			RunAt:    runAt,
 			Prompt:   "plan this campaign",
 			Role: campaignrepo.RoleConfig{

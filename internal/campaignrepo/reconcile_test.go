@@ -230,6 +230,9 @@ last_run_path: "results/summary.md"
 	if executorSpec.TaskPath != "phases/P01/tasks/T001" {
 		t.Fatalf("unexpected executor task path: %q", executorSpec.TaskPath)
 	}
+	if executorSpec.Title != "Demo Campaign · T001 · 执行 · 第 2 轮" {
+		t.Fatalf("unexpected executor title: %q", executorSpec.Title)
+	}
 	if !containsAll(executorSpec.Prompt, "Task id: T001", "Executor role: executor.gemini", "Reviewer role: reviewer.kimi", "Write scope: src/core", "Review status: changes_requested", "Last review path: phases/P01/tasks/T001/reviews/R001.md", "read that review before touching the source repo", "Source repos:", "repo-a: local_path="+root) {
 		t.Fatalf("unexpected executor prompt: %q", executorSpec.Prompt)
 	}
@@ -243,6 +246,9 @@ last_run_path: "results/summary.md"
 	}
 	if reviewerSpec.Role.Provider != "kimi" || reviewerSpec.Role.Model != "kimi-k2" || reviewerSpec.Role.Profile != "review-profile" {
 		t.Fatalf("unexpected reviewer role: %+v", reviewerSpec.Role)
+	}
+	if reviewerSpec.Title != "Demo Campaign · T002 · 评审 · 第 1 轮" {
+		t.Fatalf("unexpected reviewer title: %q", reviewerSpec.Title)
 	}
 	expectedReviewFile := filepath.Join(root, "phases", "P01", "tasks", "T002", "reviews", "R001.md")
 	if !containsAll(reviewerSpec.Prompt, "Task id: T002", "Target commit: abc123", "Last run path: results/summary.md", "Write scope: -", "Suggested review file: "+expectedReviewFile, "Source repos:", "repo-a: local_path="+root, "Verify that `target_commit`, `working_branches`, and `last_run_path` resolve", "diff stays inside `write_scope`", "Use RFC3339 for `created_at`") {
@@ -292,6 +298,9 @@ role: source
 	spec := specs[0]
 	if spec.Kind != DispatchKindPlanner {
 		t.Fatalf("unexpected dispatch kind: %s", spec.Kind)
+	}
+	if spec.Title != "Demo Campaign · 规划 · 第 1 轮" {
+		t.Fatalf("unexpected planner title: %q", spec.Title)
 	}
 	if !containsAll(
 		spec.Prompt,
@@ -380,6 +389,9 @@ write_scope: [src/**]
 	spec := specs[0]
 	if spec.Kind != DispatchKindPlannerReviewer {
 		t.Fatalf("unexpected dispatch kind: %s", spec.Kind)
+	}
+	if spec.Title != "Demo Campaign · 规划评审 · 第 1 轮" {
+		t.Fatalf("unexpected planner reviewer title: %q", spec.Title)
 	}
 	if !containsAll(
 		spec.Prompt,

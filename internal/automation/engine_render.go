@@ -70,7 +70,7 @@ func buildTaskWarningCardContent(task Task, markdown string, reason string) (str
 		"header": map[string]any{
 			"title": map[string]any{
 				"tag":     "plain_text",
-				"content": "需要人工介入",
+				"content": taskHeaderTitle(task, "需要人工介入"),
 			},
 			"template": "orange",
 		},
@@ -101,6 +101,26 @@ func taskCardTitle(task Task) string {
 		return task.ID
 	}
 	return "自动任务"
+}
+
+func taskHeaderTitle(task Task, fallback string) string {
+	if isCodeArmyTask(task) {
+		return taskCardTitle(task)
+	}
+	fallback = strings.TrimSpace(fallback)
+	if fallback != "" {
+		return fallback
+	}
+	return taskCardTitle(task)
+}
+
+func isCodeArmyTask(task Task) bool {
+	task = NormalizeTask(task)
+	if task.Action.Workflow == "code_army" {
+		return true
+	}
+	stateKey := strings.TrimSpace(task.Action.StateKey)
+	return strings.HasPrefix(stateKey, "campaign_dispatch:") || strings.HasPrefix(stateKey, "campaign_wake:")
 }
 
 func detectWorkflowSignal(commands []WorkflowCommand) *taskSignal {
@@ -261,7 +281,7 @@ func buildReplanCardContent(task Task, markdown string, reason string) (string, 
 		"header": map[string]any{
 			"title": map[string]any{
 				"tag":     "plain_text",
-				"content": "请求重新规划",
+				"content": taskHeaderTitle(task, "请求重新规划"),
 			},
 			"template": "red",
 		},
@@ -298,7 +318,7 @@ func buildBlockedCardContent(task Task, markdown string, reason string) (string,
 		"header": map[string]any{
 			"title": map[string]any{
 				"tag":     "plain_text",
-				"content": "任务阻塞",
+				"content": taskHeaderTitle(task, "任务阻塞"),
 			},
 			"template": "orange",
 		},
@@ -334,7 +354,7 @@ func buildDiscoveryCardContent(task Task, markdown string, finding string) (stri
 		"header": map[string]any{
 			"title": map[string]any{
 				"tag":     "plain_text",
-				"content": "新发现",
+				"content": taskHeaderTitle(task, "新发现"),
 			},
 			"template": "blue",
 		},
