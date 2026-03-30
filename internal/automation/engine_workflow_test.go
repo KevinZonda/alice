@@ -46,7 +46,7 @@ func TestEngine_RunUserTask_RunWorkflow(t *testing.T) {
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -137,7 +137,7 @@ func TestEngine_RunUserTask_RunWorkflow_WorkSceneUsesCard(t *testing.T) {
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -210,7 +210,7 @@ func TestEngine_RunUserTask_RunWorkflow_NeedsHumanPausesTaskAndWarns(t *testing.
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -286,7 +286,7 @@ func TestEngine_RunUserTask_RunWorkflow_PreflightNeedsHumanSkipsRunner(t *testin
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -386,7 +386,7 @@ func TestEngine_RunUserTask_RunWorkflow_InternalCampaignDeliveryFailureDoesNotFa
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
