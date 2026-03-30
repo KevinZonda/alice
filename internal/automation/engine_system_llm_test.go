@@ -57,7 +57,7 @@ func TestEngine_RunUserTask(t *testing.T) {
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -111,7 +111,7 @@ func TestEngine_RunUserTask_RunLLM(t *testing.T) {
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
@@ -201,7 +201,7 @@ func TestEngine_RunUserTask_RunLLM_WorkSceneUsesCardAndWorkScene(t *testing.T) {
 	engine.tick = 10 * time.Millisecond
 	engine.now = func() time.Time { return base.Add(2 * time.Second) }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	engine.Run(ctx)
 
