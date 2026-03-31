@@ -429,6 +429,86 @@ func TestApp_OnMessageReceive_WorkSceneThreadFollowupRequiresMention(t *testing.
 	}
 }
 
+func TestApp_OnMessageReceive_WorkSceneThreadFileFollowupWithoutMention(t *testing.T) {
+	cfg := configForGroupScenesTest()
+	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+	app := NewApp(cfg, processor)
+
+	start := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_file_followup_start"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_work_file_followup_root"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"<at user_id=\"ou_bot\">Alice</at> #work 请看我接下来上传的文件"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{OpenId: strPtr("ou_bot")},
+					},
+				},
+			},
+		},
+	}
+	followup := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_file_followup_file"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_work_file_followup_file"),
+				ThreadId:    strPtr("omt_work_file_followup"),
+				RootId:      strPtr("om_work_file_followup_root"),
+				ParentId:    strPtr("om_work_file_followup_root"),
+				MessageType: strPtr("file"),
+				Content:     strPtr(`{"file_key":"file_doc_123","file_name":"四（四）（五）.docx"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), start); err != nil {
+		t.Fatalf("unexpected work start error: %v", err)
+	}
+	if err := app.onMessageReceive(context.Background(), followup); err != nil {
+		t.Fatalf("unexpected work file followup error: %v", err)
+	}
+
+	if got := len(app.queue); got != 2 {
+		t.Fatalf("expected queue len 2, got %d", got)
+	}
+	job1 := <-app.queue
+	job2 := <-app.queue
+
+	if job2.Scene != jobSceneWork {
+		t.Fatalf("unexpected work file followup scene: %q", job2.Scene)
+	}
+	if job2.SessionKey != job1.SessionKey {
+		t.Fatalf("file followup should reuse session key, got %q want %q", job2.SessionKey, job1.SessionKey)
+	}
+	if job2.ResourceScopeKey != job1.ResourceScopeKey {
+		t.Fatalf("file followup should reuse resource scope key, got %q want %q", job2.ResourceScopeKey, job1.ResourceScopeKey)
+	}
+	if job2.MessageType != "file" {
+		t.Fatalf("unexpected file followup message type: %q", job2.MessageType)
+	}
+	if job2.Text != "用户发送了一个文件：四（四）（五）.docx" {
+		t.Fatalf("unexpected file followup text: %q", job2.Text)
+	}
+	if job2.SessionVersion != 2 {
+		t.Fatalf("unexpected file followup session version: %d", job2.SessionVersion)
+	}
+	if len(job2.Attachments) != 1 {
+		t.Fatalf("expected one attachment, got %d", len(job2.Attachments))
+	}
+	if job2.Attachments[0].FileKey != "file_doc_123" {
+		t.Fatalf("unexpected file attachment key: %q", job2.Attachments[0].FileKey)
+	}
+	if job2.Attachments[0].FileName != "四（四）（五）.docx" {
+		t.Fatalf("unexpected file attachment name: %q", job2.Attachments[0].FileName)
+	}
+}
+
 func TestApp_OnMessageReceive_GroupChatSceneUsesRotatedSessionAfterClear(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")

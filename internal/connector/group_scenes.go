@@ -75,7 +75,9 @@ func (a *App) routeGroupSceneJob(job *Job, event *larkim.P2MessageReceiveV1, mes
 			cfg.feishuBotUserID,
 		)
 		if sessionKey := a.resolveExistingWorkSession(job, event, message); sessionKey != "" {
-			if !workTriggerMatched {
+			// Existing work threads should accept attachment-only followups even
+			// when the user does not repeat @bot on the file/image message.
+			if !workTriggerMatched && len(job.Attachments) == 0 {
 				return false
 			}
 			applyWorkSceneToJob(job, cfg, sessionKey)
