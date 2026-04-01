@@ -18,3 +18,5 @@ created_at: ""
 
 ## Verdict
 - 只能写 `approve`、`concern` 或 `blocking`，并说明理由
+- 只有完全没有剩余问题时才允许 `approve`
+- 只要还有任何问题或注意事项，就必须写 `concern` 或 `blocking`

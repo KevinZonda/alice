@@ -41,6 +41,13 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 	if len(roleDefaults) > 0 {
 		repo.ConfigRoleDefaults = roleDefaults[0]
 	}
+	if len(repo.LoadIssues) > 0 {
+		summary := Summarize(repo, now, maxParallel)
+		return ReconcileResult{
+			Repository: repo,
+			Summary:    summary,
+		}, nil
+	}
 	changed := false
 	campaignID := strings.TrimSpace(repo.Campaign.Frontmatter.CampaignID)
 	campaignTitle := strings.TrimSpace(repo.Campaign.Frontmatter.Title)

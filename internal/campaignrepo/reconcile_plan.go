@@ -68,20 +68,29 @@ func reconcilePlanPhase(repo *Repository, now time.Time, _ time.Duration) (bool,
 		// (backward compat with campaigns created before the planning phase feature).
 		if hasNonDraftTasks(repo.Tasks) {
 			repo.Campaign.Frontmatter.PlanStatus = PlanStatusHumanApproved
+			clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 			return persistCampaignDocument(repo)
 		}
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
 		repo.Campaign.Frontmatter.PlanRound = 1
+		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 
 	case PlanStatusPlanning:
 		if hasSubmittedProposal(repo.PlanProposals, repo.Campaign.Frontmatter.PlanRound) {
+			if len(planningSelfCheckIssues(*repo)) > 0 {
+				return false, nil
+			}
 			repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanReviewPending
+			clearPlanSelfCheck(&repo.Campaign.Frontmatter, DispatchKindPlannerReviewer)
 			return persistCampaignDocument(repo)
 		}
 		return false, nil
 
 	case PlanStatusPlanReviewPending, PlanStatusPlanReviewing:
+		if len(planningSelfCheckIssues(*repo)) > 0 {
+			return false, nil
+		}
 		review, ok := latestPlanReviewForRound(repo.PlanReviews, repo.Campaign.Frontmatter.PlanRound)
 		if !ok {
 			return false, nil
@@ -111,6 +120,7 @@ func applyPlanVerdict(repo *Repository, review PlanReviewDocument) (bool, error)
 		}
 		repo.Campaign.Frontmatter.PlanRound++
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
+		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 
 	case "blocking", "reject":
@@ -119,6 +129,7 @@ func applyPlanVerdict(repo *Repository, review PlanReviewDocument) (bool, error)
 		}
 		repo.Campaign.Frontmatter.PlanRound++
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
+		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 	}
 	return false, nil

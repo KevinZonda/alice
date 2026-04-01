@@ -254,6 +254,7 @@ func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error
 		"ProposalOutputPath":   proposalOutputPath,
 		"MasterPlanPath":       masterPlanPath,
 		"FindingsPath":         findingsPath,
+		"SelfCheckCommand":     promptPlanSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, DispatchKindPlanner, repo.Campaign.Frontmatter.PlanRound),
 	})
 }
 
@@ -272,6 +273,7 @@ func buildPlannerReviewerDispatchPrompt(repo Repository, role RoleConfig) (strin
 		"MasterPlanPath":   masterPlanPath,
 		"ReviewerRole":     roleLabel(role),
 		"ReviewOutputPath": reviewOutputPath,
+		"SelfCheckCommand": promptPlanSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, DispatchKindPlannerReviewer, repo.Campaign.Frontmatter.PlanRound),
 	})
 }
 
@@ -352,5 +354,14 @@ func promptSelfCheckCommand(campaignID, taskID string, kind DispatchKind) string
 		strings.TrimSpace(campaignID),
 		strings.TrimSpace(taskID),
 		strings.TrimSpace(string(kind)),
+	)
+}
+
+func promptPlanSelfCheckCommand(campaignID string, kind DispatchKind, round int) string {
+	return fmt.Sprintf(
+		`$ALICE_RUNTIME_BIN runtime campaigns plan-self-check %s %s %d`,
+		strings.TrimSpace(campaignID),
+		strings.TrimSpace(string(kind)),
+		maxInt(round, 1),
 	)
 }

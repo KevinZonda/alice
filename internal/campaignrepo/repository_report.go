@@ -29,6 +29,7 @@ func (s Summary) LiveReportMarkdown() string {
 		fmt.Sprintf("- tasks: `%d` total, `%d` active, `%d` ready, `%d` review-pending, `%d` accepted, `%d` blocked, `%d` waiting, `%d` done, `%d` rejected", s.TaskCount, s.ActiveCount, s.ReadyCount, s.ReviewPendingCount, s.AcceptedCount, s.BlockedCount, s.WaitingCount, s.DoneCount, s.RejectedCount),
 		fmt.Sprintf("- selected ready: `%d`, selected review: `%d` (max parallel `%d`)", s.SelectedReadyCount, s.SelectedReviewCount, s.MaxParallel),
 		fmt.Sprintf("- wake due: `%d`, wake pending: `%d`", len(s.WakeDue), len(s.WakePending)),
+		fmt.Sprintf("- repository issues: `%d`", s.RepositoryIssueCount),
 	)
 	if s.PlanStatus != "" && s.PlanStatus != "human_approved" {
 		lines = append(lines, fmt.Sprintf("- plan status: `%s` (round %d)", s.PlanStatus, s.PlanRound))
@@ -44,6 +45,8 @@ func (s Summary) LiveReportMarkdown() string {
 	lines = appendTaskList(lines, s.ReviewPendingTasks, "")
 	lines = append(lines, "", "## Accepted")
 	lines = appendTaskList(lines, s.AcceptedTasks, "")
+	lines = append(lines, "", "## Repository Issues")
+	lines = appendRepositoryIssues(lines, s.RepositoryIssues)
 	lines = append(lines, "", "## Blockers")
 	lines = appendTaskList(lines, s.BlockedTasks, "blocked_reason")
 	lines = append(lines, "", "## Next")
@@ -67,7 +70,10 @@ func (s Summary) LiveReportMarkdown() string {
 			lines = append(lines, fmt.Sprintf("- dispatch reviewer for `%s` from `%s`", task.TaskID, blankTaskLocation(task)))
 		}
 	}
-	if len(s.WakeDue) == 0 && len(s.WakePending) == 0 && len(s.SelectedReady) == 0 && len(s.SelectedReview) == 0 {
+	if len(s.RepositoryIssues) > 0 {
+		lines = append(lines, "- fix repository issues before continuing automation")
+	}
+	if len(s.RepositoryIssues) == 0 && len(s.WakeDue) == 0 && len(s.WakePending) == 0 && len(s.SelectedReady) == 0 && len(s.SelectedReview) == 0 {
 		lines = append(lines, "- no immediate next action")
 	}
 	return strings.Join(lines, "\n") + "\n"
@@ -150,6 +156,23 @@ func appendTaskList(lines []string, tasks []TaskSummary, extra string) []string 
 	return lines
 }
 
+func appendRepositoryIssues(lines []string, issues []ValidationIssue) []string {
+	if len(issues) == 0 {
+		return append(lines, "- none")
+	}
+	for _, issue := range issues {
+		item := fmt.Sprintf("- `%s`", blankForSummary(issue.Code))
+		if strings.TrimSpace(issue.Path) != "" {
+			item += fmt.Sprintf(" [%s]", issue.Path)
+		}
+		if strings.TrimSpace(issue.Message) != "" {
+			item += " " + strings.TrimSpace(issue.Message)
+		}
+		lines = append(lines, item)
+	}
+	return lines
+}
+
 func blankTaskLocation(task TaskSummary) string {
 	if dir := strings.TrimSpace(task.Dir); dir != "" {
 		return dir
@@ -159,6 +182,8 @@ func blankTaskLocation(task TaskSummary) string {
 
 func liveReportStatus(summary Summary) string {
 	switch {
+	case summary.RepositoryIssueCount > 0:
+		return "blocked"
 	case summary.ActiveCount > 0 || summary.ReadyCount > 0 || summary.ReviewPendingCount > 0 || len(summary.WakeDue) > 0:
 		return "active"
 	case summary.BlockedCount > 0 || summary.WaitingCount > 0:

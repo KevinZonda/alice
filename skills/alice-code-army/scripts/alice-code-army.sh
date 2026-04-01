@@ -65,6 +65,11 @@ main() {
       shift
       run_campaigns task-self-check "$@"
       ;;
+    plan-self-check)
+      [[ $# -eq 4 ]] || die "usage: $PROGRAM plan-self-check CAMPAIGN_ID planner|planner_reviewer PLAN_ROUND"
+      shift
+      run_campaigns plan-self-check "$@"
+      ;;
     patch)
       [[ $# -eq 3 ]] || die "usage: $PROGRAM patch CAMPAIGN_ID PATCH_JSON"
       mutate_campaign_and_return "patch" "$2" "$3"

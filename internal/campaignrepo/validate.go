@@ -51,15 +51,16 @@ func ValidateForApproval(root string) (Repository, ValidationResult, error) {
 }
 
 func ValidateRepository(repo Repository) ValidationResult {
-	return validateRepository(repo, false)
+	return validateRepository(repo, false, true)
 }
 
 func ValidateRepositoryForApproval(repo Repository) ValidationResult {
-	return validateRepository(repo, true)
+	return validateRepository(repo, true, true)
 }
 
-func validateRepository(repo Repository, requireApprovalArtifacts bool) ValidationResult {
+func validateRepository(repo Repository, requireApprovalArtifacts bool, requirePlanningSelfCheckProof bool) ValidationResult {
 	var issues []ValidationIssue
+	issues = append(issues, repo.LoadIssues...)
 
 	phaseByID := make(map[string]PhaseDocument, len(repo.Phases))
 	for _, phase := range repo.Phases {
@@ -171,6 +172,49 @@ func validateRepository(repo Repository, requireApprovalArtifacts bool) Validati
 		}
 		reviewKeys[key] = struct{}{}
 		validateReviewDocument(review, taskByID, &issues)
+	}
+
+	proposalKeys := make(map[string]struct{}, len(repo.PlanProposals))
+	for _, proposal := range repo.PlanProposals {
+		key := strings.TrimSpace(proposal.Path)
+		if key == "" {
+			continue
+		}
+		if _, exists := proposalKeys[key]; exists {
+			issues = append(issues, ValidationIssue{
+				Code:    "plan_proposal_duplicate_path",
+				Path:    proposal.Path,
+				Message: fmt.Sprintf("duplicate plan proposal path %s", proposal.Path),
+			})
+			continue
+		}
+		proposalKeys[key] = struct{}{}
+		validatePlanProposalDocument(proposal, &issues)
+	}
+
+	reviewDocKeys := make(map[string]struct{}, len(repo.PlanReviews))
+	for _, review := range repo.PlanReviews {
+		key := strings.TrimSpace(review.Path)
+		if key == "" {
+			continue
+		}
+		if _, exists := reviewDocKeys[key]; exists {
+			issues = append(issues, ValidationIssue{
+				Code:    "plan_review_duplicate_path",
+				Path:    review.Path,
+				Message: fmt.Sprintf("duplicate plan review path %s", review.Path),
+			})
+			continue
+		}
+		reviewDocKeys[key] = struct{}{}
+		validatePlanReviewDocument(review, &issues)
+	}
+	if len(repo.PlanProposals) > 0 || len(repo.PlanReviews) > 0 {
+		validateMasterPlanArtifact(repo, &issues)
+	}
+
+	if requirePlanningSelfCheckProof {
+		issues = append(issues, planningSelfCheckIssues(repo)...)
 	}
 
 	if requireApprovalArtifacts {
@@ -1072,6 +1116,20 @@ func requireMarkdownSection(path, body, heading string, issues *[]ValidationIssu
 		Code:    code,
 		Path:    path,
 		Message: fmt.Sprintf("%s must include a non-placeholder \"## %s\" section", blankForSummary(path), heading),
+	})
+}
+
+func requireAnyMarkdownSection(path, body string, headings []string, issues *[]ValidationIssue, code string) {
+	for _, heading := range headings {
+		if !isPlaceholderText(markdownSectionContent(body, heading)) {
+			return
+		}
+	}
+	joined := strings.Join(headings, "\" or \"## ")
+	*issues = append(*issues, ValidationIssue{
+		Code:    code,
+		Path:    path,
+		Message: fmt.Sprintf("%s must include a non-placeholder \"## %s\" section", blankForSummary(path), joined),
 	})
 }
 

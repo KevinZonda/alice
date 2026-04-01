@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -589,26 +590,56 @@ func campaignIDFromAutomationStateKey(stateKey string) (string, bool) {
 	return campaignID, true
 }
 
-func dispatchKindAndTaskIDFromStateKey(stateKey string) (campaignrepo.DispatchKind, string, bool) {
+type dispatchCompletionTarget struct {
+	Kind      campaignrepo.DispatchKind
+	TaskID    string
+	PlanRound int
+}
+
+func dispatchCompletionTargetFromStateKey(stateKey string) (dispatchCompletionTarget, bool) {
 	stateKey = strings.TrimSpace(stateKey)
 	if stateKey == "" {
-		return "", "", false
+		return dispatchCompletionTarget{}, false
 	}
 	parts := strings.Split(stateKey, ":")
-	if len(parts) < 5 || parts[0] != strings.TrimSuffix(campaignDispatchStatePrefix, ":") {
-		return "", "", false
+	if len(parts) < 4 || parts[0] != strings.TrimSuffix(campaignDispatchStatePrefix, ":") {
+		return dispatchCompletionTarget{}, false
 	}
 	kind := campaignrepo.DispatchKind(strings.TrimSpace(parts[2]))
+	switch kind {
+	case campaignrepo.DispatchKindPlanner, campaignrepo.DispatchKindPlannerReviewer:
+		round, ok := parseDispatchRoundToken(parts[3], "r")
+		if !ok {
+			return dispatchCompletionTarget{}, false
+		}
+		return dispatchCompletionTarget{Kind: kind, PlanRound: round}, true
+	case campaignrepo.DispatchKindExecutor, campaignrepo.DispatchKindReviewer:
+	default:
+		return dispatchCompletionTarget{}, false
+	}
+	if len(parts) < 5 {
+		return dispatchCompletionTarget{}, false
+	}
 	taskID := strings.TrimSpace(parts[3])
 	if taskID == "" {
-		return "", "", false
+		return dispatchCompletionTarget{}, false
 	}
-	switch kind {
-	case campaignrepo.DispatchKindExecutor, campaignrepo.DispatchKindReviewer:
-		return kind, taskID, true
-	default:
-		return "", "", false
+	return dispatchCompletionTarget{Kind: kind, TaskID: taskID}, true
+}
+
+func parseDispatchRoundToken(raw, prefix string) (int, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if prefix != "" {
+		if !strings.HasPrefix(value, prefix) {
+			return 0, false
+		}
+		value = strings.TrimPrefix(value, prefix)
 	}
+	round, err := strconv.Atoi(value)
+	if err != nil || round <= 0 {
+		return 0, false
+	}
+	return round, true
 }
 
 func shouldSkipPostRunValidationForSignal(task automation.Task) bool {
@@ -626,48 +657,64 @@ func validateCampaignRepoTaskCompletion(item campaign.Campaign, task automation.
 	if strings.TrimSpace(item.CampaignRepoPath) == "" || shouldSkipPostRunValidationForSignal(task) {
 		return campaignrepo.ReconcileEvent{}, false, nil
 	}
-	kind, taskID, ok := dispatchKindAndTaskIDFromStateKey(task.Action.StateKey)
+	target, ok := dispatchCompletionTargetFromStateKey(task.Action.StateKey)
 	if !ok {
 		return campaignrepo.ReconcileEvent{}, false, nil
 	}
-	validation, err := campaignrepo.ValidateTaskPostRun(item.CampaignRepoPath, taskID, kind)
+	switch target.Kind {
+	case campaignrepo.DispatchKindPlanner, campaignrepo.DispatchKindPlannerReviewer:
+		validation, err := campaignrepo.ValidatePlanPostRun(item.CampaignRepoPath, target.Kind, target.PlanRound)
+		if err != nil || validation.Valid {
+			return campaignrepo.ReconcileEvent{}, false, err
+		}
+		reason := summarizeValidationIssues(validation.Issues, 3)
+		return campaignrepo.ReconcileEvent{
+			Kind:       campaignrepo.EventPlanningBlocked,
+			CampaignID: item.ID,
+			PlanRound:  target.PlanRound,
+			Title:      "规划收尾校验失败",
+			Detail:     fmt.Sprintf("规划角色 `%s` 在第 %d 轮结束后未通过收尾校验，已阻止继续推进。\n\n**问题**:\n%s", target.Kind, target.PlanRound, reason),
+			Severity:   "error",
+		}, true, nil
+	}
+	validation, err := campaignrepo.ValidateTaskPostRun(item.CampaignRepoPath, target.TaskID, target.Kind)
 	if err != nil || validation.Valid {
 		return campaignrepo.ReconcileEvent{}, false, err
 	}
 	reason := summarizeValidationIssues(validation.Issues, 3)
-	switch kind {
+	switch target.Kind {
 	case campaignrepo.DispatchKindExecutor:
-		outcome, err := campaignrepo.HandleTaskBlocked(item.CampaignRepoPath, taskID, "post-run validation failed after executor round: "+reason)
+		outcome, err := campaignrepo.HandleTaskBlocked(item.CampaignRepoPath, target.TaskID, "post-run validation failed after executor round: "+reason)
 		if err != nil {
 			return campaignrepo.ReconcileEvent{}, false, err
 		}
 		title := "执行收尾校验失败"
-		detail := fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，已停止继续派发。\n\n**问题**:\n%s", taskID, reason)
+		detail := fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，已停止继续派发。\n\n**问题**:\n%s", target.TaskID, reason)
 		if outcome.GuidanceRequested {
 			title = "执行收尾校验失败，转评审指导"
-			detail = fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，已转 reviewer 指导（第 %d/%d 次）。\n\n**问题**:\n%s", taskID, outcome.GuidanceAttempt, 3, reason)
+			detail = fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，已转 reviewer 指导（第 %d/%d 次）。\n\n**问题**:\n%s", target.TaskID, outcome.GuidanceAttempt, 3, reason)
 		} else if outcome.TerminalBlocked {
 			title = "执行收尾校验失败，任务阻塞"
-			detail = fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，且指导预算已耗尽，已进入真正阻塞状态。\n\n**问题**:\n%s", taskID, reason)
+			detail = fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，且指导预算已耗尽，已进入真正阻塞状态。\n\n**问题**:\n%s", target.TaskID, reason)
 		}
 		return campaignrepo.ReconcileEvent{
 			Kind:       campaignrepo.EventTaskBlocked,
 			CampaignID: item.ID,
-			TaskID:     taskID,
+			TaskID:     target.TaskID,
 			Title:      title,
 			Detail:     detail,
 			Severity:   "warning",
 		}, true, nil
 	case campaignrepo.DispatchKindReviewer:
-		if err := campaignrepo.MarkTaskBlocked(item.CampaignRepoPath, taskID, "post-run validation failed after reviewer round: "+reason); err != nil {
+		if err := campaignrepo.MarkTaskBlocked(item.CampaignRepoPath, target.TaskID, "post-run validation failed after reviewer round: "+reason); err != nil {
 			return campaignrepo.ReconcileEvent{}, false, err
 		}
 		return campaignrepo.ReconcileEvent{
 			Kind:       campaignrepo.EventTaskBlocked,
 			CampaignID: item.ID,
-			TaskID:     taskID,
+			TaskID:     target.TaskID,
 			Title:      "评审收尾校验失败，任务阻塞",
-			Detail:     fmt.Sprintf("任务 **%s** reviewer 回合结束后未通过状态校验，已阻止继续推进。\n\n**问题**:\n%s", taskID, reason),
+			Detail:     fmt.Sprintf("任务 **%s** reviewer 回合结束后未通过状态校验，已阻止继续推进。\n\n**问题**:\n%s", target.TaskID, reason),
 			Severity:   "error",
 		}, true, nil
 	default:

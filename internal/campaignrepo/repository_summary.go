@@ -32,6 +32,9 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 		GeneratedAt:   now,
 		PhaseCounts:   map[string]int{},
 	}
+	summary.RepositoryIssues = append(summary.RepositoryIssues, repo.LoadIssues...)
+	summary.RepositoryIssues = append(summary.RepositoryIssues, planningSelfCheckIssues(repo)...)
+	summary.RepositoryIssueCount = len(summary.RepositoryIssues)
 
 	byID := make(map[string]TaskDocument, len(repo.Tasks))
 	for _, task := range repo.Tasks {
@@ -206,6 +209,7 @@ func (s Summary) SummaryLine() string {
 		fmt.Sprintf("waiting=%d", s.WaitingCount),
 		fmt.Sprintf("accepted=%d", s.AcceptedCount),
 		fmt.Sprintf("wake_due=%d", len(s.WakeDue)),
+		fmt.Sprintf("repo_issues=%d", s.RepositoryIssueCount),
 	}
 	return strings.Join(parts, " ")
 }

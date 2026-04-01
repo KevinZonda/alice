@@ -144,14 +144,42 @@ proposal_id: "plan-r1"
 plan_round: 1
 status: submitted
 ---
+
+# Plan Proposal
+
+## Analysis
+- concrete analysis
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- no major risk
 `)
 	mustWriteTestFile(t, filepath.Join(root, "plans", "reviews", "round-001-review.md"), `---
 review_id: "plan-review-r1"
 plan_round: 1
+reviewer:
+  role: planner_reviewer
+  workflow: code_army
 verdict: approve
 blocking: false
 created_at: "2026-03-24T10:30:00+08:00"
 ---
+
+# Plan Review
+
+## Summary
+- ready for approval
+
+## Findings
+- no remaining issues
+
+## Verdict
+- approve
 `)
 	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
 status: draft
@@ -160,11 +188,17 @@ human_approved: false
 
 # Master Plan
 
-## Merge Summary
+## Analysis
 - refined and ready
 
 ## Phases
 - P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- no major risk
 `)
 
 	repo, validation, err := ApprovePlan(root)
@@ -393,14 +427,42 @@ proposal_id: "plan-r2"
 plan_round: 2
 status: submitted
 ---
+
+# Plan Proposal
+
+## Analysis
+- round 2 refinement
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked risk
 `)
 	mustWriteTestFile(t, filepath.Join(root, "plans", "reviews", "round-002-review.md"), `---
 review_id: "plan-review-r2"
 plan_round: 2
+reviewer:
+  role: planner_reviewer
+  workflow: code_army
 verdict: approve
 blocking: false
 created_at: "2026-03-24T10:30:00+08:00"
 ---
+
+# Plan Review
+
+## Summary
+- ready for approval
+
+## Findings
+- no remaining issues
+
+## Conclusion
+- approve
 `)
 	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
 status: submitted
@@ -412,11 +474,17 @@ human_approved: false
 ## Changes from Round 1
 > previous draft called this section 待补充
 
-## Merge Summary
+## Analysis
 - refined and ready
 
 ## Phases
 - P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked risk
 `)
 
 	_, validation, err := ValidateForApproval(root)
