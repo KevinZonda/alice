@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -355,6 +356,62 @@ func TestShouldMarkCampaignCompleted(t *testing.T) {
 	item.Status = campaign.StatusHold
 	if shouldMarkCampaignCompleted(item, summary) {
 		t.Fatal("expected hold status to skip auto-completion")
+	}
+}
+
+func TestValidateCampaignRepoTaskCompletion_ExecutorValidationFailureBecomesRetrying(t *testing.T) {
+	root := t.TempDir()
+	mustWriteBootstrapTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+---
+`)
+	mustWriteBootstrapTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteBootstrapTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "task.md"), `---
+task_id: T001
+title: "Replay on remote host"
+phase: P01
+status: executing
+dispatch_state: executor_dispatched
+review_status: pending
+execution_round: 1
+---
+`)
+
+	event, ok, err := validateCampaignRepoTaskCompletion(campaign.Campaign{
+		ID:               "camp_demo",
+		CampaignRepoPath: root,
+	}, automation.Task{
+		Action: automation.Action{
+			StateKey: "campaign_dispatch:camp_demo:executor:T001:x1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("validate campaign repo task completion failed: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected validation failure event to be returned")
+	}
+	if event.Kind != campaignrepo.EventTaskRetrying {
+		t.Fatalf("expected task_retrying event, got %+v", event)
+	}
+
+	repo, err := campaignrepo.Load(root)
+	if err != nil {
+		t.Fatalf("load repo failed: %v", err)
+	}
+	task := repo.Tasks[0]
+	if got := task.Frontmatter.Status; got != campaignrepo.TaskStatusReviewPending {
+		t.Fatalf("expected task to enter review_pending, got %q", got)
+	}
+	if got := task.Frontmatter.DispatchState; got != "blocked_guidance_requested" {
+		t.Fatalf("expected blocked guidance dispatch state, got %q", got)
 	}
 }
 

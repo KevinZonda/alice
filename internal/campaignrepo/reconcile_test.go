@@ -411,8 +411,8 @@ last_run_path: "results/README.md"
 	if task.Frontmatter.ReviewRound != 1 {
 		t.Fatalf("expected review round 1, got %d", task.Frontmatter.ReviewRound)
 	}
-	if len(result.Events) == 0 || result.Events[0].Kind != EventTaskBlocked {
-		t.Fatalf("expected blocked notification event, got %+v", result.Events)
+	if len(result.Events) == 0 || result.Events[0].Kind != EventTaskRetrying {
+		t.Fatalf("expected retrying notification event, got %+v", result.Events)
 	}
 	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindReviewer {
 		t.Fatalf("expected reviewer dispatch after blocked handoff, got %+v", result.DispatchTasks)

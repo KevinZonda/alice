@@ -12,6 +12,8 @@ const (
 	EventPlanningBlocked      ReconcileEventKind = "planning_blocked"
 	EventTaskDispatched       ReconcileEventKind = "task_dispatched"
 	EventTaskIntegrated       ReconcileEventKind = "task_integrated"
+	EventTaskRetrying         ReconcileEventKind = "task_retrying"
+	EventTaskRecovered        ReconcileEventKind = "task_recovered"
 	EventReviewVerdictApplied ReconcileEventKind = "review_verdict_applied"
 	EventReplanRequested      ReconcileEventKind = "replan_requested"
 	EventTaskBlocked          ReconcileEventKind = "task_blocked"
