@@ -35,6 +35,7 @@ const defaultUserTaskTimeout = 10 * time.Minute
 const defaultWorkflowTaskTimeout = 24 * time.Hour
 
 const taskSignalNeedsHuman = "needs_human"
+const taskSignalCompleted = "completed"
 const taskSignalReplan = "replan"
 const taskSignalBlocked = "blocked"
 const taskSignalDiscovery = "discovery"

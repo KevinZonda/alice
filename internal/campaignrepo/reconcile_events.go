@@ -15,6 +15,7 @@ const (
 	EventReplanRequested      ReconcileEventKind = "replan_requested"
 	EventTaskBlocked          ReconcileEventKind = "task_blocked"
 	EventDiscoveryReported    ReconcileEventKind = "discovery_reported"
+	EventCampaignCompleted    ReconcileEventKind = "campaign_completed"
 )
 
 // ReconcileEvent represents a state change event produced during reconciliation.

@@ -85,6 +85,43 @@ func buildTaskWarningCardContent(task Task, markdown string, reason string) (str
 	return string(raw), nil
 }
 
+func buildCompletedCardContent(task Task, markdown string, result string) (string, error) {
+	reply := strings.TrimSpace(markdown)
+	if reply == "" {
+		reply = "全部运行结束，自动任务已暂停。"
+	}
+	elements := []any{
+		taskCardMarkdown("**状态**\n全部运行结束。"),
+		taskCardMarkdown("**任务**\n" + taskCardTitle(task)),
+	}
+	if trimmedResult := strings.TrimSpace(result); trimmedResult != "" && trimmedResult != reply {
+		elements = append(elements, taskCardMarkdown("**结果**\n"+trimmedResult))
+	}
+	elements = append(elements, taskCardMarkdown("**上下文**\n"+reply))
+	card := map[string]any{
+		"schema": "2.0",
+		"config": map[string]any{
+			"enable_forward": true,
+			"update_multi":   true,
+		},
+		"header": map[string]any{
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": taskHeaderTitle(task, "全部运行结束"),
+			},
+			"template": "green",
+		},
+		"body": map[string]any{
+			"elements": elements,
+		},
+	}
+	raw, err := json.Marshal(card)
+	if err != nil {
+		return "", fmt.Errorf("marshal completed card failed: %w", err)
+	}
+	return string(raw), nil
+}
+
 func taskCardMarkdown(content string) map[string]any {
 	return map[string]any{
 		"tag":     "markdown",
@@ -143,6 +180,10 @@ func detectWorkflowSignals(commands []WorkflowCommand) []taskSignal {
 			signals = append(signals, taskSignal{kind: taskSignalNeedsHuman, message: reason, pause: true})
 			continue
 		}
+		if result, ok := parseCompletedCommand(command.Text); ok {
+			signals = append(signals, taskSignal{kind: taskSignalCompleted, message: result, pause: true})
+			continue
+		}
 		if reason, ok := parseReplanCommand(command.Text); ok {
 			signals = append(signals, taskSignal{kind: taskSignalReplan, message: reason, pause: true})
 			continue
@@ -172,6 +213,24 @@ func parseReplanCommand(command string) (string, bool) {
 		reason = "executor requested replanning"
 	}
 	return reason, true
+}
+
+func parseCompletedCommand(command string) (string, bool) {
+	fields := strings.Fields(strings.TrimSpace(command))
+	if len(fields) < 2 || fields[0] != "/alice" {
+		return "", false
+	}
+	keyword := strings.ToLower(strings.ReplaceAll(fields[1], "_", "-"))
+	switch keyword {
+	case "completed", "complete", "done":
+		result := strings.TrimSpace(strings.Join(fields[2:], " "))
+		if result == "" {
+			result = "workflow completed"
+		}
+		return result, true
+	default:
+		return "", false
+	}
 }
 
 func parseBlockedCommand(command string) (string, bool) {
@@ -239,6 +298,11 @@ func fallbackWorkflowReply(signal *taskSignal) string {
 			return "需要人工介入，自动任务已暂停。"
 		}
 		return "需要人工介入，自动任务已暂停。\n\n原因：" + msg
+	case taskSignalCompleted:
+		if msg == "" {
+			return "全部运行结束，自动任务已暂停。"
+		}
+		return "全部运行结束，自动任务已暂停。\n\n结果：" + msg
 	case taskSignalReplan:
 		if msg == "" {
 			return "执行方发现新情况，请求重新规划，当前任务已暂停。"
@@ -256,6 +320,26 @@ func fallbackWorkflowReply(signal *taskSignal) string {
 		return "执行方报告了新发现：\n\n" + msg
 	default:
 		return ""
+	}
+}
+
+func buildSignalCardContent(task Task, markdown string, signal *taskSignal) (string, error) {
+	if signal == nil {
+		return "", nil
+	}
+	switch signal.kind {
+	case taskSignalNeedsHuman:
+		return buildTaskWarningCardContent(task, markdown, signal.message)
+	case taskSignalCompleted:
+		return buildCompletedCardContent(task, markdown, signal.message)
+	case taskSignalReplan:
+		return buildReplanCardContent(task, markdown, signal.message)
+	case taskSignalBlocked:
+		return buildBlockedCardContent(task, markdown, signal.message)
+	case taskSignalDiscovery:
+		return buildDiscoveryCardContent(task, markdown, signal.message)
+	default:
+		return "", nil
 	}
 }
 

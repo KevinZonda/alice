@@ -114,6 +114,7 @@ func (b *connectorRuntimeBuilder) reconcileCampaignRepo(item campaign.Campaign, 
 		logging.Warnf("campaign repo reconcile failed campaign=%s path=%s: %v", item.ID, item.CampaignRepoPath, err)
 		return
 	}
+	completionEvent, shouldNotifyCompletion := newCampaignCompletedEvent(item, result.Summary)
 	events := append([]campaignrepo.ReconcileEvent(nil), result.Events...)
 	events = append(events, newSummaryBlockedEvents(item.ID, previousBlockedReasons, result.Summary)...)
 	if len(events) > 0 {
@@ -135,6 +136,8 @@ func (b *connectorRuntimeBuilder) reconcileCampaignRepo(item campaign.Campaign, 
 	}
 	if err := b.updateCampaignRepoLifecycle(item, result.Summary); err != nil {
 		logging.Warnf("patch campaign lifecycle failed campaign=%s: %v", item.ID, err)
+	} else if shouldNotifyCompletion {
+		b.sendCampaignNotifications(item, []campaignrepo.ReconcileEvent{completionEvent})
 	}
 }
 
@@ -174,6 +177,26 @@ func shouldMarkCampaignCompleted(item campaign.Campaign, summary campaignrepo.Su
 	}
 	terminalCount := summary.AcceptedCount + summary.DoneCount + summary.RejectedCount
 	return terminalCount == summary.TaskCount
+}
+
+func newCampaignCompletedEvent(item campaign.Campaign, summary campaignrepo.Summary) (campaignrepo.ReconcileEvent, bool) {
+	if !shouldMarkCampaignCompleted(item, summary) {
+		return campaignrepo.ReconcileEvent{}, false
+	}
+	return campaignrepo.ReconcileEvent{
+		Kind:       campaignrepo.EventCampaignCompleted,
+		CampaignID: item.ID,
+		Title:      "全部运行结束",
+		Detail: fmt.Sprintf(
+			"Campaign **%s** 的任务已全部进入终态，runtime 状态已更新为 `completed`。\n\n**摘要**: tasks `%d` | accepted `%d` | done `%d` | rejected `%d`",
+			campaignDisplayTitle(item.Title, item.ID),
+			summary.TaskCount,
+			summary.AcceptedCount,
+			summary.DoneCount,
+			summary.RejectedCount,
+		),
+		Severity: "success",
+	}, true
 }
 
 func (b *connectorRuntimeBuilder) updateCampaignRepoLifecycle(item campaign.Campaign, summary campaignrepo.Summary) error {

@@ -56,6 +56,9 @@ func (b *connectorRuntimeBuilder) guardCampaignRepoWorkflowTask(_ context.Contex
 	if strings.TrimSpace(item.CampaignRepoPath) == "" {
 		return automation.WorkflowPreflightDecision{}, nil
 	}
+	if decision, ok := terminalCampaignWorkflowDecision(item); ok {
+		return decision, nil
+	}
 
 	repo, err := campaignrepo.Load(item.CampaignRepoPath)
 	if err != nil {
@@ -112,4 +115,31 @@ func isPlanGateBlockingStatus(planStatus string) bool {
 	default:
 		return false
 	}
+}
+
+func terminalCampaignWorkflowDecision(item campaign.Campaign) (automation.WorkflowPreflightDecision, bool) {
+	item = campaign.NormalizeCampaign(item)
+	var message string
+	switch item.Status {
+	case campaign.StatusCompleted:
+		message = fmt.Sprintf(
+			"campaign `%s` 的任务已全部进入终态，全部运行结束；generic code_army reconcile worker 已自动暂停。",
+			item.ID,
+		)
+	case campaign.StatusMerged, campaign.StatusRejected, campaign.StatusCanceled:
+		message = fmt.Sprintf(
+			"campaign `%s` 已到终态（status=%s），全部运行结束；generic code_army reconcile worker 已自动暂停。",
+			item.ID,
+			item.Status,
+		)
+	default:
+		return automation.WorkflowPreflightDecision{}, false
+	}
+	return automation.WorkflowPreflightDecision{
+		Block:         true,
+		Message:       message,
+		SignalKind:    "completed",
+		SignalMessage: message,
+		ForceCard:     true,
+	}, true
 }

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -341,5 +342,47 @@ func TestShouldMarkCampaignCompleted(t *testing.T) {
 	item.Status = campaign.StatusHold
 	if shouldMarkCampaignCompleted(item, summary) {
 		t.Fatal("expected hold status to skip auto-completion")
+	}
+}
+
+func TestNewCampaignCompletedEvent(t *testing.T) {
+	item := campaign.Campaign{
+		ID:     "camp_demo",
+		Title:  "Demo Campaign",
+		Status: campaign.StatusRunning,
+	}
+	summary := campaignrepo.Summary{
+		TaskCount:           3,
+		AcceptedCount:       1,
+		DoneCount:           2,
+		RejectedCount:       0,
+		ActiveCount:         0,
+		ReadyCount:          0,
+		ReworkCount:         0,
+		ReviewPendingCount:  0,
+		ReviewingCount:      0,
+		SelectedReadyCount:  0,
+		SelectedReviewCount: 0,
+		BlockedCount:        0,
+		WaitingCount:        0,
+	}
+
+	event, ok := newCampaignCompletedEvent(item, summary)
+	if !ok {
+		t.Fatal("expected terminal summary to emit completion event")
+	}
+	if event.Kind != campaignrepo.EventCampaignCompleted {
+		t.Fatalf("unexpected event kind: %q", event.Kind)
+	}
+	if event.Title != "全部运行结束" {
+		t.Fatalf("unexpected event title: %q", event.Title)
+	}
+	if !strings.Contains(event.Detail, "runtime 状态已更新为 `completed`") {
+		t.Fatalf("unexpected event detail: %q", event.Detail)
+	}
+
+	item.Status = campaign.StatusHold
+	if _, ok := newCampaignCompletedEvent(item, summary); ok {
+		t.Fatal("expected hold campaign to skip completion event")
 	}
 }
