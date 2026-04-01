@@ -219,6 +219,32 @@ write_scope: [src/next.rs]
 	}
 }
 
+func TestLiveReportMarkdown_IncludesWakePendingInNext(t *testing.T) {
+	summary := Summary{
+		CampaignID:    "camp_demo",
+		CampaignTitle: "Demo Campaign",
+		CurrentPhase:  "P03",
+		WaitingCount:  1,
+		GeneratedAt:   time.Date(2026, 4, 1, 1, 40, 43, 0, time.FixedZone("CST", 8*3600)),
+		WakePending: []TaskSummary{
+			{
+				TaskID: "T301",
+				Phase:  "P03",
+				Dir:    "phases/P03/tasks/T301",
+				WakeAt: time.Date(2026, 4, 3, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+			},
+		},
+	}
+
+	report := summary.LiveReportMarkdown()
+	if !strings.Contains(report, "wake `T301` scheduled at `2026-04-03T00:00:00+08:00` from `phases/P03/tasks/T301`") {
+		t.Fatalf("expected live report to mention pending wake, got %s", report)
+	}
+	if strings.Contains(report, "no immediate next action") {
+		t.Fatalf("expected live report to avoid empty next action when wake is pending, got %s", report)
+	}
+}
+
 func TestNormalizeTaskDocumentPreservesExplicitTimeOffset(t *testing.T) {
 	oldLocal := time.Local
 	time.Local = time.UTC

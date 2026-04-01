@@ -270,12 +270,14 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 					signal: signal,
 				}
 				if decision.ForceCard || signal.kind == taskSignalNeedsHuman {
-					cardContent, err := buildTaskWarningCardContent(task, reply, reason)
+					cardContent, err := buildSignalCardContent(task, reply, signal)
 					if err != nil {
 						return taskDispatch{}, err
 					}
-					dispatch.cardContent = cardContent
-					dispatch.forceCard = true
+					if cardContent != "" {
+						dispatch.cardContent = cardContent
+						dispatch.forceCard = true
+					}
 				}
 				return dispatch, nil
 			}
@@ -330,18 +332,7 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			completed: true,
 		}
 		if signal != nil {
-			var cardContent string
-			var cardErr error
-			switch signal.kind {
-			case taskSignalNeedsHuman:
-				cardContent, cardErr = buildTaskWarningCardContent(task, text, signal.message)
-			case taskSignalReplan:
-				cardContent, cardErr = buildReplanCardContent(task, text, signal.message)
-			case taskSignalBlocked:
-				cardContent, cardErr = buildBlockedCardContent(task, text, signal.message)
-			case taskSignalDiscovery:
-				cardContent, cardErr = buildDiscoveryCardContent(task, text, signal.message)
-			}
+			cardContent, cardErr := buildSignalCardContent(task, text, signal)
 			if cardErr != nil {
 				return taskDispatch{}, cardErr
 			}

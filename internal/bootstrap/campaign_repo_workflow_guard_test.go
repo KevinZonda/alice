@@ -77,3 +77,41 @@ func TestGuardCampaignRepoWorkflowTask_AllowsOfficialDispatchTask(t *testing.T) 
 		t.Fatal("expected official dispatch task to bypass the generic plan gate")
 	}
 }
+
+func TestGuardCampaignRepoWorkflowTask_BlocksGenericReconcileForCompletedCampaign(t *testing.T) {
+	repoDir := t.TempDir()
+	store := campaign.NewStore(filepath.Join(t.TempDir(), "campaigns.db"))
+	if _, err := store.CreateCampaign(campaign.Campaign{
+		ID:               "camp_done",
+		Title:            "Done Campaign",
+		Objective:        "Demo objective",
+		CampaignRepoPath: repoDir,
+		Session:          campaign.SessionRoute{ScopeKey: "chat_id:oc_chat|scene:work|thread:omt_done", ReceiveIDType: "chat_id", ReceiveID: "oc_chat", ChatType: "group"},
+		Creator:          campaign.Actor{OpenID: "ou_actor"},
+		Status:           campaign.StatusCompleted,
+	}); err != nil {
+		t.Fatalf("create campaign failed: %v", err)
+	}
+
+	builder := &connectorRuntimeBuilder{campaignStore: store}
+	decision, err := builder.guardCampaignRepoWorkflowTask(context.Background(), automation.Task{
+		Action: automation.Action{
+			Type:     automation.ActionTypeRunWorkflow,
+			Workflow: "code_army",
+			StateKey: "code_army:camp_done:heartbeat",
+			Prompt:   "/alice reconcile campaign camp_done",
+		},
+	})
+	if err != nil {
+		t.Fatalf("guard returned err=%v", err)
+	}
+	if !decision.Block {
+		t.Fatal("expected completed campaign to block generic reconcile worker")
+	}
+	if decision.SignalKind != "completed" {
+		t.Fatalf("expected completed signal, got %q", decision.SignalKind)
+	}
+	if !strings.Contains(decision.Message, "全部运行结束") {
+		t.Fatalf("expected terminal completion message, got %q", decision.Message)
+	}
+}

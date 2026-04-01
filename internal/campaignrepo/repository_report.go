@@ -52,6 +52,11 @@ func (s Summary) LiveReportMarkdown() string {
 			lines = append(lines, fmt.Sprintf("- wake `%s` at `%s` from `%s`", task.TaskID, task.WakeAt.Format(time.RFC3339), blankTaskLocation(task)))
 		}
 	}
+	if len(s.WakePending) > 0 {
+		for _, task := range s.WakePending {
+			lines = append(lines, fmt.Sprintf("- wake `%s` scheduled at `%s` from `%s`", task.TaskID, task.WakeAt.Format(time.RFC3339), blankTaskLocation(task)))
+		}
+	}
 	if len(s.SelectedReady) > 0 {
 		for _, task := range s.SelectedReady {
 			lines = append(lines, fmt.Sprintf("- dispatch executor for `%s` from `%s`", task.TaskID, blankTaskLocation(task)))
@@ -62,7 +67,7 @@ func (s Summary) LiveReportMarkdown() string {
 			lines = append(lines, fmt.Sprintf("- dispatch reviewer for `%s` from `%s`", task.TaskID, blankTaskLocation(task)))
 		}
 	}
-	if len(s.WakeDue) == 0 && len(s.SelectedReady) == 0 && len(s.SelectedReview) == 0 {
+	if len(s.WakeDue) == 0 && len(s.WakePending) == 0 && len(s.SelectedReady) == 0 && len(s.SelectedReview) == 0 {
 		lines = append(lines, "- no immediate next action")
 	}
 	return strings.Join(lines, "\n") + "\n"
