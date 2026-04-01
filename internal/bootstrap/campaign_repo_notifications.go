@@ -78,9 +78,6 @@ func newSummaryBlockedEvents(campaignID string, previous map[string]string, summ
 			continue
 		}
 		reason := strings.TrimSpace(task.BlockedReason)
-		if reason == "" {
-			continue
-		}
 		if strings.TrimSpace(previous[task.TaskID]) == reason {
 			continue
 		}
@@ -101,13 +98,112 @@ func newSummaryBlockedEvents(campaignID string, previous map[string]string, summ
 	return events
 }
 
+func newSummaryRecoveredEvents(campaignID string, previous map[string]string, summary campaignrepo.Summary) []campaignrepo.ReconcileEvent {
+	if len(previous) == 0 {
+		return nil
+	}
+	current := currentNotifiedBlockedTasks(summary)
+	var events []campaignrepo.ReconcileEvent
+	for taskID, reason := range previous {
+		taskID = strings.TrimSpace(taskID)
+		reason = strings.TrimSpace(reason)
+		if taskID == "" || !shouldNotifySummaryBlockedReason(reason) {
+			continue
+		}
+		if _, stillBlocked := current[taskID]; stillBlocked {
+			continue
+		}
+		taskTitle := ""
+		taskStatus := ""
+		if task, ok := lookupSummaryTask(summary, taskID); ok {
+			taskTitle = strings.TrimSpace(task.Title)
+			taskStatus = strings.TrimSpace(task.Status)
+		}
+		detail := fmt.Sprintf("任务 **%s** 先前触发告警的 runtime blocker 已不再出现在最新报告中，旧失败通知已被覆盖。\n\n**先前原因**: %s", taskID, reason)
+		if taskTitle != "" {
+			detail = fmt.Sprintf("任务 **%s** %s 先前触发告警的 runtime blocker 已不再出现在最新报告中，旧失败通知已被覆盖。\n\n**先前原因**: %s", taskID, taskTitle, reason)
+		}
+		if taskStatus != "" {
+			detail += fmt.Sprintf("\n\n**当前状态**: %s", taskStatus)
+		}
+		events = append(events, campaignrepo.ReconcileEvent{
+			Kind:       campaignrepo.EventTaskRecovered,
+			CampaignID: campaignID,
+			TaskID:     taskID,
+			Title:      "先前阻塞已恢复",
+			Detail:     detail,
+			Severity:   "success",
+		})
+	}
+	return events
+}
+
 func shouldNotifySummaryBlockedTask(task campaignrepo.TaskSummary) bool {
 	switch task.Status {
 	case campaignrepo.TaskStatusExecuting, campaignrepo.TaskStatusReviewing, campaignrepo.TaskStatusReviewPending, campaignrepo.TaskStatusBlocked:
-		return true
+		return shouldNotifySummaryBlockedReason(task.BlockedReason)
 	default:
 		return false
 	}
+}
+
+func shouldNotifySummaryBlockedReason(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	switch {
+	case reason == "":
+		return false
+	case strings.HasPrefix(reason, "dependency `"):
+		return false
+	case strings.HasPrefix(reason, "missing dependency `"):
+		return false
+	case strings.Contains(reason, "accepted but not integrated yet"):
+		return false
+	case strings.Contains(reason, "leased to `"):
+		return false
+	case strings.Contains(reason, "write scope overlaps with `"):
+		return false
+	default:
+		return true
+	}
+}
+
+func currentNotifiedBlockedTasks(summary campaignrepo.Summary) map[string]campaignrepo.TaskSummary {
+	if len(summary.BlockedTasks) == 0 {
+		return nil
+	}
+	current := make(map[string]campaignrepo.TaskSummary, len(summary.BlockedTasks))
+	for _, task := range summary.BlockedTasks {
+		if !shouldNotifySummaryBlockedTask(task) {
+			continue
+		}
+		current[strings.TrimSpace(task.TaskID)] = task
+	}
+	return current
+}
+
+func lookupSummaryTask(summary campaignrepo.Summary, taskID string) (campaignrepo.TaskSummary, bool) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return campaignrepo.TaskSummary{}, false
+	}
+	for _, group := range [][]campaignrepo.TaskSummary{
+		summary.ActiveTasks,
+		summary.ReadyTasks,
+		summary.SelectedReady,
+		summary.ReviewPendingTasks,
+		summary.SelectedReview,
+		summary.AcceptedTasks,
+		summary.BlockedTasks,
+		summary.WakePending,
+		summary.WakeDue,
+	} {
+		for _, task := range group {
+			if strings.TrimSpace(task.TaskID) == taskID {
+				return task, true
+			}
+		}
+	}
+	return campaignrepo.TaskSummary{}, false
 }
 
 func (b *connectorRuntimeBuilder) sendCampaignNotifications(item campaign.Campaign, events []campaignrepo.ReconcileEvent) {
@@ -126,6 +222,9 @@ func (b *connectorRuntimeBuilder) sendCampaignNotifications(item campaign.Campai
 	defer cancel()
 	urgentRecipients := campaignUrgentRecipientOpenIDs(item)
 	for _, event := range events {
+		if !shouldSendCampaignEvent(event) {
+			continue
+		}
 		title := campaignEventCardTitle(item.Title, item.ID, event)
 		cardContent, err := buildCampaignEventCard(title, event)
 		if err != nil {
@@ -153,6 +252,15 @@ func (b *connectorRuntimeBuilder) sendCampaignNotifications(item campaign.Campai
 			}
 			b.sendCampaignUrgentDirectMessage(ctx, item, target.Route.ReceiveIDType, target.Route.ReceiveID, event, title, urgentRecipients)
 		}
+	}
+}
+
+func shouldSendCampaignEvent(event campaignrepo.ReconcileEvent) bool {
+	switch event.Kind {
+	case campaignrepo.EventTaskRetrying:
+		return false
+	default:
+		return true
 	}
 }
 

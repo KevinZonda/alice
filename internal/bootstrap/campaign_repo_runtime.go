@@ -118,6 +118,7 @@ func (b *connectorRuntimeBuilder) reconcileCampaignRepo(item campaign.Campaign, 
 	completionEvent, shouldNotifyCompletion := newCampaignCompletedEvent(item, result.Summary)
 	events := append([]campaignrepo.ReconcileEvent(nil), result.Events...)
 	events = append(events, newSummaryBlockedEvents(item.ID, previousBlockedReasons, result.Summary)...)
+	events = append(events, newSummaryRecoveredEvents(item.ID, previousBlockedReasons, result.Summary)...)
 	if len(events) > 0 {
 		b.sendCampaignNotifications(item, events)
 	}
@@ -695,8 +696,12 @@ func validateCampaignRepoTaskCompletion(item campaign.Campaign, task automation.
 			title = "执行收尾校验失败，任务阻塞"
 			detail = fmt.Sprintf("任务 **%s** executor 回合结束后未通过状态校验，且指导预算已耗尽，已进入真正阻塞状态。\n\n**问题**:\n%s", target.TaskID, reason)
 		}
+		kind := campaignrepo.EventTaskBlocked
+		if outcome.GuidanceRequested {
+			kind = campaignrepo.EventTaskRetrying
+		}
 		return campaignrepo.ReconcileEvent{
-			Kind:       campaignrepo.EventTaskBlocked,
+			Kind:       kind,
 			CampaignID: item.ID,
 			TaskID:     target.TaskID,
 			Title:      title,

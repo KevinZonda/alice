@@ -560,7 +560,7 @@ func requeueBlockedTasksForReviewerGuidance(repo *Repository, campaignID string)
 		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
 		taskTitle := strings.TrimSpace(task.Frontmatter.Title)
 		events = append(events, ReconcileEvent{
-			Kind:       EventTaskBlocked,
+			Kind:       EventTaskRetrying,
 			CampaignID: campaignID,
 			TaskID:     taskID,
 			Title:      "任务遇到阻塞，转评审指导",

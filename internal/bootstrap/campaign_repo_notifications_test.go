@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Alice-space/alice/internal/campaign"
@@ -25,8 +26,20 @@ func TestShouldEscalateCampaignEvent_OnlyTaskBlocked(t *testing.T) {
 	if !shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskBlocked}) {
 		t.Fatal("expected task_blocked to trigger urgent escalation")
 	}
+	if shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskRetrying}) {
+		t.Fatal("did not expect task_retrying to trigger urgent escalation")
+	}
 	if shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskDispatched}) {
 		t.Fatal("did not expect task_dispatched to trigger urgent escalation")
+	}
+}
+
+func TestShouldSendCampaignEvent_SuppressesRetrying(t *testing.T) {
+	if shouldSendCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskRetrying}) {
+		t.Fatal("did not expect task_retrying to be sent to chat")
+	}
+	if !shouldSendCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskRecovered}) {
+		t.Fatal("expected task_recovered to be sent to chat")
 	}
 }
 
@@ -295,5 +308,42 @@ func TestNewSummaryBlockedEvents_SuppressesRepeatedReason(t *testing.T) {
 	}, summary)
 	if len(events) != 0 {
 		t.Fatalf("expected repeated blocker reason to be suppressed, got %+v", events)
+	}
+}
+
+func TestNewSummaryRecoveredEvents_EmitsRecoveredWhenRuntimeBlockerClears(t *testing.T) {
+	summary := campaignrepo.Summary{
+		ReviewPendingTasks: []campaignrepo.TaskSummary{
+			{
+				TaskID: "T203",
+				Title:  "Retry PMTSim",
+				Status: campaignrepo.TaskStatusReviewPending,
+			},
+		},
+	}
+
+	events := newSummaryRecoveredEvents("camp_demo", map[string]string{
+		"T203": "task T203 declared working_branches repo-a:feat but none exist in target_repos local_path",
+	}, summary)
+	if len(events) != 1 {
+		t.Fatalf("expected one recovered event, got %+v", events)
+	}
+	if events[0].Kind != campaignrepo.EventTaskRecovered {
+		t.Fatalf("expected task_recovered event, got %+v", events[0])
+	}
+	if events[0].TaskID != "T203" {
+		t.Fatalf("expected T203 recovery event, got %+v", events[0])
+	}
+	if !strings.Contains(events[0].Detail, "旧失败通知已被覆盖") {
+		t.Fatalf("expected superseded detail, got %q", events[0].Detail)
+	}
+}
+
+func TestNewSummaryRecoveredEvents_IgnoresPreviousDependencyBlockers(t *testing.T) {
+	events := newSummaryRecoveredEvents("camp_demo", map[string]string{
+		"T201": "dependency `T102` not done yet",
+	}, campaignrepo.Summary{})
+	if len(events) != 0 {
+		t.Fatalf("expected dependency blocker recovery to stay silent, got %+v", events)
 	}
 }

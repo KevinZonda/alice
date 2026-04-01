@@ -81,6 +81,7 @@ func (b *connectorRuntimeBuilder) handleBlockedSignal(item campaign.Campaign, re
 	}
 	title := "任务阻塞"
 	detail := fmt.Sprintf("任务 **%s** 遇到阻塞，无法继续执行。\n\n**原因**: %s", taskID, reason)
+	kind := campaignrepo.EventTaskBlocked
 	if repoPath != "" && taskID != "" {
 		outcome, err := campaignrepo.HandleTaskBlocked(repoPath, taskID, reason)
 		if err != nil {
@@ -88,13 +89,14 @@ func (b *connectorRuntimeBuilder) handleBlockedSignal(item campaign.Campaign, re
 		} else if outcome.GuidanceRequested {
 			title = "任务遇到阻塞，转评审指导"
 			detail = fmt.Sprintf("任务 **%s** 遇到阻塞，已转 reviewer 指导（第 %d/%d 次）。\n\n**原因**: %s", taskID, outcome.GuidanceAttempt, 3, outcome.Reason)
+			kind = campaignrepo.EventTaskRetrying
 		} else if outcome.TerminalBlocked {
 			title = "任务阻塞"
 			detail = fmt.Sprintf("任务 **%s** 多次阻塞后仍未恢复，已进入真正阻塞状态。\n\n**原因**: %s", taskID, outcome.Reason)
 		}
 	}
 	b.sendCampaignSignalNotification(item, campaignrepo.ReconcileEvent{
-		Kind:       campaignrepo.EventTaskBlocked,
+		Kind:       kind,
 		CampaignID: item.ID,
 		TaskID:     taskID,
 		Title:      title,
