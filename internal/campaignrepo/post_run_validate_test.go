@@ -348,3 +348,134 @@ func TestLatestRelevantReview_IgnoresNonReviewerArtifacts(t *testing.T) {
 		t.Fatalf("expected valid reviewer review to win, got %s", chosen.Path)
 	}
 }
+
+func TestRunPlanSelfCheck_PersistsPlannerReviewerFailureProofForApproveWithConcerns(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+plan_round: 2
+plan_status: plan_review_pending
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship planning"
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Planner task"
+phase: P01
+status: draft
+target_repos: []
+write_scope:
+  - campaign:phases/P01/tasks/T001/**
+executor:
+  role: executor
+  workflow: code_army
+reviewer:
+  role: reviewer
+  workflow: code_army
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "proposals", "round-002-plan.md"), `---
+proposal_id: "plan-r2"
+plan_round: 2
+status: submitted
+---
+
+# Plan Proposal
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
+status: draft
+human_approved: false
+---
+
+# Master Plan
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "reviews", "round-002-review.md"), `---
+review_id: "plan-review-r2"
+plan_round: 2
+reviewer:
+  role: planner_reviewer
+  workflow: code_army
+verdict: approve
+blocking: false
+created_at: "2026-04-01T10:30:00+08:00"
+---
+
+# Plan Review
+
+## Summary
+- mostly ready
+
+## Findings
+- one remaining issue
+
+## Concerns
+- still needs a human boundary check
+
+## Conclusion
+- approve
+`)
+
+	checkedAt := time.Date(2026, 4, 1, 10, 35, 0, 0, time.FixedZone("CST", 8*3600))
+	validation, err := RunPlanSelfCheck(root, DispatchKindPlannerReviewer, 2, checkedAt)
+	if err != nil {
+		t.Fatalf("run plan self-check failed: %v", err)
+	}
+	if validation.Valid {
+		t.Fatal("expected approve-with-concerns review to fail planner reviewer self-check")
+	}
+	found := false
+	for _, issue := range validation.Issues {
+		if issue.Code == "plan_review_approve_has_concerns" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected strict approve issue, got %+v", validation.Issues)
+	}
+
+	repo, err := Load(root)
+	if err != nil {
+		t.Fatalf("reload repo failed: %v", err)
+	}
+	if repo.Campaign.Frontmatter.PlannerReviewerSelfCheckRound != 2 {
+		t.Fatalf("unexpected planner reviewer self-check round: %d", repo.Campaign.Frontmatter.PlannerReviewerSelfCheckRound)
+	}
+	if repo.Campaign.Frontmatter.PlannerReviewerSelfCheckStatus != taskSelfCheckStatusFailed {
+		t.Fatalf("unexpected planner reviewer self-check status: %q", repo.Campaign.Frontmatter.PlannerReviewerSelfCheckStatus)
+	}
+	if repo.Campaign.Frontmatter.PlannerReviewerSelfCheckAtRaw != checkedAt.Format(time.RFC3339) {
+		t.Fatalf("unexpected planner reviewer self-check timestamp: %q", repo.Campaign.Frontmatter.PlannerReviewerSelfCheckAtRaw)
+	}
+}

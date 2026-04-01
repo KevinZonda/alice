@@ -19,6 +19,18 @@ type markdownFrontmatterResult struct {
 	Found       bool
 }
 
+func loadIssue(code, root, path string, message string) ValidationIssue {
+	relPath := strings.TrimSpace(path)
+	if strings.TrimSpace(root) != "" && strings.TrimSpace(path) != "" {
+		relPath = relativePath(root, path)
+	}
+	return ValidationIssue{
+		Code:    strings.TrimSpace(code),
+		Path:    filepath.ToSlash(relPath),
+		Message: strings.TrimSpace(message),
+	}
+}
+
 func loadCampaignDocument(path, root string) (CampaignDocument, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -45,6 +57,20 @@ func loadCampaignDocument(path, root string) (CampaignDocument, error) {
 	frontmatter.SourceRepos = normalizeStringList(frontmatter.SourceRepos)
 	frontmatter.ReviewMode = strings.TrimSpace(frontmatter.ReviewMode)
 	frontmatter.ReportMode = strings.TrimSpace(frontmatter.ReportMode)
+	if frontmatter.PlanRound < 0 {
+		frontmatter.PlanRound = 0
+	}
+	frontmatter.PlanStatus = normalizePlanStatus(frontmatter.PlanStatus)
+	if frontmatter.PlannerSelfCheckRound < 0 {
+		frontmatter.PlannerSelfCheckRound = 0
+	}
+	frontmatter.PlannerSelfCheckStatus = normalizeTaskSelfCheckStatus(frontmatter.PlannerSelfCheckStatus)
+	frontmatter.PlannerSelfCheckAtRaw = strings.TrimSpace(frontmatter.PlannerSelfCheckAtRaw)
+	if frontmatter.PlannerReviewerSelfCheckRound < 0 {
+		frontmatter.PlannerReviewerSelfCheckRound = 0
+	}
+	frontmatter.PlannerReviewerSelfCheckStatus = normalizeTaskSelfCheckStatus(frontmatter.PlannerReviewerSelfCheckStatus)
+	frontmatter.PlannerReviewerSelfCheckAtRaw = strings.TrimSpace(frontmatter.PlannerReviewerSelfCheckAtRaw)
 	return CampaignDocument{
 		Path:        relativePath(root, path),
 		Body:        parsed.Body,
@@ -52,22 +78,29 @@ func loadCampaignDocument(path, root string) (CampaignDocument, error) {
 	}, nil
 }
 
-func loadPhaseDocuments(root string) ([]PhaseDocument, error) {
+func loadPhaseDocuments(root string) ([]PhaseDocument, []ValidationIssue, error) {
 	matches, err := filepath.Glob(filepath.Join(root, "phases", "*", "phase.md"))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	phases := make([]PhaseDocument, 0, len(matches))
+	var issues []ValidationIssue
 	for _, path := range matches {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, err
+			return nil, issues, err
 		}
 		parsed := parseMarkdownFrontmatter(string(raw))
 		var frontmatter PhaseFrontmatter
 		if parsed.Found {
 			if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-				return nil, fmt.Errorf("parse phase frontmatter %s: %w", path, err)
+				issues = append(issues, loadIssue(
+					"phase_frontmatter_invalid",
+					root,
+					path,
+					fmt.Sprintf("phase frontmatter parse failed: %v", err),
+				))
+				continue
 			}
 		}
 		frontmatter.Phase = strings.TrimSpace(frontmatter.Phase)
@@ -83,11 +116,12 @@ func loadPhaseDocuments(root string) ([]PhaseDocument, error) {
 		})
 	}
 	sort.Slice(phases, func(i, j int) bool { return phases[i].Path < phases[j].Path })
-	return phases, nil
+	return phases, issues, nil
 }
 
-func loadTaskDocuments(root string) ([]TaskDocument, error) {
+func loadTaskDocuments(root string) ([]TaskDocument, []ValidationIssue, error) {
 	var tasks []TaskDocument
+	var issues []ValidationIssue
 	err := filepath.WalkDir(filepath.Join(root, "phases"), func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -119,7 +153,13 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		}
 		var frontmatter TaskFrontmatter
 		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-			return fmt.Errorf("parse task frontmatter %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"task_frontmatter_invalid",
+				root,
+				path,
+				fmt.Sprintf("task frontmatter parse failed: %v", err),
+			))
+			return nil
 		}
 		frontmatter.TaskID = strings.TrimSpace(frontmatter.TaskID)
 		if frontmatter.TaskID == "" {
@@ -165,11 +205,23 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		frontmatter.ResultPaths = normalizeStringList(frontmatter.ResultPaths)
 		leaseUntil, err := parseFlexibleTime(frontmatter.LeaseUntilRaw)
 		if err != nil {
-			return fmt.Errorf("parse lease_until %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"task_lease_until_invalid",
+				root,
+				path,
+				fmt.Sprintf("task lease_until parse failed: %v", err),
+			))
+			return nil
 		}
 		wakeAt, err := parseFlexibleTime(frontmatter.WakeAtRaw)
 		if err != nil {
-			return fmt.Errorf("parse wake_at %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"task_wake_at_invalid",
+				root,
+				path,
+				fmt.Sprintf("task wake_at parse failed: %v", err),
+			))
+			return nil
 		}
 		taskDirRel := relativeTaskDir(root, path, frontmatter)
 		contextPath := filepath.ToSlash(filepath.Join(taskDirRel, "context.md"))
@@ -213,10 +265,10 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, issues, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	sort.Slice(tasks, func(i, j int) bool {
 		if tasks[i].Frontmatter.Phase != tasks[j].Frontmatter.Phase {
@@ -227,11 +279,12 @@ func loadTaskDocuments(root string) ([]TaskDocument, error) {
 		}
 		return tasks[i].Path < tasks[j].Path
 	})
-	return tasks, nil
+	return tasks, issues, nil
 }
 
-func loadReviewDocuments(root string) ([]ReviewDocument, error) {
+func loadReviewDocuments(root string) ([]ReviewDocument, []ValidationIssue, error) {
 	var reviews []ReviewDocument
+	var issues []ValidationIssue
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -259,7 +312,13 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 		}
 		var frontmatter ReviewFrontmatter
 		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-			return fmt.Errorf("parse review frontmatter %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"review_frontmatter_invalid",
+				root,
+				path,
+				fmt.Sprintf("review frontmatter parse failed: %v", err),
+			))
+			return nil
 		}
 		frontmatter.ReviewID = strings.TrimSpace(frontmatter.ReviewID)
 		frontmatter.TargetTask = strings.TrimSpace(frontmatter.TargetTask)
@@ -275,7 +334,13 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 		frontmatter.CreatedAtRaw = strings.TrimSpace(frontmatter.CreatedAtRaw)
 		createdAt, err := parseFlexibleTime(frontmatter.CreatedAtRaw)
 		if err != nil {
-			return fmt.Errorf("parse review created_at %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"review_created_at_invalid",
+				root,
+				path,
+				fmt.Sprintf("review created_at parse failed: %v", err),
+			))
+			return nil
 		}
 		if createdAt.IsZero() {
 			if info, statErr := os.Stat(path); statErr == nil {
@@ -293,10 +358,10 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, issues, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	sort.Slice(reviews, func(i, j int) bool {
 		left := reviews[i]
@@ -312,11 +377,12 @@ func loadReviewDocuments(root string) ([]ReviewDocument, error) {
 		}
 		return left.Path < right.Path
 	})
-	return reviews, nil
+	return reviews, issues, nil
 }
 
-func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, error) {
+func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, []ValidationIssue, error) {
 	var docs []SourceRepoDocument
+	var issues []ValidationIssue
 	err := filepath.WalkDir(filepath.Join(root, "repos"), func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -340,7 +406,13 @@ func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, error) {
 		}
 		var frontmatter SourceRepoFrontmatter
 		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-			return fmt.Errorf("parse source repo frontmatter %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"source_repo_frontmatter_invalid",
+				root,
+				path,
+				fmt.Sprintf("source repo frontmatter parse failed: %v", err),
+			))
+			return nil
 		}
 		frontmatter.RepoID = strings.TrimSpace(frontmatter.RepoID)
 		frontmatter.RemoteURL = strings.TrimSpace(frontmatter.RemoteURL)
@@ -360,10 +432,10 @@ func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, error) {
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, issues, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	sort.Slice(docs, func(i, j int) bool {
 		if docs[i].Frontmatter.RepoID != docs[j].Frontmatter.RepoID {
@@ -371,7 +443,7 @@ func loadSourceRepoDocuments(root string) ([]SourceRepoDocument, error) {
 		}
 		return docs[i].Path < docs[j].Path
 	})
-	return docs, nil
+	return docs, issues, nil
 }
 
 func parseMarkdownFrontmatter(raw string) markdownFrontmatterResult {
@@ -467,8 +539,9 @@ func normalizeCompactTimeOffset(raw string) string {
 	return raw[:len(raw)-2] + ":" + raw[len(raw)-2:]
 }
 
-func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, error) {
+func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, []ValidationIssue, error) {
 	var proposals []PlanProposalDocument
+	var issues []ValidationIssue
 	err := filepath.WalkDir(filepath.Join(root, "plans", "proposals"), func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -492,7 +565,13 @@ func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, error) {
 		}
 		var frontmatter PlanProposalFrontmatter
 		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-			return fmt.Errorf("parse plan proposal frontmatter %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"plan_proposal_frontmatter_invalid",
+				root,
+				path,
+				fmt.Sprintf("plan proposal frontmatter parse failed: %v", err),
+			))
+			return nil
 		}
 		frontmatter.ProposalID = strings.TrimSpace(frontmatter.ProposalID)
 		frontmatter.Status = strings.ToLower(strings.TrimSpace(frontmatter.Status))
@@ -507,10 +586,10 @@ func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, error) {
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, issues, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	sort.Slice(proposals, func(i, j int) bool {
 		if proposals[i].Frontmatter.PlanRound != proposals[j].Frontmatter.PlanRound {
@@ -518,11 +597,12 @@ func loadPlanProposalDocuments(root string) ([]PlanProposalDocument, error) {
 		}
 		return proposals[i].Path < proposals[j].Path
 	})
-	return proposals, nil
+	return proposals, issues, nil
 }
 
-func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
+func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, []ValidationIssue, error) {
 	var reviews []PlanReviewDocument
+	var issues []ValidationIssue
 	err := filepath.WalkDir(filepath.Join(root, "plans", "reviews"), func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -546,7 +626,13 @@ func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
 		}
 		var frontmatter PlanReviewFrontmatter
 		if err := yaml.Unmarshal([]byte(parsed.Frontmatter), &frontmatter); err != nil {
-			return fmt.Errorf("parse plan review frontmatter %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"plan_review_frontmatter_invalid",
+				root,
+				path,
+				fmt.Sprintf("plan review frontmatter parse failed: %v", err),
+			))
+			return nil
 		}
 		frontmatter.ReviewID = strings.TrimSpace(frontmatter.ReviewID)
 		frontmatter.Reviewer = normalizeRoleConfig(frontmatter.Reviewer)
@@ -557,7 +643,13 @@ func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
 		}
 		createdAt, err := parseFlexibleTime(frontmatter.CreatedAtRaw)
 		if err != nil {
-			return fmt.Errorf("parse plan review created_at %s: %w", path, err)
+			issues = append(issues, loadIssue(
+				"plan_review_created_at_invalid",
+				root,
+				path,
+				fmt.Sprintf("plan review created_at parse failed: %v", err),
+			))
+			return nil
 		}
 		if createdAt.IsZero() {
 			if info, statErr := os.Stat(path); statErr == nil {
@@ -573,10 +665,10 @@ func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
 		return nil
 	})
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, issues, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, issues, err
 	}
 	sort.Slice(reviews, func(i, j int) bool {
 		if reviews[i].Frontmatter.PlanRound != reviews[j].Frontmatter.PlanRound {
@@ -587,7 +679,7 @@ func loadPlanReviewDocuments(root string) ([]PlanReviewDocument, error) {
 		}
 		return reviews[i].Path < reviews[j].Path
 	})
-	return reviews, nil
+	return reviews, issues, nil
 }
 
 func relativePath(root, path string) string {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,14 +36,15 @@ func newRuntimeCampaignRepoScanCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, summary, err := campaignrepo.ScanFromPath(item.CampaignRepoPath, currentTime(), item.MaxParallelTrials)
+			repo, summary, err := campaignrepo.ScanFromPath(item.CampaignRepoPath, currentTime(), item.MaxParallelTrials)
 			if err != nil {
 				return err
 			}
 			return printRuntimeJSON(map[string]any{
-				"status":   "ok",
-				"campaign": item,
-				"summary":  summary,
+				"status":            "ok",
+				"campaign":          item,
+				"summary":           summary,
+				"repository_issues": repo.LoadIssues,
 			})
 		}),
 	}
@@ -121,6 +123,56 @@ func newRuntimeCampaignTaskSelfCheckCmd() *cobra.Command {
 				"campaign":   item,
 				"task_id":    taskID,
 				"kind":       kind,
+				"validation": validation,
+			}
+			if !validation.Valid {
+				payload["status"] = "invalid"
+				if printErr := printRuntimeJSON(payload); printErr != nil {
+					return printErr
+				}
+				return validation.Error()
+			}
+			return printRuntimeJSON(payload)
+		}),
+	}
+}
+
+func newRuntimeCampaignPlanSelfCheckCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "plan-self-check CAMPAIGN_ID planner|planner_reviewer PLAN_ROUND",
+		Short: "Run post-run self-check for one planner/planner-reviewer round",
+		Args:  cobra.ExactArgs(3),
+		RunE: withRuntimeClient(func(
+			ctx context.Context,
+			client *runtimeapi.Client,
+			session mcpbridge.SessionContext,
+			_ *cobra.Command,
+			args []string,
+		) error {
+			item, err := loadRuntimeCampaign(ctx, client, session, args[0])
+			if err != nil {
+				return err
+			}
+			kind := campaignrepo.DispatchKind(strings.ToLower(strings.TrimSpace(args[1])))
+			switch kind {
+			case campaignrepo.DispatchKindPlanner, campaignrepo.DispatchKindPlannerReviewer:
+			default:
+				return fmt.Errorf("kind must be %q or %q", campaignrepo.DispatchKindPlanner, campaignrepo.DispatchKindPlannerReviewer)
+			}
+			round, err := strconv.Atoi(strings.TrimSpace(args[2]))
+			if err != nil || round <= 0 {
+				return errors.New("plan round must be a positive integer")
+			}
+
+			validation, err := campaignrepo.RunPlanSelfCheck(item.CampaignRepoPath, kind, round, currentTime())
+			if err != nil {
+				return err
+			}
+			payload := map[string]any{
+				"status":     "ok",
+				"campaign":   item,
+				"kind":       kind,
+				"plan_round": round,
 				"validation": validation,
 			}
 			if !validation.Valid {

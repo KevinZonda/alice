@@ -331,6 +331,96 @@ created_at: "2026-03-28T14:57:39+0800"
 	}
 }
 
+func TestLoad_FailSoftOnInvalidPlanReviewFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+plan_round: 1
+plan_status: plan_review_pending
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "proposals", "round-001-plan.md"), `---
+proposal_id: "plan-r1"
+plan_round: 1
+status: submitted
+---
+
+# Plan Proposal
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
+status: draft
+human_approved: false
+---
+
+# Master Plan
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "reviews", "round-001-review.md"), `---
+review_id: "plan-review-r1"
+plan_round: 1
+reviewer:
+  role: planner_reviewer
+verdict: concern
+blocking: []
+created_at: "2026-04-01T10:30:00+08:00"
+---
+`)
+
+	repo, err := Load(root)
+	if err != nil {
+		t.Fatalf("expected fail-soft load, got error: %v", err)
+	}
+	if len(repo.LoadIssues) != 1 || repo.LoadIssues[0].Code != "plan_review_frontmatter_invalid" {
+		t.Fatalf("expected plan review load issue, got %+v", repo.LoadIssues)
+	}
+	if len(repo.PlanReviews) != 0 {
+		t.Fatalf("expected invalid plan review to be skipped, got %+v", repo.PlanReviews)
+	}
+
+	summary := Summarize(repo, time.Date(2026, 4, 1, 10, 33, 0, 0, time.FixedZone("CST", 8*3600)), 2)
+	if summary.RepositoryIssueCount != 1 {
+		t.Fatalf("expected repository_issue_count=1, got %d", summary.RepositoryIssueCount)
+	}
+	report := summary.LiveReportMarkdown()
+	if !strings.Contains(report, "plan_review_frontmatter_invalid") {
+		t.Fatalf("expected live report to mention repository issue, got %s", report)
+	}
+	if strings.Contains(report, "no immediate next action") {
+		t.Fatalf("expected repository issue to suppress empty next action, got %s", report)
+	}
+}
+
 func TestReconcileFromPathClaimsExecutorAndReviewer(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, 3, 24, 11, 0, 0, 0, time.FixedZone("CST", 8*3600))

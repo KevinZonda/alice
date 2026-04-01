@@ -31,5 +31,8 @@ Campaign ID: {{ .CampaignID }}。
 - phase 设计里要让 reviewer 看得出依赖链和可并行组，避免把大目标直接压成少数几个笼统 task。
 - 标准 executor / reviewer block 统一使用 `workflow: code_army`。除非确实要做局部 override，否则 task / review 的角色块只保留 `role` + `workflow`。不要往 `campaign.md` 里加入 `default_*`。
 - 不要修改 source repo、`campaign.md` 或 `reports/live-report.md`。
-- 运行 `alice-code-army repo-lint {{ .CampaignID }}` 或 `$ALICE_RUNTIME_BIN runtime campaigns repo-lint {{ .CampaignID }}`，修完 lint 失败后再结束。
+- 运行 `alice-code-army repo-lint {{ .CampaignID }}` 或 `$ALICE_RUNTIME_BIN runtime campaigns repo-lint {{ .CampaignID }}`；如果 lint 失败，先修 proposal / master-plan / phase / task package，再重新运行，直到通过。
+- 在结束本轮前，必须运行一次收尾自检命令并确认退出码为 0；如果失败，先修 planner 产物，再重复运行，直到通过。自检命令：
+  `{{ .SelfCheckCommand }}`
+- 不要先跑 lint / self-check 再写最终文件；必须在所有 planner 文件落盘后，重新跑最后一次 lint 和 self-check。
 - 最终给一条简短中文公开总结，说明本轮细化了哪些 phase / task、解决了哪些 lint 问题、还剩什么主要风险。

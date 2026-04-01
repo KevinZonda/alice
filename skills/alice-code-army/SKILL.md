@@ -185,6 +185,8 @@ task frontmatter 现在默认带两类角色：
   `"$CODE_ARMY_SH" repo-reconcile camp_xxx`
 - 对单个 executor / reviewer 回合做收尾自检；命令会回写 `self_check_*` 证明，且只有返回 0 才表示这轮可以合法结束：
   `"$CODE_ARMY_SH" task-self-check camp_xxx T001 executor`
+- 对单个 planner / planner reviewer 回合做收尾自检；命令会回写 campaign-level self-check 证明，且只有返回 0 才表示这一轮规划产物可以合法结束：
+  `"$CODE_ARMY_SH" plan-self-check camp_xxx planner 2`
 - 查看单个 campaign：
   `"$CODE_ARMY_SH" get camp_xxx`
 - Patch campaign：

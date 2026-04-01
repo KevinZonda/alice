@@ -9,6 +9,7 @@ const (
 	EventPlanReviewVerdict    ReconcileEventKind = "plan_review_verdict"
 	EventHumanApprovalNeeded  ReconcileEventKind = "human_approval_needed"
 	EventPlanApproved         ReconcileEventKind = "plan_approved"
+	EventPlanningBlocked      ReconcileEventKind = "planning_blocked"
 	EventTaskDispatched       ReconcileEventKind = "task_dispatched"
 	EventTaskIntegrated       ReconcileEventKind = "task_integrated"
 	EventReviewVerdictApplied ReconcileEventKind = "review_verdict_applied"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -49,19 +50,25 @@ type CampaignDocument struct {
 }
 
 type CampaignFrontmatter struct {
-	CampaignID        string   `yaml:"campaign_id" json:"campaign_id,omitempty"`
-	Title             string   `yaml:"title" json:"title,omitempty"`
-	Objective         string   `yaml:"objective" json:"objective,omitempty"`
-	Status            string   `yaml:"status,omitempty" json:"status,omitempty"`
-	CampaignRepoPath  string   `yaml:"campaign_repo_path" json:"campaign_repo_path,omitempty"`
-	CurrentPhase      string   `yaml:"current_phase" json:"current_phase,omitempty"`
-	CurrentDirection  string   `yaml:"current_direction" json:"current_direction,omitempty"`
-	CurrentWinnerTask string   `yaml:"current_winner_task" json:"current_winner_task,omitempty"`
-	SourceRepos       []string `yaml:"source_repos" json:"source_repos,omitempty"`
-	ReviewMode        string   `yaml:"review_mode" json:"review_mode,omitempty"`
-	ReportMode        string   `yaml:"report_mode" json:"report_mode,omitempty"`
-	PlanRound         int      `yaml:"plan_round" json:"plan_round,omitempty"`
-	PlanStatus        string   `yaml:"plan_status" json:"plan_status,omitempty"`
+	CampaignID                     string   `yaml:"campaign_id" json:"campaign_id,omitempty"`
+	Title                          string   `yaml:"title" json:"title,omitempty"`
+	Objective                      string   `yaml:"objective" json:"objective,omitempty"`
+	Status                         string   `yaml:"status,omitempty" json:"status,omitempty"`
+	CampaignRepoPath               string   `yaml:"campaign_repo_path" json:"campaign_repo_path,omitempty"`
+	CurrentPhase                   string   `yaml:"current_phase" json:"current_phase,omitempty"`
+	CurrentDirection               string   `yaml:"current_direction" json:"current_direction,omitempty"`
+	CurrentWinnerTask              string   `yaml:"current_winner_task" json:"current_winner_task,omitempty"`
+	SourceRepos                    []string `yaml:"source_repos" json:"source_repos,omitempty"`
+	ReviewMode                     string   `yaml:"review_mode" json:"review_mode,omitempty"`
+	ReportMode                     string   `yaml:"report_mode" json:"report_mode,omitempty"`
+	PlanRound                      int      `yaml:"plan_round" json:"plan_round,omitempty"`
+	PlanStatus                     string   `yaml:"plan_status" json:"plan_status,omitempty"`
+	PlannerSelfCheckRound          int      `yaml:"planner_self_check_round" json:"planner_self_check_round,omitempty"`
+	PlannerSelfCheckStatus         string   `yaml:"planner_self_check_status" json:"planner_self_check_status,omitempty"`
+	PlannerSelfCheckAtRaw          string   `yaml:"planner_self_check_at" json:"planner_self_check_at,omitempty"`
+	PlannerReviewerSelfCheckRound  int      `yaml:"planner_reviewer_self_check_round" json:"planner_reviewer_self_check_round,omitempty"`
+	PlannerReviewerSelfCheckStatus string   `yaml:"planner_reviewer_self_check_status" json:"planner_reviewer_self_check_status,omitempty"`
+	PlannerReviewerSelfCheckAtRaw  string   `yaml:"planner_reviewer_self_check_at" json:"planner_reviewer_self_check_at,omitempty"`
 }
 
 type PhaseDocument struct {
@@ -207,6 +214,7 @@ type Repository struct {
 	PlanProposals      []PlanProposalDocument `json:"plan_proposals,omitempty"`
 	PlanReviews        []PlanReviewDocument   `json:"plan_reviews,omitempty"`
 	ConfigRoleDefaults CampaignRoleDefaults   `json:"-"`
+	LoadIssues         []ValidationIssue      `json:"load_issues,omitempty"`
 }
 
 type TaskSummary struct {
@@ -242,41 +250,43 @@ type WakeTaskSpec struct {
 }
 
 type Summary struct {
-	Root                string         `json:"root"`
-	CampaignID          string         `json:"campaign_id,omitempty"`
-	CampaignTitle       string         `json:"campaign_title,omitempty"`
-	CurrentPhase        string         `json:"current_phase,omitempty"`
-	PlanRound           int            `json:"plan_round,omitempty"`
-	PlanStatus          string         `json:"plan_status,omitempty"`
-	MaxParallel         int            `json:"max_parallel"`
-	TaskCount           int            `json:"task_count"`
-	DraftCount          int            `json:"draft_count"`
-	ReadyCount          int            `json:"ready_count"`
-	ReworkCount         int            `json:"rework_count"`
-	SelectedReadyCount  int            `json:"selected_ready_count"`
-	ActiveCount         int            `json:"active_count"`
-	ExecutingCount      int            `json:"executing_count"`
-	ReviewCount         int            `json:"review_count"`
-	ReviewPendingCount  int            `json:"review_pending_count"`
-	ReviewingCount      int            `json:"reviewing_count"`
-	SelectedReviewCount int            `json:"selected_review_count"`
-	AcceptedCount       int            `json:"accepted_count"`
-	BlockedCount        int            `json:"blocked_count"`
-	WaitingCount        int            `json:"waiting_count"`
-	DoneCount           int            `json:"done_count"`
-	RejectedCount       int            `json:"rejected_count"`
-	GeneratedAt         time.Time      `json:"generated_at"`
-	ActiveTasks         []TaskSummary  `json:"active_tasks,omitempty"`
-	ReadyTasks          []TaskSummary  `json:"ready_tasks,omitempty"`
-	SelectedReady       []TaskSummary  `json:"selected_ready,omitempty"`
-	ReviewPendingTasks  []TaskSummary  `json:"review_pending_tasks,omitempty"`
-	SelectedReview      []TaskSummary  `json:"selected_review,omitempty"`
-	AcceptedTasks       []TaskSummary  `json:"accepted_tasks,omitempty"`
-	BlockedTasks        []TaskSummary  `json:"blocked_tasks,omitempty"`
-	WakePending         []TaskSummary  `json:"wake_pending,omitempty"`
-	WakeDue             []TaskSummary  `json:"wake_due,omitempty"`
-	WakeTasks           []WakeTaskSpec `json:"wake_tasks,omitempty"`
-	PhaseCounts         map[string]int `json:"phase_counts,omitempty"`
+	Root                 string            `json:"root"`
+	CampaignID           string            `json:"campaign_id,omitempty"`
+	CampaignTitle        string            `json:"campaign_title,omitempty"`
+	CurrentPhase         string            `json:"current_phase,omitempty"`
+	PlanRound            int               `json:"plan_round,omitempty"`
+	PlanStatus           string            `json:"plan_status,omitempty"`
+	MaxParallel          int               `json:"max_parallel"`
+	TaskCount            int               `json:"task_count"`
+	DraftCount           int               `json:"draft_count"`
+	ReadyCount           int               `json:"ready_count"`
+	ReworkCount          int               `json:"rework_count"`
+	SelectedReadyCount   int               `json:"selected_ready_count"`
+	ActiveCount          int               `json:"active_count"`
+	ExecutingCount       int               `json:"executing_count"`
+	ReviewCount          int               `json:"review_count"`
+	ReviewPendingCount   int               `json:"review_pending_count"`
+	ReviewingCount       int               `json:"reviewing_count"`
+	SelectedReviewCount  int               `json:"selected_review_count"`
+	AcceptedCount        int               `json:"accepted_count"`
+	BlockedCount         int               `json:"blocked_count"`
+	WaitingCount         int               `json:"waiting_count"`
+	DoneCount            int               `json:"done_count"`
+	RejectedCount        int               `json:"rejected_count"`
+	RepositoryIssueCount int               `json:"repository_issue_count"`
+	GeneratedAt          time.Time         `json:"generated_at"`
+	ActiveTasks          []TaskSummary     `json:"active_tasks,omitempty"`
+	ReadyTasks           []TaskSummary     `json:"ready_tasks,omitempty"`
+	SelectedReady        []TaskSummary     `json:"selected_ready,omitempty"`
+	ReviewPendingTasks   []TaskSummary     `json:"review_pending_tasks,omitempty"`
+	SelectedReview       []TaskSummary     `json:"selected_review,omitempty"`
+	AcceptedTasks        []TaskSummary     `json:"accepted_tasks,omitempty"`
+	BlockedTasks         []TaskSummary     `json:"blocked_tasks,omitempty"`
+	WakePending          []TaskSummary     `json:"wake_pending,omitempty"`
+	WakeDue              []TaskSummary     `json:"wake_due,omitempty"`
+	WakeTasks            []WakeTaskSpec    `json:"wake_tasks,omitempty"`
+	PhaseCounts          map[string]int    `json:"phase_counts,omitempty"`
+	RepositoryIssues     []ValidationIssue `json:"repository_issues,omitempty"`
 }
 
 func Load(root string) (Repository, error) {
@@ -304,30 +314,46 @@ func Load(root string) (Repository, error) {
 	if repo.Campaign.Frontmatter.CampaignRepoPath == "" {
 		repo.Campaign.Frontmatter.CampaignRepoPath = absRoot
 	}
-	repo.Phases, err = loadPhaseDocuments(absRoot)
+	var loadIssues []ValidationIssue
+	repo.Phases, loadIssues, err = loadPhaseDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
-	repo.Tasks, err = loadTaskDocuments(absRoot)
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	repo.Tasks, loadIssues, err = loadTaskDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
-	repo.Reviews, err = loadReviewDocuments(absRoot)
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	repo.Reviews, loadIssues, err = loadReviewDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
-	repo.SourceRepos, err = loadSourceRepoDocuments(absRoot)
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	repo.SourceRepos, loadIssues, err = loadSourceRepoDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
-	repo.PlanProposals, err = loadPlanProposalDocuments(absRoot)
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	repo.PlanProposals, loadIssues, err = loadPlanProposalDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
-	repo.PlanReviews, err = loadPlanReviewDocuments(absRoot)
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	repo.PlanReviews, loadIssues, err = loadPlanReviewDocuments(absRoot)
 	if err != nil {
 		return Repository{}, err
 	}
+	repo.LoadIssues = append(repo.LoadIssues, loadIssues...)
+	sort.Slice(repo.LoadIssues, func(i, j int) bool {
+		if repo.LoadIssues[i].Code != repo.LoadIssues[j].Code {
+			return repo.LoadIssues[i].Code < repo.LoadIssues[j].Code
+		}
+		if repo.LoadIssues[i].Path != repo.LoadIssues[j].Path {
+			return repo.LoadIssues[i].Path < repo.LoadIssues[j].Path
+		}
+		return repo.LoadIssues[i].Message < repo.LoadIssues[j].Message
+	})
 	return repo, nil
 }
 

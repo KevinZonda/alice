@@ -952,12 +952,15 @@ role: source
 		"`context.md` 的 Context / Relevant Repos / Relevant Files / Dependencies",
 		"`alice-code-army repo-lint camp_demo`",
 		"$ALICE_RUNTIME_BIN runtime campaigns repo-lint camp_demo",
+		"$ALICE_RUNTIME_BIN runtime campaigns plan-self-check camp_demo planner 1",
 		"proposal / master-plan / phases / tasks 在 phase 目标、task ID、depends_on、target_repos、write_scope、acceptance、parallelism 上必须一致",
 		"必须保持 `status: draft`",
 		"不得产出 `planned`、`ready`、`executing` 或任何 `review_*` 状态",
 		"executor 只靠 task 文件夹就能开工",
 		"优先拆成更窄、更清晰的 task",
 		"不要往 `campaign.md` 里加入 `default_*`",
+		"必须运行一次收尾自检命令并确认退出码为 0",
+		"不要先跑 lint / self-check 再写最终文件",
 		"简短中文公开总结",
 	) {
 		t.Fatalf("unexpected planner prompt: %q", spec.Prompt)
@@ -1237,14 +1240,150 @@ write_scope: [src/**]
 		"`plans/merged/master-plan.md`",
 		"`alice-code-army repo-lint camp_demo`",
 		"$ALICE_RUNTIME_BIN runtime campaigns repo-lint camp_demo",
+		"$ALICE_RUNTIME_BIN runtime campaigns plan-self-check camp_demo planner_reviewer 1",
 		"`created_at` 使用 RFC3339",
 		"proposal / master-plan / phases / tasks 在 phase 目标、task ID、depends_on、target_repos、write_scope、acceptance、parallelism 上必须一致",
 		"不要要求 planner 去替换那里静态说明文字或占位提示",
 		"本轮评审不要使用 `repo-lint --for-approval`",
 		"任务粒度过粗、只能靠聊天补 context、验收不可观察，也通常至少是 `concern`",
+		"只有在你确认**完全没有剩余问题、没有注意事项、没有待人类补判边界**时，才允许写 `approve`",
+		"只要还有任何问题，无论大小，都不允许带着备注 `approve`",
+		"必须运行一次收尾自检命令并确认退出码为 0",
+		"如果 verdict 是 `approve`，review 正文里不应再保留非空的 `## Concerns`",
 		"优先级最高的返工 task ID",
 	) {
 		t.Fatalf("unexpected planner reviewer prompt: %q", spec.Prompt)
+	}
+}
+
+func TestReconcileAndPrepare_RequiresPlannerSelfCheckBeforePlanReviewPending(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 4, 1, 10, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	initGitRepo(t, root)
+
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+objective: "Ship a concrete plan"
+source_repos: [repo-a]
+current_phase: P01
+plan_round: 1
+plan_status: planning
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: planned
+goal: "Phase one"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "repos", "repo-a.md"), `---
+repo_id: repo-a
+local_path: "`+root+`"
+default_branch: main
+role: source
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Planner task"
+phase: P01
+status: draft
+target_repos: [repo-a]
+write_scope: [campaign:phases/P01/tasks/T001/**]
+executor:
+  role: executor
+  workflow: code_army
+reviewer:
+  role: reviewer
+  workflow: code_army
+---
+
+# Task
+
+## Goal
+- write a concrete planner task
+
+## Background
+- enough background
+
+## Acceptance
+- acceptance is clear
+
+## Deliverables
+- deliver the package
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "proposals", "round-001-plan.md"), `---
+proposal_id: "plan-r1"
+plan_round: 1
+status: submitted
+---
+
+# Plan Proposal
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
+status: draft
+human_approved: false
+---
+
+# Master Plan
+
+## Analysis
+- concrete
+
+## Phases
+- P01
+
+## Task Breakdown
+- T001
+
+## Risks
+- tracked
+`)
+
+	result, err := ReconcileAndPrepare(root, now, 2, defaultDispatchLease)
+	if err != nil {
+		t.Fatalf("reconcile before self-check failed: %v", err)
+	}
+	if got := normalizePlanStatus(result.Repository.Campaign.Frontmatter.PlanStatus); got != PlanStatusPlanning {
+		t.Fatalf("expected plan_status to stay planning before self-check, got %s", got)
+	}
+	if len(result.DispatchTasks) != 0 {
+		t.Fatalf("expected no dispatch tasks before planner self-check, got %+v", result.DispatchTasks)
+	}
+	if result.Summary.RepositoryIssueCount == 0 {
+		t.Fatal("expected repository issues to mention missing planner self-check proof")
+	}
+
+	validation, err := RunPlanSelfCheck(root, DispatchKindPlanner, 1, now)
+	if err != nil {
+		t.Fatalf("run planner self-check failed: %v", err)
+	}
+	if !validation.Valid {
+		t.Fatalf("expected planner self-check to pass, got %+v", validation.Issues)
+	}
+
+	result, err = ReconcileAndPrepare(root, now, 2, defaultDispatchLease)
+	if err != nil {
+		t.Fatalf("reconcile after self-check failed: %v", err)
+	}
+	if got := normalizePlanStatus(result.Repository.Campaign.Frontmatter.PlanStatus); got != PlanStatusPlanReviewPending {
+		t.Fatalf("expected plan_status to advance to plan_review_pending, got %s", got)
+	}
+	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindPlannerReviewer {
+		t.Fatalf("expected planner reviewer dispatch after self-check, got %+v", result.DispatchTasks)
 	}
 }
 

@@ -54,32 +54,48 @@ func TestCampaignIDFromAutomationStateKey(t *testing.T) {
 	}
 }
 
-func TestDispatchKindAndTaskIDFromStateKey(t *testing.T) {
+func TestDispatchCompletionTargetFromStateKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		stateKey string
-		wantKind campaignrepo.DispatchKind
-		wantTask string
+		want     dispatchCompletionTarget
 		wantOK   bool
 	}{
 		{
 			name:     "executor dispatch",
 			stateKey: "campaign_dispatch:camp_demo:executor:T001:x1",
-			wantKind: campaignrepo.DispatchKindExecutor,
-			wantTask: "T001",
-			wantOK:   true,
+			want: dispatchCompletionTarget{
+				Kind:   campaignrepo.DispatchKindExecutor,
+				TaskID: "T001",
+			},
+			wantOK: true,
 		},
 		{
 			name:     "reviewer dispatch",
 			stateKey: "campaign_dispatch:camp_demo:reviewer:T001:r2",
-			wantKind: campaignrepo.DispatchKindReviewer,
-			wantTask: "T001",
-			wantOK:   true,
+			want: dispatchCompletionTarget{
+				Kind:   campaignrepo.DispatchKindReviewer,
+				TaskID: "T001",
+			},
+			wantOK: true,
 		},
 		{
-			name:     "planner dispatch is ignored",
-			stateKey: "campaign_dispatch:camp_demo:planner:plan-r1:r1",
-			wantOK:   false,
+			name:     "planner dispatch",
+			stateKey: "campaign_dispatch:camp_demo:planner:r1",
+			want: dispatchCompletionTarget{
+				Kind:      campaignrepo.DispatchKindPlanner,
+				PlanRound: 1,
+			},
+			wantOK: true,
+		},
+		{
+			name:     "planner reviewer dispatch",
+			stateKey: "campaign_dispatch:camp_demo:planner_reviewer:r2",
+			want: dispatchCompletionTarget{
+				Kind:      campaignrepo.DispatchKindPlannerReviewer,
+				PlanRound: 2,
+			},
+			wantOK: true,
 		},
 		{
 			name:     "wake task is ignored",
@@ -90,15 +106,12 @@ func TestDispatchKindAndTaskIDFromStateKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotKind, gotTask, gotOK := dispatchKindAndTaskIDFromStateKey(tt.stateKey)
+			got, gotOK := dispatchCompletionTargetFromStateKey(tt.stateKey)
 			if gotOK != tt.wantOK {
 				t.Fatalf("unexpected ok state: got=%v want=%v", gotOK, tt.wantOK)
 			}
-			if gotKind != tt.wantKind {
-				t.Fatalf("unexpected dispatch kind: got=%q want=%q", gotKind, tt.wantKind)
-			}
-			if gotTask != tt.wantTask {
-				t.Fatalf("unexpected task id: got=%q want=%q", gotTask, tt.wantTask)
+			if got != tt.want {
+				t.Fatalf("unexpected dispatch completion target: got=%+v want=%+v", got, tt.want)
 			}
 		})
 	}
