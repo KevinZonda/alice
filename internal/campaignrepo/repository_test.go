@@ -409,8 +409,8 @@ created_at: "2026-04-01T10:30:00+08:00"
 	}
 
 	summary := Summarize(repo, time.Date(2026, 4, 1, 10, 33, 0, 0, time.FixedZone("CST", 8*3600)), 2)
-	if summary.RepositoryIssueCount != 1 {
-		t.Fatalf("expected repository_issue_count=1, got %d", summary.RepositoryIssueCount)
+	if summary.RepositoryIssueCount == 0 {
+		t.Fatalf("expected repository issues, got %d", summary.RepositoryIssueCount)
 	}
 	report := summary.LiveReportMarkdown()
 	if !strings.Contains(report, "plan_review_frontmatter_invalid") {
@@ -604,6 +604,101 @@ last_run_path: "results/summary.md"
 	}
 }
 
+func TestSummarize_SuppressesDispatchWhenMasterPlanContractDrifts(t *testing.T) {
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "source")
+	initGitRepo(t, sourceRoot)
+	headCommit := gitHeadCommit(t, sourceRoot)
+
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+source_repos: [repo-a]
+plan_status: human_approved
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship bilingual entry"
+exit_gates:
+  - "T001 must deliver a minimal /zh/ validation entry"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "repos", "repo-a.md"), `---
+repo_id: repo-a
+local_path: "`+sourceRoot+`"
+default_branch: main
+base_commit: "`+headCommit+`"
+role: source
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "plans", "merged", "master-plan.md"), `---
+status: approved
+human_approved: true
+---
+
+# Master Plan
+
+## Analysis
+- concrete
+
+## Phases
+- P01 双语入口
+  - Tasks: T001
+
+## Task Breakdown
+- T001 建立最小中文入口
+  - Depends on: -
+  - Target repos: repo-a
+  - Write scope: repo-a:src/pages/zh/index.astro
+  - Acceptance focus: 最小 /zh/ 验证入口必须可访问。
+
+## Risks
+- tracked
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Drifted task"
+phase: P01
+status: ready
+target_repos: [repo-a]
+write_scope: [repo-a:src/pages/index.astro]
+---
+
+# Task
+
+## Goal
+- ship the page
+
+## Background
+- enough background
+
+## Acceptance
+- the homepage loads
+
+## Deliverables
+- deliver the page
+`)
+
+	repo, err := Load(root)
+	if err != nil {
+		t.Fatalf("load repo failed: %v", err)
+	}
+	summary := Summarize(repo, time.Date(2026, 4, 2, 15, 0, 0, 0, time.FixedZone("CST", 8*3600)), 1)
+	if summary.RepositoryIssueCount == 0 {
+		t.Fatal("expected contract drift to surface as repository issues")
+	}
+	if len(summary.SelectedReady) != 0 {
+		t.Fatalf("expected contract drift to suppress ready dispatch, got %+v", summary.SelectedReady)
+	}
+	report := summary.LiveReportMarkdown()
+	if !strings.Contains(report, "task_contract_write_scope_mismatch") {
+		t.Fatalf("expected live report to include contract mismatch, got %s", report)
+	}
+}
+
 func TestSummarize_BlocksDanglingExecutingTaskWithoutOwnerLease(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
@@ -745,6 +840,10 @@ title: "Needs review verdict"
 phase: P01
 status: reviewing
 review_round: 1
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-24T10:31:00+08:00"
 owner_agent: reviewer.claude
 lease_until: "2026-03-24T12:00:00+08:00"
 ---

@@ -69,6 +69,10 @@ title: "Needs verdict"
 phase: P01
 status: reviewing
 review_round: 1
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-24T10:31:00+08:00"
 owner_agent: reviewer.claude
 lease_until: "2026-03-24T12:00:00+08:00"
 target_repos: [repo-a]
@@ -150,6 +154,10 @@ title: "Campaign-only review"
 phase: P01
 status: reviewing
 review_round: 1
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-24T10:31:00+08:00"
 owner_agent: reviewer
 lease_until: "2026-03-24T12:00:00+08:00"
 target_repos: [repo-a]
@@ -303,6 +311,71 @@ created_at: "2026-03-24T10:30:00+08:00"
 	}
 }
 
+func TestApplyReviewVerdicts_DefersFreshReviewWithoutReviewerSelfCheck(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Fresh review waits for self-check"
+phase: P01
+status: reviewing
+review_status: reviewing
+review_round: 1
+owner_agent: reviewer.codex
+lease_until: "2026-03-24T12:00:00+08:00"
+write_scope: [campaign:reports/live-report.md]
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R001.md"), `---
+review_id: R001
+target_task: T001
+review_round: 1
+verdict: concern
+blocking: false
+created_at: "2026-03-24T10:30:00+08:00"
+---
+`)
+
+	repo, err := Load(root)
+	if err != nil {
+		t.Fatalf("load repo failed: %v", err)
+	}
+	applied, events, err := applyReviewVerdicts(&repo, "camp_demo")
+	if err != nil {
+		t.Fatalf("apply review verdicts failed: %v", err)
+	}
+	if applied != 0 {
+		t.Fatalf("expected judge to defer review without reviewer self-check, got %d", applied)
+	}
+	task := repo.Tasks[0]
+	if task.Frontmatter.DispatchState != dispatchStateJudgeWaitingReviewer {
+		t.Fatalf("expected judge waiting dispatch state, got %q", task.Frontmatter.DispatchState)
+	}
+	if !strings.Contains(task.Frontmatter.LastBlockedReason, "self-check proof") {
+		t.Fatalf("expected blocked reason to explain missing reviewer self-check, got %q", task.Frontmatter.LastBlockedReason)
+	}
+	if len(events) != 1 || events[0].Kind != EventJudgeDeferred {
+		t.Fatalf("expected judge deferred event, got %+v", events)
+	}
+
+	summary := Summarize(repo, time.Date(2026, 3, 24, 10, 35, 0, 0, time.FixedZone("CST", 8*3600)), 1)
+	report := summary.LiveReportMarkdown()
+	if !strings.Contains(report, "judge is waiting for reviewer self-check proof") {
+		t.Fatalf("expected live report to include judge defer reason, got %s", report)
+	}
+}
+
 func TestApplyReviewVerdicts_SkipsSamePathReviewAfterStateMutation(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
@@ -398,6 +471,10 @@ review_status: reviewing
 review_round: 1
 block_guidance_count: 2
 last_blocked_reason: "missing IHEP cluster handoff"
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-24T10:31:00+08:00"
 owner_agent: reviewer.claude
 lease_until: "2026-03-24T12:00:00+08:00"
 ---
@@ -543,6 +620,10 @@ working_branches: [repo-a:`+branchName+`]
 worktree_paths: [repo-a:`+worktreePath+`]
 write_scope: [repo-a:src/lib.rs]
 review_round: 1
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-31T16:51:00+08:00"
 base_commit: "`+baseCommit+`"
 head_commit: "`+taskHead+`"
 last_run_path: "results/summary.md"
@@ -651,6 +732,10 @@ working_branches: [repo-a:`+branchName+`]
 worktree_paths: [repo-a:`+worktreePath+`]
 write_scope: [repo-a:src/lib.rs]
 review_round: 1
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-31T17:06:00+08:00"
 base_commit: "`+baseCommit+`"
 head_commit: "`+taskHead+`"
 last_run_path: "results/summary.md"
@@ -1753,8 +1838,8 @@ last_run_path: "results/summary.md"
 	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusExecuting {
 		t.Fatalf("expected task to be re-dispatched for execution, got %s", got)
 	}
-	if task.Frontmatter.ExecutionRound != 2 {
-		t.Fatalf("expected execution round 2 after auto retry, got %d", task.Frontmatter.ExecutionRound)
+	if task.Frontmatter.ExecutionRound != 1 {
+		t.Fatalf("expected artifact repair to keep execution round 1, got %d", task.Frontmatter.ExecutionRound)
 	}
 	if task.Frontmatter.AutoRetryCount != 1 {
 		t.Fatalf("expected auto retry count 1, got %d", task.Frontmatter.AutoRetryCount)
@@ -1762,11 +1847,14 @@ last_run_path: "results/summary.md"
 	if !strings.Contains(task.Frontmatter.LastBlockedReason, "working_branches") {
 		t.Fatalf("expected blocked reason to mention working_branches, got %q", task.Frontmatter.LastBlockedReason)
 	}
-	if task.Frontmatter.DispatchState != "executor_dispatched" {
-		t.Fatalf("expected executor_dispatched after auto retry, got %q", task.Frontmatter.DispatchState)
+	if task.Frontmatter.DispatchState != dispatchStateArtifactRepairDispatched {
+		t.Fatalf("expected artifact_repair_dispatched after auto retry, got %q", task.Frontmatter.DispatchState)
 	}
 	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindExecutor {
 		t.Fatalf("expected one executor dispatch task, got %+v", result.DispatchTasks)
+	}
+	if !strings.Contains(result.DispatchTasks[0].StateKey, ":a1") {
+		t.Fatalf("expected artifact repair state key suffix, got %q", result.DispatchTasks[0].StateKey)
 	}
 }
 
@@ -1821,17 +1909,88 @@ last_run_path: "results/summary.md"
 		t.Fatalf("reconcile failed: %v", err)
 	}
 	task := result.Repository.Tasks[0]
-	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusReviewPending {
-		t.Fatalf("expected task to stay review_pending after retry budget is exhausted, got %s", got)
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusBlocked {
+		t.Fatalf("expected task to escalate to blocked after retry budget is exhausted, got %s", got)
 	}
 	if task.Frontmatter.AutoRetryCount != 3 {
 		t.Fatalf("expected auto retry count to stay at 3, got %d", task.Frontmatter.AutoRetryCount)
+	}
+	if task.Frontmatter.DispatchState != dispatchStateNeedsHuman {
+		t.Fatalf("expected needs_human dispatch state, got %q", task.Frontmatter.DispatchState)
 	}
 	if len(result.DispatchTasks) != 0 {
 		t.Fatalf("expected no dispatch tasks once retry budget is exhausted, got %+v", result.DispatchTasks)
 	}
 	if len(result.Summary.BlockedTasks) != 1 || result.Summary.BlockedTasks[0].TaskID != "T001" {
 		t.Fatalf("expected exhausted task to stay blocked in summary, got %+v", result.Summary.BlockedTasks)
+	}
+}
+
+func TestReconcileAndPrepare_EscalatesRepeatedReviewTargetLoopToNeedsHuman(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 3, 29, 20, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+plan_status: human_approved
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship phase one"
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Repeated artifact review loop"
+phase: P01
+status: rework
+write_scope: [campaign:phases/P01/tasks/T001/**]
+execution_round: 4
+review_round: 2
+review_status: changes_requested
+last_run_path: "results/summary.md"
+last_review_path: "phases/P01/tasks/T001/reviews/R002.md"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "results", "summary.md"), "# Summary\n")
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R001.md"), `---
+review_id: R001
+target_task: T001
+review_round: 1
+verdict: concern
+blocking: false
+created_at: "2026-03-24T10:30:00+08:00"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R002.md"), `---
+review_id: R002
+target_task: T001
+review_round: 2
+verdict: concern
+blocking: false
+created_at: "2026-03-24T11:30:00+08:00"
+---
+`)
+
+	result, err := ReconcileAndPrepare(root, now, 1, time.Hour)
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	task := result.Repository.Tasks[0]
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusBlocked {
+		t.Fatalf("expected repeated review target to escalate to blocked, got %s", got)
+	}
+	if task.Frontmatter.DispatchState != dispatchStateNeedsHuman {
+		t.Fatalf("expected needs_human dispatch state, got %q", task.Frontmatter.DispatchState)
+	}
+	if !strings.Contains(task.Frontmatter.LastBlockedReason, "review rounds 2 and 1") {
+		t.Fatalf("expected loop reason to mention repeated rounds, got %q", task.Frontmatter.LastBlockedReason)
+	}
+	if !containsEventKind(result.Events, EventTaskNeedsHuman) {
+		t.Fatalf("expected needs-human event, got %+v", result.Events)
 	}
 }
 

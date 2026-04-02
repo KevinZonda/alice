@@ -38,11 +38,11 @@ func (s Summary) LiveReportMarkdown() string {
 		"",
 		"## Active Tasks",
 	)
-	lines = appendTaskList(lines, s.ActiveTasks, "")
+	lines = appendTaskList(lines, s.ActiveTasks, "context_reason")
 	lines = append(lines, "", "## Ready Tasks")
 	lines = appendTaskList(lines, s.ReadyTasks, "")
 	lines = append(lines, "", "## Review Queue")
-	lines = appendTaskList(lines, s.ReviewPendingTasks, "")
+	lines = appendTaskList(lines, s.ReviewPendingTasks, "context_reason")
 	lines = append(lines, "", "## Accepted")
 	lines = appendTaskList(lines, s.AcceptedTasks, "")
 	lines = append(lines, "", "## Repository Issues")
@@ -148,7 +148,7 @@ func appendTaskList(lines []string, tasks []TaskSummary, extra string) []string 
 		if title := strings.TrimSpace(task.Title); title != "" {
 			item += " " + title
 		}
-		if extra == "blocked_reason" && strings.TrimSpace(task.BlockedReason) != "" {
+		if (extra == "blocked_reason" || extra == "context_reason") && strings.TrimSpace(task.BlockedReason) != "" {
 			item += " | " + task.BlockedReason
 		}
 		lines = append(lines, item)

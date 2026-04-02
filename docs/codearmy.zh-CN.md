@@ -330,6 +330,33 @@ flowchart LR
 - `depends_on` 只把依赖任务的 `done` 视为真正完成。
 - 所以一个 task 即使已经评审通过，如果你希望它解除下游依赖，仍要把它推进到 `done`。
 
+还要补一条更关键的事实：
+
+- `status` 不是完整状态机。
+- 当前真正控制调度的其实是 `status + dispatch_state + review_status + self_check_* + last_blocked_reason` 的组合。
+- 只看 `status`，经常会误判 task 为什么没继续往前走。
+
+### 运行时子状态
+
+下面这些 `dispatch_state` 是当前实现里最值得盯的几个子状态：
+
+| `dispatch_state` | 含义 | 是否会新开 round |
+| --- | --- | --- |
+| `executor_dispatched` | 正常派发 executor | 会增加 `execution_round` |
+| `artifact_repair_requested` / `artifact_repair_dispatched` | 只补 task-local 结果/证据，不做新的完整执行回合 | 不会增加 `execution_round` |
+| `judge_waiting_reviewer_self_check` | review 文件已经写出，但 judge 还不能应用 verdict，因为 reviewer self-check proof 不完整或已失配 | 不会 |
+| `integration_conflict_requested` | 已通过 review，但回主线集成时发生 merge conflict，回流给 executor 修冲突 | 会重新派发 executor |
+| `integration_blocked` | 集成失败且当前没有自动恢复路径 | 不会 |
+| `blocked_guidance_requested` / `blocked_guidance_applied` | executor 报阻塞后，没有直接终止，而是先转 reviewer 给恢复指导 | 会占用 review round，但语义上不是正常验收 review |
+| `needs_human` | 系统认为自动返工已经不值得继续，等待人工脱困 | 不会 |
+| `integrated` / `integration_not_required` | 最后收口已完成 | 终态 |
+
+实操上可以这么读：
+
+- `status: rework` 且 `dispatch_state: artifact_repair_requested`，表示它不是一次“新的完整返工”，而是在补证据。
+- `status: review_pending` 且 `dispatch_state: judge_waiting_reviewer_self_check`，表示 review 已经写出来了，但 judge 还没合法吃进去。
+- `status: blocked` 且 `dispatch_state: needs_human`，表示系统已经停止自动重试，不要再指望下一轮 reconcile 自己好。
+
 ## 每个流程实际收到的 prompt
 
 如果你想排查“为什么 agent 会这样做”，这里要区分两层：
@@ -870,6 +897,180 @@ phases/P01/tasks/T001/reviews/R001.md
 
 - 这条现在主要由 reviewer dispatch prompt 和流程约定来约束。
 - runtime 侧目前还没有单独的“reviewer 写 source repo 就硬拦截”保护。
+
+### 误区 6：为什么又派发了一次 executor，但 `execution_round` 没涨
+
+因为这次可能不是完整返工，而是 `artifact-only repair`。
+
+当前实现里，只要 task 已经到 `review_pending`，但缺的是 task-local 结果文件、`last_run_path`、真实浏览器验证证据这类 artifact，系统会把它转成：
+
+- `status: rework`
+- `dispatch_state: artifact_repair_requested`
+
+然后再派发一次 executor 去补件，但不会增加 `execution_round`。这是为了把“补证据”与“重新做一轮源码执行”区分开。
+
+### 误区 7：review 文件已经写了，为什么 verdict 还没应用
+
+因为现在 judge 会等待 reviewer self-check proof。
+
+如果 task 处在：
+
+- `dispatch_state: judge_waiting_reviewer_self_check`
+
+说明 review 文件本身已经存在，但至少有一项还没对上：
+
+- `self_check_kind`
+- `self_check_status`
+- `self_check_round`
+- `self_check_at`
+- `self_check_digest`
+
+这时要先修 reviewer self-check，而不是继续催 reconcile。
+
+### 误区 8：为什么 live report 里还有 ready/review-pending task，但系统就是不派发
+
+因为现在 `repository issues` 会全局阻断新的 dispatch。
+
+只要 `reports/live-report.md` 里 `repository issues` 非零，系统仍会保留当前 active task，但不会再新开 executor/reviewer/planner 派发。最常见原因是：
+
+- phase / master-plan / task package contract 打架
+- 缺少 required self-check proof
+- repo-first 结构本身不合法
+
+### 误区 9：blocked 之后为什么又跑去 reviewer 了
+
+因为当前实现里，executor 的阻塞并不总是直接终止。
+
+前几次阻塞会先走一条“reviewer 恢复指导”支路：
+
+- `blocked -> review_pending`
+- `dispatch_state: blocked_guidance_requested`
+
+这不是普通验收 review，而是 reviewer 帮 executor 给出下一步恢复建议；只有多次指导后仍然不通，才会进入终态阻塞或 `needs_human`。
+
+## 当前仍存在的设计问题
+
+截至 `2026-04-02`，当前版本虽然已经补了 contract lint、judge explainability、worktree auto-heal、loop detection 和 artifact-only repair，但状态机本身仍有几类结构性问题：
+
+### 1. `dispatch_state` 仍然是开放字符串，不是强类型状态
+
+- `status` / `plan_status` 至少有较明确的归一化入口。
+- 但 `dispatch_state` 目前基本还是“写字符串 + 约定解释”。
+- 结果就是状态含义分散在多个文件里，文档、lint 和实现容易再度漂移。
+
+这类问题的直接表现是：
+
+- 你很难一眼知道哪些 `dispatch_state` 是合法集合。
+- 很难对“允许从哪里跳到哪里”做统一校验。
+- 一旦字面值改动，容易出现 live report、调度器和 reconcile 逻辑不一致。
+
+### 2. 很多自动决策仍依赖 `last_blocked_reason` 的自由文本
+
+当前有不少决策都在看 blocker 文本，而不是结构化字段，例如：
+
+- 是否可自动重试
+- 是否像 merge conflict
+- 是否应该升级 `needs_human`
+
+这样做短期上手快，但长期会带来两个问题：
+
+- wording 一变，自动恢复/升级策略就可能失效
+- 机器很难区分“同类 blocker 再次出现”和“只是措辞不同”
+
+后续更稳的方向应该是补：
+
+- `blocker_code`
+- `blocker_class`
+- `blocker_actor`
+- `blocker_scope`
+
+把自由文本退回成面向人的解释层。
+
+### 3. planning 评审的 verdict 语义仍然过粗
+
+现在对 plan review 来说：
+
+- `concern`
+- `blocking`
+- `reject`
+
+最终都会把当前 proposal 标成 `superseded`，然后 `plan_round + 1`，重新回到 `planning`。
+
+这意味着系统还没有清楚地区分：
+
+- 小修小补的 plan rework
+- 明确的 planning hard-block
+- 需要人类拍板的拒绝
+
+结果是 planning loop 的“为什么重开一轮”目前还是太粗，不利于后续做更精细的 planner 调度和 SLA。
+
+### 4. repository issue 现在是 campaign 级 stop-the-world gate
+
+当前只要 repo 有一条 runtime repository issue，系统就会停止新的 dispatch。
+
+好处是能防止坏 contract 继续扩散；问题是：
+
+- 一个 phase/task 的文档冲突，会拖住整个 campaign
+- 不能只冻结有问题的 task，而让其他完全独立的 task 继续跑
+
+这对于大 campaign 会越来越昂贵。后续更合理的形态应该是：
+
+- phase-scoped gate
+- task-scoped gate
+- 只在真正影响调度安全时才 campaign-wide freeze
+
+### 5. blocked guidance 仍复用了正常 review 通道
+
+现在 executor 一旦阻塞，前几次会被转成 reviewer guidance 流程。但它复用的还是：
+
+- `review_pending`
+- `review_round`
+- `reviews/Rxxx.md`
+
+这会带来一个认知问题：
+
+- “验收 review”
+- “阻塞恢复指导”
+
+在产物形态和轮次字段上看起来很像，但其实是两类不同活动。当前靠 `dispatch_state` 区分，仍然偏隐式。
+
+更长期的设计，最好把它拆成独立 side-lane，例如：
+
+- `guidance_pending`
+- `guiding`
+- `guidance_round`
+
+否则 review 统计和故障归因会持续混在一起。
+
+### 6. self-check proof 仍然绑定在可变 frontmatter 上
+
+现在 self-check proof 是记录在 task/campaign frontmatter 里的，而且 proof digest 绑定了一批可变字段。
+
+这解决了“谁都可以嘴上说自己检查过”的问题，但副作用是：
+
+- 一次 benign 的 metadata repair，也可能让 proof 失配
+- judge 虽然现在会把原因说清楚，但 proof 本身仍然容易被后续小改动污染
+
+更稳的方向通常是：
+
+- 把 self-check proof 变成独立、不可变的 per-round artifact
+- judge 读取该 artifact，而不是依赖当前 task frontmatter 的实时快照
+
+### 7. `accepted` 和 `done` 仍然混合了承认通过与集成完成两层语义
+
+这条现在文档已经说明了，但从设计角度看，它仍然是一个值得继续优化的点。
+
+当前：
+
+- `accepted` 表示 review 已通过
+- `done` 表示已经完成最终收口，通常包含 merge-back/integration
+
+这会让依赖语义更保守，但也意味着系统还缺一个更清楚的中间概念，用来表达：
+
+- “逻辑上已经完成，可以给下游继续用”
+- 但“物理上还没 merge 回默认分支”
+
+如果后续要支持更复杂的 branch-based 并行，这一层状态还需要继续拆。
 
 ## 推荐的最小使用姿势
 

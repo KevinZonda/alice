@@ -16,4 +16,6 @@ Recommended pattern:
    - campaign repo artifacts
    - runtime campaign / automation API state
    - runtime log
-8. If you changed embedded skills, run `alice skills sync` before treating a new run as representative.
+8. When a task looks stuck, check `repository issues`, `dispatch_state`, `last_blocked_reason`, and `self_check_*` together; `status` alone is no longer enough.
+9. `execution_round` not increasing does not always mean "no redispatch"; artifact-only repair can redispatch an executor without opening a new full execution round.
+10. If you changed embedded skills, run `alice skills sync` before treating a new run as representative.
