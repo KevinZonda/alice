@@ -32,9 +32,9 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 		GeneratedAt:   now,
 		PhaseCounts:   map[string]int{},
 	}
-	summary.RepositoryIssues = append(summary.RepositoryIssues, repo.LoadIssues...)
-	summary.RepositoryIssues = append(summary.RepositoryIssues, planningSelfCheckIssues(repo)...)
+	summary.RepositoryIssues = runtimeRepositoryIssues(repo)
 	summary.RepositoryIssueCount = len(summary.RepositoryIssues)
+	blockNewDispatch := summary.RepositoryIssueCount > 0
 
 	byID := make(map[string]TaskDocument, len(repo.Tasks))
 	for _, task := range repo.Tasks {
@@ -161,7 +161,7 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 			summary.ReworkCount++
 		}
 		summary.ReadyTasks = append(summary.ReadyTasks, view)
-		if len(summary.SelectedReady) < availableSlots {
+		if !blockNewDispatch && len(summary.SelectedReady) < availableSlots {
 			summary.SelectedReady = append(summary.SelectedReady, view)
 			selectedReservations = append(selectedReservations, buildReservation(task))
 		}
@@ -187,7 +187,7 @@ func Summarize(repo Repository, now time.Time, maxParallel int) Summary {
 			summary.BlockedTasks = append(summary.BlockedTasks, withBlockedReason(view, reason))
 			continue
 		}
-		if len(summary.SelectedReview) < reviewSlots {
+		if !blockNewDispatch && len(summary.SelectedReview) < reviewSlots {
 			summary.SelectedReview = append(summary.SelectedReview, view)
 		}
 	}
@@ -226,6 +226,7 @@ func taskSummary(task TaskDocument) TaskSummary {
 		LeaseUntil:     task.LeaseUntil,
 		WakeAt:         task.WakeAt,
 		WakePrompt:     strings.TrimSpace(task.Frontmatter.WakePrompt),
+		BlockedReason:  strings.TrimSpace(task.Frontmatter.LastBlockedReason),
 		DependsOn:      append([]string(nil), task.Frontmatter.DependsOn...),
 		TargetRepos:    append([]string(nil), task.Frontmatter.TargetRepos...),
 		WriteScope:     append([]string(nil), task.Frontmatter.WriteScope...),

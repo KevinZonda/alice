@@ -168,6 +168,7 @@ func buildExecutorDispatchPrompt(repo Repository, task TaskDocument, role RoleCo
 		"ReportSnippet":               blankForSummary(task.Frontmatter.ReportSnippetPath),
 		"ReviewStatus":                blankForSummary(task.Frontmatter.ReviewStatus),
 		"LastReviewPath":              blankForSummary(task.Frontmatter.LastReviewPath),
+		"ArtifactRepairOnly":          taskDispatchesArtifactRepair(task),
 		"AutoRetryCount":              task.Frontmatter.AutoRetryCount,
 		"IntegrationRetryCount":       task.Frontmatter.IntegrationRetryCount,
 		"IntegrationConflictRecovery": taskNeedsIntegrationConflictRecovery(task),
@@ -218,6 +219,15 @@ func reviewerPromptTargetCommit(task TaskDocument) string {
 }
 
 func executionDispatchStateKey(repo Repository, task TaskDocument) string {
+	if taskDispatchesArtifactRepair(task) {
+		return fmt.Sprintf(
+			"campaign_dispatch:%s:executor:%s:x%d:a%d",
+			blankForKey(repo.Campaign.Frontmatter.CampaignID),
+			blankForKey(task.Frontmatter.TaskID),
+			maxInt(task.Frontmatter.ExecutionRound, 1),
+			maxInt(task.Frontmatter.AutoRetryCount, 1),
+		)
+	}
 	return fmt.Sprintf(
 		"campaign_dispatch:%s:executor:%s:x%d",
 		blankForKey(repo.Campaign.Frontmatter.CampaignID),

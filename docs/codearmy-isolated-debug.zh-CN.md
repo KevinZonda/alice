@@ -40,6 +40,12 @@
    - repo 产物已写出来，但 verdict / summary 还没被下一次 reconcile 应用
    - task 其实跑挂了，只是 runtime summary 还没刷新
 
+10. 现在还要额外优先看 4 个运行态信号：
+   - `reports/live-report.md` 里的 `repository issues` 是否非零；这会直接停止新的 dispatch
+   - task 的 `dispatch_state` 是否落在 `artifact_repair_*`、`judge_waiting_reviewer_self_check`、`blocked_guidance_*`、`needs_human`、`integration_*`
+   - task 的 `last_blocked_reason` 是否已经是结构化、稳定、可复现的 blocker，而不是一句模糊描述
+   - `self_check_*` 是否真的匹配当前 round；review 文件已经写出不等于 judge 已经会应用 verdict
+
 ## 会话隔离建议
 
 如果只是本地验证 workflow，不希望向真实飞书会话发消息，可以用假的会话路由环境：
@@ -122,6 +128,49 @@ planner 即使在 proposal 里写了“我已经修复 X”，也不一定真的
 
 如果这四层不一致，说明还需要更强的 repo-lint / consistency check，而不能只靠 prompt。
 
+### 5. `execution_round` 不涨，不代表没有再次派发
+
+现在 task 可能会进入 `artifact-only repair`：
+
+- `status: rework`
+- `dispatch_state: artifact_repair_requested`
+
+这时系统会再次派发 executor 去补 task-local 结果/证据，但不会增加 `execution_round`。所以排障时不能只看 round 数，还要一起看：
+
+- `dispatch_state`
+- `auto_retry_count`
+- `last_blocked_reason`
+
+### 6. review 文件存在，不代表 judge 已经会吃 verdict
+
+如果 task 卡在：
+
+- `dispatch_state: judge_waiting_reviewer_self_check`
+
+说明 review markdown 已经写出来，但 reviewer self-check proof 还没有形成完整闭环。优先检查：
+
+- `self_check_kind`
+- `self_check_round`
+- `self_check_status`
+- `self_check_at`
+- `self_check_digest`
+
+不要把这类问题误判成“reconcile 没跑”。
+
+### 7. planning loop 里，`concern` 和 `blocking` 目前都会回到新一轮 planning
+
+隔离调试时，如果你看到：
+
+- `plan_round + 1`
+- `plan_status` 又回到 `planning`
+
+不要默认它一定是严重 blocker。当前实现里，plan review 的 `concern`、`blocking`、`reject` 都会让规划重新开一轮，所以还要回头读：
+
+- `plans/reviews/round-XXX-review.md`
+- `campaign.md` 里的 `plan_round`
+
+才能判断这是小修重规划，还是硬阻塞重规划。
+
 ## 建议的最小检查清单
 
 - 模型配置：
@@ -134,6 +183,10 @@ planner 即使在 proposal 里写了“我已经修复 X”，也不一定真的
   - review 文件写出后，下一次 reconcile 是否正确推进 `plan_round` / `plan_status`
 - execution：
   - executor 产物、review 文件、judge verdict 是否能闭环
+- state machine：
+  - `status` 之外，`dispatch_state` / `review_status` / `self_check_*` / `last_blocked_reason` 是否一致
+- global gating：
+  - 是否有 repository issue 把整个 campaign 的新 dispatch 暂停了
 - skill 分发：
   - 安装副本是否已经 sync 到最新 embedded skill
 

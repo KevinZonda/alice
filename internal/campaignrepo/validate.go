@@ -216,20 +216,13 @@ func validateRepository(repo Repository, requireApprovalArtifacts bool, requireP
 	if requirePlanningSelfCheckProof {
 		issues = append(issues, planningSelfCheckIssues(repo)...)
 	}
+	issues = append(issues, contractConsistencyIssues(repo)...)
 
 	if requireApprovalArtifacts {
 		validateApprovalArtifacts(repo, &issues)
 	}
 
-	sort.Slice(issues, func(i, j int) bool {
-		if issues[i].Code != issues[j].Code {
-			return issues[i].Code < issues[j].Code
-		}
-		if issues[i].Path != issues[j].Path {
-			return issues[i].Path < issues[j].Path
-		}
-		return issues[i].Message < issues[j].Message
-	})
+	sortValidationIssues(issues)
 	return ValidationResult{
 		Valid:  len(issues) == 0,
 		Issues: issues,

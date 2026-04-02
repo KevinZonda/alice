@@ -29,6 +29,9 @@ Write scope: {{ .WriteScope | join ", " | default "-" }}
 集成冲突恢复次数: {{ .IntegrationRetryCount }}
 阻塞指导次数: {{ .BlockGuidanceCount }}
 上次阻塞原因: {{ .LastBlockedReason }}
+{{- if .ArtifactRepairOnly }}
+这是一次 task-local artifact repair：优先补 task 结果、frontmatter、自检证据和 campaign-local 产物，不要无故扩大成新的 source diff 或新执行轮次。
+{{- end }}
 {{- if .IntegrationConflictRecovery }}
 这是一次集成冲突恢复轮：上一轮把 task branch 回主线时发生了 merge conflict。你本轮的目标不是重做整个 task，而是在 `task_worktree` 中吸收默认分支的新变化、解掉冲突，并保留已批准改动的意图。
 {{- end }}

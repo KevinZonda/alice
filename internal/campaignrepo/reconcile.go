@@ -3,6 +3,7 @@ package campaignrepo
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -10,6 +11,15 @@ import (
 const defaultDispatchLease = 2 * time.Hour
 const maxSummaryBlockAutoRetries = 3
 const maxBlockedGuidanceRetries = 3
+const maxExecutionRoundsBeforeNeedsHuman = 6
+const maxReviewRoundsBeforeNeedsHuman = 6
+
+const (
+	dispatchStateArtifactRepairRequested  = "artifact_repair_requested"
+	dispatchStateArtifactRepairDispatched = "artifact_repair_dispatched"
+	dispatchStateJudgeWaitingReviewer     = "judge_waiting_reviewer_self_check"
+	dispatchStateNeedsHuman               = "needs_human"
+)
 
 type ReconcileResult struct {
 	Repository       Repository         `json:"repository"`
@@ -118,6 +128,14 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 		changed = true
 	}
 
+	repairedWorkspaces, err := repairTaskExecutionWorkspaces(&repo)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	if repairedWorkspaces > 0 {
+		changed = true
+	}
+
 	blockGuidanceTasks, blockedEvents, err := requeueBlockedTasksForReviewerGuidance(&repo, campaignID)
 	if err != nil {
 		return ReconcileResult{}, err
@@ -133,6 +151,15 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 	}
 	if autoRetriedTasks > 0 {
 		changed = true
+	}
+
+	needsHumanTasks, needsHumanEvents, err := escalateLoopingTasksToHuman(&repo, campaignID)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	if needsHumanTasks > 0 {
+		changed = true
+		events = append(events, needsHumanEvents...)
 	}
 
 	summary := Summarize(repo, now, maxParallel)
@@ -325,7 +352,7 @@ func retryReviewPendingArtifactBlockers(repo *Repository) (int, error) {
 		}
 		task.Frontmatter.AutoRetryCount++
 		task.Frontmatter.Status = TaskStatusRework
-		task.Frontmatter.DispatchState = "auto_retry_requested"
+		task.Frontmatter.DispatchState = dispatchStateArtifactRepairRequested
 		task.Frontmatter.ReviewStatus = "changes_requested"
 		task.Frontmatter.OwnerAgent = ""
 		task.LeaseUntil = time.Time{}
@@ -337,6 +364,15 @@ func retryReviewPendingArtifactBlockers(repo *Repository) (int, error) {
 		retried++
 	}
 	return retried, nil
+}
+
+func taskDispatchesArtifactRepair(task TaskDocument) bool {
+	switch strings.TrimSpace(task.Frontmatter.DispatchState) {
+	case dispatchStateArtifactRepairRequested, dispatchStateArtifactRepairDispatched:
+		return task.Frontmatter.AutoRetryCount > 0
+	default:
+		return false
+	}
 }
 
 func repairInactiveTaskState(repo *Repository) (int, error) {
@@ -380,6 +416,116 @@ func repairInactiveTaskState(repo *Repository) (int, error) {
 		repaired++
 	}
 	return repaired, nil
+}
+
+func escalateLoopingTasksToHuman(repo *Repository, campaignID string) (int, []ReconcileEvent, error) {
+	if repo == nil || len(repo.Tasks) == 0 {
+		return 0, nil, nil
+	}
+	reviewIndex := reviewsByTask(repo.Reviews)
+	escalated := 0
+	var events []ReconcileEvent
+	for idx := range repo.Tasks {
+		task := &repo.Tasks[idx]
+		reason := taskNeedsHumanLoopReason(*task, reviewIndex[strings.TrimSpace(task.Frontmatter.TaskID)])
+		if reason == "" {
+			continue
+		}
+		if normalizeTaskStatus(task.Frontmatter.Status) == TaskStatusBlocked &&
+			strings.TrimSpace(task.Frontmatter.DispatchState) == dispatchStateNeedsHuman &&
+			strings.TrimSpace(task.Frontmatter.LastBlockedReason) == reason {
+			continue
+		}
+		task.Frontmatter.Status = TaskStatusBlocked
+		task.Frontmatter.DispatchState = dispatchStateNeedsHuman
+		task.Frontmatter.ReviewStatus = "blocked"
+		task.Frontmatter.LastBlockedReason = reason
+		clearTaskAssignment(task)
+		if err := persistTaskDocument(repo, idx); err != nil {
+			return escalated, events, err
+		}
+		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+		taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+		events = append(events, ReconcileEvent{
+			Kind:       EventTaskNeedsHuman,
+			CampaignID: campaignID,
+			TaskID:     taskID,
+			Title:      "任务需要人工脱困",
+			Detail:     fmt.Sprintf("任务 **%s** %s 已停止自动返工并升级为人工处理：%s", taskID, taskTitle, reason),
+			Severity:   "error",
+		})
+		escalated++
+	}
+	return escalated, events, nil
+}
+
+func taskNeedsHumanLoopReason(task TaskDocument, reviews []ReviewDocument) string {
+	status := normalizeTaskStatus(task.Frontmatter.Status)
+	switch status {
+	case TaskStatusReady, TaskStatusRework, TaskStatusReviewPending, TaskStatusBlocked:
+	default:
+		return ""
+	}
+	if strings.TrimSpace(task.Frontmatter.DispatchState) == dispatchStateNeedsHuman {
+		return ""
+	}
+	if task.Frontmatter.AutoRetryCount >= maxSummaryBlockAutoRetries && strings.TrimSpace(task.Frontmatter.LastBlockedReason) != "" {
+		return fmt.Sprintf("artifact-only repair has already retried %d times but the blocker remains: %s", task.Frontmatter.AutoRetryCount, strings.TrimSpace(task.Frontmatter.LastBlockedReason))
+	}
+	if reason := repeatedConcernOnSameTargetReason(task, reviews); reason != "" {
+		return reason
+	}
+	if strings.TrimSpace(task.Frontmatter.LastBlockedReason) != "" &&
+		(task.Frontmatter.ExecutionRound >= maxExecutionRoundsBeforeNeedsHuman ||
+			task.Frontmatter.ReviewRound >= maxReviewRoundsBeforeNeedsHuman) {
+		return fmt.Sprintf("task has looped to execution_round=%d review_round=%d while the blocker is still %q", task.Frontmatter.ExecutionRound, task.Frontmatter.ReviewRound, strings.TrimSpace(task.Frontmatter.LastBlockedReason))
+	}
+	return ""
+}
+
+func repeatedConcernOnSameTargetReason(task TaskDocument, reviews []ReviewDocument) string {
+	if len(reviews) < 2 || task.Frontmatter.ReviewRound < 2 {
+		return ""
+	}
+	relevant := make([]ReviewDocument, 0, len(reviews))
+	for _, review := range reviews {
+		if !reviewMatchesTaskReviewer(task, review) {
+			continue
+		}
+		verdict := normalizeReviewVerdict(review.Frontmatter.Verdict, review.Frontmatter.Blocking)
+		if verdict == "" || verdict == "approve" {
+			continue
+		}
+		relevant = append(relevant, review)
+	}
+	if len(relevant) < 2 {
+		return ""
+	}
+	sort.Slice(relevant, func(i, j int) bool {
+		return compareReviewDocs(relevant[i], relevant[j]) > 0
+	})
+	latest := relevant[0]
+	previous := relevant[1]
+	if latest.Frontmatter.ReviewRound == previous.Frontmatter.ReviewRound {
+		return ""
+	}
+	latestTarget := reviewTargetFingerprint(task, latest)
+	previousTarget := reviewTargetFingerprint(task, previous)
+	if latestTarget == "" || latestTarget != previousTarget {
+		return ""
+	}
+	return fmt.Sprintf("review rounds %d and %d both returned non-approve verdicts on the same target %s", latest.Frontmatter.ReviewRound, previous.Frontmatter.ReviewRound, latestTarget)
+}
+
+func reviewTargetFingerprint(task TaskDocument, review ReviewDocument) string {
+	target := strings.TrimSpace(review.Frontmatter.TargetCommit)
+	if target != "" {
+		return target
+	}
+	if !taskRequiresSourceRepoEvidence(task) {
+		return "campaign-artifacts"
+	}
+	return strings.TrimSpace(task.Frontmatter.HeadCommit)
 }
 
 func planTransitionEvent(campaignID, campaignTitle, prevStatus, newStatus string, planRound int) (ReconcileEvent, bool) {
@@ -544,8 +690,26 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 		if !ok {
 			continue
 		}
-		if filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath)) == filepath.ToSlash(review.Path) &&
-			!reviewVerdictReadyForJudge(*task, review) {
+		if reason := reviewVerdictGateReason(*task, review); reason != "" {
+			if strings.TrimSpace(task.Frontmatter.LastBlockedReason) == reason &&
+				strings.TrimSpace(task.Frontmatter.DispatchState) == dispatchStateJudgeWaitingReviewer {
+				continue
+			}
+			task.Frontmatter.LastBlockedReason = reason
+			task.Frontmatter.DispatchState = dispatchStateJudgeWaitingReviewer
+			if err := persistTaskDocument(repo, idx); err != nil {
+				return applied, events, err
+			}
+			taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+			taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+			events = append(events, ReconcileEvent{
+				Kind:       EventJudgeDeferred,
+				CampaignID: campaignID,
+				TaskID:     taskID,
+				Title:      "Judge 等待 reviewer 自检",
+				Detail:     fmt.Sprintf("任务 **%s** %s 的评审结论暂不应用：%s", taskID, taskTitle, reason),
+				Severity:   "warning",
+			})
 			continue
 		}
 		verdict := normalizeReviewVerdict(review.Frontmatter.Verdict, review.Frontmatter.Blocking)
@@ -618,6 +782,7 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 		if verdict == "blocking" && blockedGuidanceLoop {
 			task.Frontmatter.DispatchState = "blocked_guidance_applied"
 		}
+		task.Frontmatter.LastBlockedReason = ""
 		task.Frontmatter.LastReviewPath = filepath.ToSlash(review.Path)
 		task.Frontmatter.OwnerAgent = ""
 		task.LeaseUntil = time.Time{}
@@ -639,19 +804,34 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 }
 
 func reviewVerdictReadyForJudge(task TaskDocument, review ReviewDocument) bool {
-	if DispatchKind(strings.ToLower(strings.TrimSpace(task.Frontmatter.SelfCheckKind))) != DispatchKindReviewer {
-		return false
-	}
-	if normalizeTaskSelfCheckStatus(task.Frontmatter.SelfCheckStatus) != taskSelfCheckStatusPassed {
-		return false
-	}
+	return reviewVerdictGateReason(task, review) == ""
+}
+
+func reviewVerdictGateReason(task TaskDocument, review ReviewDocument) string {
 	targetRound := task.Frontmatter.ReviewRound
 	if review.Frontmatter.ReviewRound > 0 {
 		targetRound = review.Frontmatter.ReviewRound
 	}
-	return targetRound > 0 &&
-		task.Frontmatter.SelfCheckRound == targetRound &&
-		taskSelfCheckProofMatchesCurrentState(task, DispatchKindReviewer)
+	taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+	recordedKind := DispatchKind(strings.ToLower(strings.TrimSpace(task.Frontmatter.SelfCheckKind)))
+	switch {
+	case recordedKind == "":
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: no self_check_kind is recorded", taskID, targetRound)
+	case recordedKind != DispatchKindReviewer:
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: latest self_check_kind is %s", taskID, targetRound, recordedKind)
+	case normalizeTaskSelfCheckStatus(task.Frontmatter.SelfCheckStatus) != taskSelfCheckStatusPassed:
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: self_check_status is %q instead of %q", taskID, targetRound, blankForSummary(task.Frontmatter.SelfCheckStatus), taskSelfCheckStatusPassed)
+	case targetRound <= 0:
+		return fmt.Sprintf("judge cannot apply reviewer verdict for task %s because review_round is empty", taskID)
+	case task.Frontmatter.SelfCheckRound != targetRound:
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: latest proof is for round %d", taskID, targetRound, task.Frontmatter.SelfCheckRound)
+	case strings.TrimSpace(task.Frontmatter.SelfCheckAtRaw) == "":
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: self_check_at is empty", taskID, targetRound)
+	case !taskSelfCheckProofMatchesCurrentState(task, DispatchKindReviewer):
+		return fmt.Sprintf("judge is waiting for reviewer self-check proof for task %s round %d: task state no longer matches the recorded proof digest", taskID, targetRound)
+	default:
+		return ""
+	}
 }
 
 func requeueBlockedTasksForReviewerGuidance(repo *Repository, campaignID string) (int, []ReconcileEvent, error) {
@@ -753,14 +933,23 @@ func claimSelectedExecutorTasks(repo *Repository, summary Summary, now time.Time
 		if err := ensureTaskExecutionWorkspaces(repo, task); err != nil {
 			return claimed, events, err
 		}
-		task.Frontmatter.ExecutionRound++
+		artifactRepairOnly := taskDispatchesArtifactRepair(*task)
+		if !artifactRepairOnly {
+			task.Frontmatter.ExecutionRound++
+		}
 		task.Frontmatter.Status = TaskStatusExecuting
 		task.Frontmatter.DispatchState = "executor_dispatched"
+		if artifactRepairOnly {
+			task.Frontmatter.DispatchState = dispatchStateArtifactRepairDispatched
+		}
 		clearTaskSelfCheck(task)
 		task.Frontmatter.OwnerAgent = roleLabel(role)
 		task.LeaseUntil = now.Add(leaseDuration)
 		task.WakeAt = time.Time{}
 		task.Frontmatter.WakePrompt = ""
+		if !artifactRepairOnly && !taskNeedsIntegrationConflictRecovery(*task) {
+			task.Frontmatter.LastBlockedReason = ""
+		}
 		if task.Frontmatter.ReviewStatus == "" {
 			task.Frontmatter.ReviewStatus = "pending"
 		}
@@ -772,12 +961,16 @@ func claimSelectedExecutorTasks(repo *Repository, summary Summary, now time.Time
 		}
 		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
 		taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+		detail := fmt.Sprintf("任务 **%s** %s 已派发给 %s（第 %d 轮）", taskID, taskTitle, roleLabel(role), task.Frontmatter.ExecutionRound)
+		if artifactRepairOnly {
+			detail = fmt.Sprintf("任务 **%s** %s 已派发给 %s 进行 task-local artifact repair（执行轮次仍为第 %d 轮，补件第 %d 次）", taskID, taskTitle, roleLabel(role), task.Frontmatter.ExecutionRound, task.Frontmatter.AutoRetryCount)
+		}
 		events = append(events, ReconcileEvent{
 			Kind:       EventTaskDispatched,
 			CampaignID: campaignID,
 			TaskID:     taskID,
 			Title:      "任务已派发执行",
-			Detail:     fmt.Sprintf("任务 **%s** %s 已派发给 %s（第 %d 轮）", taskID, taskTitle, roleLabel(role), task.Frontmatter.ExecutionRound),
+			Detail:     detail,
 			Severity:   "info",
 		})
 		claimed++
@@ -808,6 +1001,7 @@ func claimSelectedReviewTasks(repo *Repository, summary Summary, now time.Time, 
 		task.LeaseUntil = now.Add(leaseDuration)
 		task.WakeAt = time.Time{}
 		task.Frontmatter.WakePrompt = ""
+		task.Frontmatter.LastBlockedReason = ""
 		if err := persistTaskDocument(repo, taskIndex); err != nil {
 			return claimed, events, err
 		}

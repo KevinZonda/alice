@@ -251,6 +251,13 @@ func ensureGitTaskWorktree(repoPath, worktreePath, branchName, baseRevision stri
 		}
 		currentBranch, err := gitCurrentBranch(worktreePath)
 		if err != nil {
+			healed, healErr := tryAutoHealDetachedTaskWorktree(repoPath, worktreePath, branchName)
+			if healErr != nil {
+				return healErr
+			}
+			if healed {
+				return nil
+			}
 			return err
 		}
 		if currentBranch != branchName {
@@ -338,6 +345,86 @@ func gitWorktreesShareCommonDir(repoPath, worktreePath string) (bool, error) {
 		return false, fmt.Errorf("resolve common dir for %s: %w", worktreePath, err)
 	}
 	return filepath.Clean(left) == filepath.Clean(right), nil
+}
+
+func tryAutoHealDetachedTaskWorktree(repoPath, worktreePath, branchName string) (bool, error) {
+	repoPath = strings.TrimSpace(repoPath)
+	worktreePath = filepath.Clean(strings.TrimSpace(worktreePath))
+	branchName = strings.TrimSpace(branchName)
+	if repoPath == "" || worktreePath == "" || branchName == "" {
+		return false, nil
+	}
+	if !gitLocalBranchExists(repoPath, branchName) {
+		return false, nil
+	}
+	occupants, err := gitWorktreeBranchOccupants(repoPath, branchName)
+	if err != nil {
+		return false, fmt.Errorf("inspect existing worktrees for branch %s: %w", branchName, err)
+	}
+	for _, occupant := range occupants {
+		occupant = filepath.Clean(strings.TrimSpace(occupant))
+		if occupant == "" || occupant == worktreePath {
+			continue
+		}
+		return false, fmt.Errorf("branch %s is already checked out at %s; cannot auto-heal detached task worktree %s", branchName, occupant, worktreePath)
+	}
+	headCommit, err := gitResolvedHEADCommit(worktreePath)
+	if err != nil {
+		return false, nil
+	}
+	branchCommit, err := gitResolvedBranchCommit(repoPath, branchName)
+	if err != nil {
+		return false, nil
+	}
+	if headCommit != branchCommit {
+		return false, nil
+	}
+	if _, err := runGit(worktreePath, "switch", branchName); err != nil {
+		return false, fmt.Errorf("reattach detached task worktree %s to branch %s: %w", worktreePath, branchName, err)
+	}
+	return true, nil
+}
+
+func gitResolvedHEADCommit(path string) (string, error) {
+	return runGit(path, "rev-parse", "--verify", "HEAD^{commit}")
+}
+
+func gitResolvedBranchCommit(path, branch string) (string, error) {
+	return runGit(path, "rev-parse", "--verify", "refs/heads/"+strings.TrimSpace(branch)+"^{commit}")
+}
+
+func repairTaskExecutionWorkspaces(repo *Repository) (int, error) {
+	if repo == nil || len(repo.Tasks) == 0 {
+		return 0, nil
+	}
+	repaired := 0
+	for idx := range repo.Tasks {
+		task := &repo.Tasks[idx]
+		status := normalizeTaskStatus(task.Frontmatter.Status)
+		if !taskRequiresSourceRepoEvidence(*task) {
+			continue
+		}
+		if len(task.Frontmatter.WorktreePaths) == 0 {
+			continue
+		}
+		if status != TaskStatusExecuting && status != TaskStatusReviewPending && status != TaskStatusReviewing {
+			continue
+		}
+		beforeBranches := strings.Join(task.Frontmatter.WorkingBranches, "\x00")
+		beforeWorktrees := strings.Join(task.Frontmatter.WorktreePaths, "\x00")
+		if err := ensureTaskExecutionWorkspaces(repo, task); err != nil {
+			return repaired, err
+		}
+		if beforeBranches == strings.Join(task.Frontmatter.WorkingBranches, "\x00") &&
+			beforeWorktrees == strings.Join(task.Frontmatter.WorktreePaths, "\x00") {
+			continue
+		}
+		if err := persistTaskDocument(repo, idx); err != nil {
+			return repaired, err
+		}
+		repaired++
+	}
+	return repaired, nil
 }
 
 func validateTaskWorktreePaths(task TaskDocument, issues *[]ValidationIssue) {
