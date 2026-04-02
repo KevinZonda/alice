@@ -148,6 +148,7 @@ func buildDispatchSpecs(repo Repository, now time.Time) ([]DispatchTaskSpec, err
 
 func buildExecutorDispatchPrompt(repo Repository, task TaskDocument, role RoleConfig) (string, error) {
 	sourceChangeRequired := taskRequiresSourceRepoEvidence(task)
+	facts := buildTaskFactSnapshot(repo, task, DispatchKindExecutor)
 	return renderCampaignPrompt(campaignRepoPromptExecutorDispatch, map[string]any{
 		"CampaignID":                  repo.Campaign.Frontmatter.CampaignID,
 		"CampaignRepo":                repo.Root,
@@ -177,6 +178,14 @@ func buildExecutorDispatchPrompt(repo Repository, task TaskDocument, role RoleCo
 		"LastHumanGuidancePath":       blankForSummary(task.Frontmatter.LastHumanGuidancePath),
 		"LastHumanGuidanceSummary":    blankForSummary(task.Frontmatter.LastHumanGuidanceSummary),
 		"LastBlockedReason":           blankForSummary(task.Frontmatter.LastBlockedReason),
+		"LastBlockedCode":             blankForSummary(task.Frontmatter.BlockedCode),
+		"LastReceiptPath":             blankForSummary(task.Frontmatter.LastReceiptPath),
+		"ReceiptPath":                 facts.ExpectedReceiptPath,
+		"FactSnapshot":                formatFactSnapshot(facts),
+		"FactDigest":                  factSnapshotDigest(facts),
+		"RepairBudget":                dispatchRepairBudget(DispatchKindExecutor),
+		"SelfCheckBudget":             dispatchSelfCheckBudget(DispatchKindExecutor),
+		"DispatchDepth":               effectiveTaskDispatchDepth(repo, task),
 		"SelfCheckCommand":            promptSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, task.Frontmatter.TaskID, DispatchKindExecutor),
 	})
 }
@@ -184,6 +193,7 @@ func buildExecutorDispatchPrompt(repo Repository, task TaskDocument, role RoleCo
 func buildReviewerDispatchPrompt(repo Repository, task TaskDocument, role RoleConfig) (string, error) {
 	reviewPath := reviewDocumentPath(task)
 	sourceChangeRequired := taskRequiresSourceRepoEvidence(task)
+	facts := buildTaskFactSnapshot(repo, task, DispatchKindReviewer)
 	return renderCampaignPrompt(campaignRepoPromptReviewerDispatch, map[string]any{
 		"CampaignID":                  repo.Campaign.Frontmatter.CampaignID,
 		"CampaignRepo":                repo.Root,
@@ -204,6 +214,14 @@ func buildReviewerDispatchPrompt(repo Repository, task TaskDocument, role RoleCo
 		"IntegrationConflictRecovery": taskNeedsIntegrationConflictRecovery(task),
 		"WriteScope":                  task.Frontmatter.WriteScope,
 		"SourceRepoRefs":              targetSourceRepoRefs(repo, task),
+		"LastBlockedCode":             blankForSummary(task.Frontmatter.BlockedCode),
+		"LastReceiptPath":             blankForSummary(task.Frontmatter.LastReceiptPath),
+		"ReceiptPath":                 facts.ExpectedReceiptPath,
+		"FactSnapshot":                formatFactSnapshot(facts),
+		"FactDigest":                  factSnapshotDigest(facts),
+		"RepairBudget":                dispatchRepairBudget(DispatchKindReviewer),
+		"SelfCheckBudget":             dispatchSelfCheckBudget(DispatchKindReviewer),
+		"DispatchDepth":               effectiveTaskDispatchDepth(repo, task),
 		"SuggestedReviewFile":         filepath.Join(repo.Root, filepath.FromSlash(reviewPath)),
 		"SelfCheckCommand":            promptSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, task.Frontmatter.TaskID, DispatchKindReviewer),
 	})
@@ -261,6 +279,7 @@ func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error
 	proposalOutputPath := filepath.Join(repo.Root, "plans", "proposals", fmt.Sprintf("round-%03d-plan.md", maxInt(repo.Campaign.Frontmatter.PlanRound, 1)))
 	masterPlanPath := filepath.Join(repo.Root, "plans", "merged", "master-plan.md")
 	findingsPath := filepath.Join(repo.Root, "findings.md")
+	facts := buildPlanFactSnapshot(repo, DispatchKindPlanner)
 	return renderCampaignPrompt(campaignRepoPromptPlannerDispatch, map[string]any{
 		"CampaignID":           repo.Campaign.Frontmatter.CampaignID,
 		"CampaignRepo":         repo.Root,
@@ -276,6 +295,13 @@ func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error
 		"ProposalOutputPath":   proposalOutputPath,
 		"MasterPlanPath":       masterPlanPath,
 		"FindingsPath":         findingsPath,
+		"ReceiptPath":          facts.ExpectedReceiptPath,
+		"LastReceiptPath":      blankForSummary(repo.Campaign.Frontmatter.PlannerReceiptPath),
+		"FactSnapshot":         formatFactSnapshot(facts),
+		"FactDigest":           factSnapshotDigest(facts),
+		"RepairBudget":         dispatchRepairBudget(DispatchKindPlanner),
+		"SelfCheckBudget":      dispatchSelfCheckBudget(DispatchKindPlanner),
+		"DispatchDepth":        effectiveCampaignDispatchDepth(repo),
 		"SelfCheckCommand":     promptPlanSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, DispatchKindPlanner, repo.Campaign.Frontmatter.PlanRound),
 	})
 }
@@ -283,6 +309,7 @@ func buildPlannerDispatchPrompt(repo Repository, role RoleConfig) (string, error
 func buildPlannerReviewerDispatchPrompt(repo Repository, role RoleConfig) (string, error) {
 	reviewOutputPath := filepath.Join(repo.Root, "plans", "reviews", fmt.Sprintf("round-%03d-review.md", maxInt(repo.Campaign.Frontmatter.PlanRound, 1)))
 	masterPlanPath := filepath.Join(repo.Root, "plans", "merged", "master-plan.md")
+	facts := buildPlanFactSnapshot(repo, DispatchKindPlannerReviewer)
 	return renderCampaignPrompt(campaignRepoPromptPlannerReviewerDispatch, map[string]any{
 		"CampaignID":       repo.Campaign.Frontmatter.CampaignID,
 		"CampaignRepo":     repo.Root,
@@ -295,6 +322,13 @@ func buildPlannerReviewerDispatchPrompt(repo Repository, role RoleConfig) (strin
 		"MasterPlanPath":   masterPlanPath,
 		"ReviewerRole":     roleLabel(role),
 		"ReviewOutputPath": reviewOutputPath,
+		"ReceiptPath":      facts.ExpectedReceiptPath,
+		"LastReceiptPath":  blankForSummary(repo.Campaign.Frontmatter.PlannerReviewerReceiptPath),
+		"FactSnapshot":     formatFactSnapshot(facts),
+		"FactDigest":       factSnapshotDigest(facts),
+		"RepairBudget":     dispatchRepairBudget(DispatchKindPlannerReviewer),
+		"SelfCheckBudget":  dispatchSelfCheckBudget(DispatchKindPlannerReviewer),
+		"DispatchDepth":    effectiveCampaignDispatchDepth(repo),
 		"SelfCheckCommand": promptPlanSelfCheckCommand(repo.Campaign.Frontmatter.CampaignID, DispatchKindPlannerReviewer, repo.Campaign.Frontmatter.PlanRound),
 	})
 }

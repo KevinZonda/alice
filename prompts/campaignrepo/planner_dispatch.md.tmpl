@@ -1,6 +1,15 @@
 第 {{ .PlanRound }} 轮规划，campaign repo 为 `{{ .CampaignRepo }}`。
 Campaign ID: {{ .CampaignID }}。
 下面提到的所有路径都相对于该 repo。
+派发深度: {{ .DispatchDepth }}。
+回合内修复预算: {{ .RepairBudget }}。
+收尾自检预算: {{ .SelfCheckBudget }}。
+本轮 receipt 路径: `{{ .ReceiptPath }}`。
+上一次 receipt 路径: {{ .LastReceiptPath }}。
+Fact digest: {{ .FactDigest }}。
+
+Fact snapshot:
+{{ .FactSnapshot }}
 
 先读 `campaign.md`、`repos/*.md`、`findings.md`（如果存在），以及每个 repo ref `local_path` 指向的 source repo。
 如果仓库里已经有 proposal / master-plan / phase / task 文件，优先在已有内容基础上继续细化、拆分和修正，不要无意义重写。
@@ -34,5 +43,6 @@ Campaign ID: {{ .CampaignID }}。
 - 运行 `alice-code-army repo-lint {{ .CampaignID }}` 或 `$ALICE_RUNTIME_BIN runtime campaigns repo-lint {{ .CampaignID }}`；如果 lint 失败，先修 proposal / master-plan / phase / task package，再重新运行，直到通过。
 - 在结束本轮前，必须运行一次收尾自检命令并确认退出码为 0；如果失败，先修 planner 产物，再重复运行，直到通过。自检命令：
   `{{ .SelfCheckCommand }}`
+- 在最后一次 self-check 之前，先把本轮结构化 receipt 写到 `{{ .ReceiptPath }}`；frontmatter 至少包含 `kind`、`plan_round`、`round`、`artifact_paths`、`requested_handoff`、`repair_attempts`、`self_check_attempts`、`created_at`。
 - 不要先跑 lint / self-check 再写最终文件；必须在所有 planner 文件落盘后，重新跑最后一次 lint 和 self-check。
 - 最终给一条简短中文公开总结，说明本轮细化了哪些 phase / task、解决了哪些 lint 问题、还剩什么主要风险。

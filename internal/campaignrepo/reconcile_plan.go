@@ -73,6 +73,8 @@ func reconcilePlanPhase(repo *Repository, now time.Time, _ time.Duration) (bool,
 		}
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
 		repo.Campaign.Frontmatter.PlanRound = 1
+		recordPlanRoundReceiptPath(&repo.Campaign.Frontmatter, DispatchKindPlanner, repo.Campaign.Frontmatter.PlanRound)
+		repo.Campaign.Frontmatter.PlannerReviewerReceiptPath = ""
 		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 
@@ -82,6 +84,7 @@ func reconcilePlanPhase(repo *Repository, now time.Time, _ time.Duration) (bool,
 				return false, nil
 			}
 			repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanReviewPending
+			recordPlanRoundReceiptPath(&repo.Campaign.Frontmatter, DispatchKindPlannerReviewer, repo.Campaign.Frontmatter.PlanRound)
 			clearPlanSelfCheck(&repo.Campaign.Frontmatter, DispatchKindPlannerReviewer)
 			return persistCampaignDocument(repo)
 		}
@@ -120,6 +123,8 @@ func applyPlanVerdict(repo *Repository, review PlanReviewDocument) (bool, error)
 		}
 		repo.Campaign.Frontmatter.PlanRound++
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
+		recordPlanRoundReceiptPath(&repo.Campaign.Frontmatter, DispatchKindPlanner, repo.Campaign.Frontmatter.PlanRound)
+		repo.Campaign.Frontmatter.PlannerReviewerReceiptPath = ""
 		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 
@@ -129,6 +134,8 @@ func applyPlanVerdict(repo *Repository, review PlanReviewDocument) (bool, error)
 		}
 		repo.Campaign.Frontmatter.PlanRound++
 		repo.Campaign.Frontmatter.PlanStatus = PlanStatusPlanning
+		recordPlanRoundReceiptPath(&repo.Campaign.Frontmatter, DispatchKindPlanner, repo.Campaign.Frontmatter.PlanRound)
+		repo.Campaign.Frontmatter.PlannerReviewerReceiptPath = ""
 		clearPlanningSelfCheckProofs(&repo.Campaign.Frontmatter)
 		return persistCampaignDocument(repo)
 	}

@@ -7,6 +7,11 @@ Task ID: {{ .TaskID }}
 Task 标题: {{ .TaskTitle }}
 执行角色: {{ .ExecutorRole }}
 执行轮次: {{ .ExecutionRound }}
+派发深度: {{ .DispatchDepth }}
+回合内修复预算: {{ .RepairBudget }}
+收尾自检预算: {{ .SelfCheckBudget }}
+本轮 receipt 路径: {{ .ReceiptPath }}
+上一次 receipt 路径: {{ .LastReceiptPath }}
 收尾自检命令: {{ .SelfCheckCommand }}
 目标 repos: {{ .TargetRepos | join ", " | default "-" }}
 Source repos:
@@ -29,6 +34,10 @@ Write scope: {{ .WriteScope | join ", " | default "-" }}
 集成冲突恢复次数: {{ .IntegrationRetryCount }}
 阻塞指导次数: {{ .BlockGuidanceCount }}
 上次阻塞原因: {{ .LastBlockedReason }}
+上次阻塞代码: {{ .LastBlockedCode }}
+Fact digest: {{ .FactDigest }}
+Fact snapshot:
+{{ .FactSnapshot }}
 {{- if ne .LastHumanGuidancePath "-" }}
 最近一次人工指导动作: {{ .HumanGuidanceStatus }}
 最近一次人工指导摘要: {{ .LastHumanGuidanceSummary }}
@@ -60,6 +69,9 @@ Write scope: {{ .WriteScope | join ", " | default "-" }}
    - 这类“可等待 / 可继续运行 / 可重试解决”的问题，优先继续修正；如果只是等待外部作业，改成 `waiting_external` 并设置 `wake_at` / `wake_prompt`，随后重新跑 self-check。
 9. executor 不得在 `reviews/` 下新建或修改 review 文件；只能读取已有 review。只有 reviewer 可以写新的 review 文件。
 10. 最终回复前，必须运行一次收尾自检命令并确认退出码为 0；如果失败，先修 task/source-repo/result/frontmatter，再重复运行，直到通过。自检没过时，不允许结束本轮，也不要手工伪造 `self_check_*` 字段。
+   - 先在回合内自愈：执行 -> 检查 -> 修复 -> 再检查。只要还没耗尽回合内修复预算，就不要把半成品状态直接抛给 runtime。
+   - 在最后一次 self-check 之前，先写本轮结构化 receipt 到 `{{ .ReceiptPath }}`；frontmatter 至少包含 `kind`、`task_id`、`round`、`artifact_paths`、`requested_handoff`、`repair_attempts`、`self_check_attempts`、`created_at`。
+   - receipt 里的 `artifact_paths` 必须覆盖这轮真实交接产物；如果要交给 reviewer，至少包含 `last_run_path`。
 11. 自检前，自己先检查一遍 invariant：
     - 最终 task status 对 executor 交接是否合法
     - `owner_agent` / `lease_until` 是否与该状态匹配

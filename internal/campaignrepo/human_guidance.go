@@ -71,21 +71,8 @@ func ApplyTaskHumanGuidance(root, taskID, action, guidance string, now time.Time
 		if err != nil {
 			return TaskDocument{}, err
 		}
-		clearTaskAssignment(task)
-		task.Frontmatter.HumanGuidanceRound = round
-		task.Frontmatter.HumanGuidanceStatus = action
-		task.Frontmatter.LastHumanGuidancePath = guidancePath
-		task.Frontmatter.LastHumanGuidanceSummary = guidance
-		task.Frontmatter.LastBlockedReason = ""
-		switch action {
-		case TaskHumanGuidanceActionAccept:
-			task.Frontmatter.Status = TaskStatusAccepted
-			task.Frontmatter.ReviewStatus = "approved"
-			task.Frontmatter.DispatchState = dispatchStateHumanGuidanceApplied
-		case TaskHumanGuidanceActionResume:
-			task.Frontmatter.Status = TaskStatusRework
-			task.Frontmatter.ReviewStatus = "changes_requested"
-			task.Frontmatter.DispatchState = dispatchStateHumanGuidanceRequested
+		if err := applyTaskHumanGuidanceTransition(task, action, guidancePath, guidance, round); err != nil {
+			return TaskDocument{}, err
 		}
 		if err := persistTaskDocument(&repo, idx); err != nil {
 			return TaskDocument{}, err

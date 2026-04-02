@@ -86,9 +86,12 @@ func newSummaryBlockedEvents(campaignID string, previous map[string]string, summ
 			title = "任务阻塞更新"
 		}
 		detail := fmt.Sprintf("任务 **%s** %s 当前被 runtime gate 挡住，尚未进入下一步。\n\n**原因**: %s", task.TaskID, strings.TrimSpace(task.Title), reason)
-		if isPostRunValidationBlockedReason(reason) {
+		if isPostRunValidationBlockedTask(task) {
 			title = "收尾校验待恢复"
 			detail = fmt.Sprintf("任务 **%s** %s 的收尾校验尚未收口，当前处于恢复等待态。\n\n这类问题通常可通过继续运行、补齐合法交接产物或重新通过 self-check 解决，不需要人工加急介入。\n\n**原因**: %s", task.TaskID, strings.TrimSpace(task.Title), reason)
+		}
+		if hint := strings.TrimSpace(task.RecoveryHint); hint != "" {
+			detail += fmt.Sprintf("\n\n**建议恢复方式**: %s", hint)
 		}
 		events = append(events, campaignrepo.ReconcileEvent{
 			Kind:       campaignrepo.EventTaskBlocked,
@@ -145,9 +148,21 @@ func newSummaryRecoveredEvents(campaignID string, previous map[string]string, su
 func shouldNotifySummaryBlockedTask(task campaignrepo.TaskSummary) bool {
 	switch task.Status {
 	case campaignrepo.TaskStatusExecuting, campaignrepo.TaskStatusReviewing, campaignrepo.TaskStatusReviewPending, campaignrepo.TaskStatusBlocked:
+		if shouldNotifySummaryBlockedCode(task.BlockedCode) {
+			return true
+		}
 		return shouldNotifySummaryBlockedReason(task.BlockedReason)
 	default:
 		return false
+	}
+}
+
+func shouldNotifySummaryBlockedCode(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "", "dependency_wait", "lease_held", "write_scope_conflict":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -169,6 +184,13 @@ func shouldNotifySummaryBlockedReason(reason string) bool {
 	default:
 		return true
 	}
+}
+
+func isPostRunValidationBlockedTask(task campaignrepo.TaskSummary) bool {
+	if strings.TrimSpace(task.BlockedCode) == "post_run_validation" {
+		return true
+	}
+	return isPostRunValidationBlockedReason(task.BlockedReason)
 }
 
 func currentNotifiedBlockedTasks(summary campaignrepo.Summary) map[string]campaignrepo.TaskSummary {

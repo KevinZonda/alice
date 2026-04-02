@@ -63,6 +63,9 @@ type CampaignFrontmatter struct {
 	ReportMode                     string   `yaml:"report_mode" json:"report_mode,omitempty"`
 	PlanRound                      int      `yaml:"plan_round" json:"plan_round,omitempty"`
 	PlanStatus                     string   `yaml:"plan_status" json:"plan_status,omitempty"`
+	DispatchDepth                  string   `yaml:"dispatch_depth" json:"dispatch_depth,omitempty"`
+	PlannerReceiptPath             string   `yaml:"planner_receipt_path" json:"planner_receipt_path,omitempty"`
+	PlannerReviewerReceiptPath     string   `yaml:"planner_reviewer_receipt_path" json:"planner_reviewer_receipt_path,omitempty"`
 	PlannerSelfCheckRound          int      `yaml:"planner_self_check_round" json:"planner_self_check_round,omitempty"`
 	PlannerSelfCheckStatus         string   `yaml:"planner_self_check_status" json:"planner_self_check_status,omitempty"`
 	PlannerSelfCheckAtRaw          string   `yaml:"planner_self_check_at" json:"planner_self_check_at,omitempty"`
@@ -127,13 +130,18 @@ type TaskFrontmatter struct {
 	BlockGuidanceCount       int        `yaml:"block_guidance_count" json:"block_guidance_count,omitempty"`
 	HumanGuidanceRound       int        `yaml:"human_guidance_round" json:"human_guidance_round,omitempty"`
 	HumanGuidanceStatus      string     `yaml:"human_guidance_status" json:"human_guidance_status,omitempty"`
+	DispatchDepth            string     `yaml:"dispatch_depth" json:"dispatch_depth,omitempty"`
 	BaseCommit               string     `yaml:"base_commit" json:"base_commit,omitempty"`
 	HeadCommit               string     `yaml:"head_commit" json:"head_commit,omitempty"`
 	LastBlockedReason        string     `yaml:"last_blocked_reason" json:"last_blocked_reason,omitempty"`
+	BlockedCode              string     `yaml:"blocked_code" json:"blocked_code,omitempty"`
+	BlockedClass             string     `yaml:"blocked_class" json:"blocked_class,omitempty"`
+	RecoveryHint             string     `yaml:"recovery_hint" json:"recovery_hint,omitempty"`
 	LastHumanGuidancePath    string     `yaml:"last_human_guidance_path" json:"last_human_guidance_path,omitempty"`
 	LastHumanGuidanceSummary string     `yaml:"last_human_guidance_summary" json:"last_human_guidance_summary,omitempty"`
 	LastRunPath              string     `yaml:"last_run_path" json:"last_run_path,omitempty"`
 	LastReviewPath           string     `yaml:"last_review_path" json:"last_review_path,omitempty"`
+	LastReceiptPath          string     `yaml:"last_receipt_path" json:"last_receipt_path,omitempty"`
 	SelfCheckKind            string     `yaml:"self_check_kind" json:"self_check_kind,omitempty"`
 	SelfCheckRound           int        `yaml:"self_check_round" json:"self_check_round,omitempty"`
 	SelfCheckStatus          string     `yaml:"self_check_status" json:"self_check_status,omitempty"`
@@ -224,26 +232,30 @@ type Repository struct {
 }
 
 type TaskSummary struct {
-	TaskID         string    `json:"task_id"`
-	Title          string    `json:"title,omitempty"`
-	Phase          string    `json:"phase,omitempty"`
-	Status         string    `json:"status"`
-	Path           string    `json:"path"`
-	Dir            string    `json:"dir,omitempty"`
-	OwnerAgent     string    `json:"owner_agent,omitempty"`
-	LeaseUntil     time.Time `json:"lease_until,omitempty"`
-	WakeAt         time.Time `json:"wake_at,omitempty"`
-	WakePrompt     string    `json:"wake_prompt,omitempty"`
-	BlockedReason  string    `json:"blocked_reason,omitempty"`
-	DependsOn      []string  `json:"depends_on,omitempty"`
-	TargetRepos    []string  `json:"target_repos,omitempty"`
-	WriteScope     []string  `json:"write_scope,omitempty"`
-	DispatchState  string    `json:"dispatch_state,omitempty"`
-	ReviewStatus   string    `json:"review_status,omitempty"`
-	ExecutionRound int       `json:"execution_round,omitempty"`
-	ReviewRound    int       `json:"review_round,omitempty"`
-	HeadCommit     string    `json:"head_commit,omitempty"`
-	LastReviewPath string    `json:"last_review_path,omitempty"`
+	TaskID          string    `json:"task_id"`
+	Title           string    `json:"title,omitempty"`
+	Phase           string    `json:"phase,omitempty"`
+	Status          string    `json:"status"`
+	Path            string    `json:"path"`
+	Dir             string    `json:"dir,omitempty"`
+	OwnerAgent      string    `json:"owner_agent,omitempty"`
+	LeaseUntil      time.Time `json:"lease_until,omitempty"`
+	WakeAt          time.Time `json:"wake_at,omitempty"`
+	WakePrompt      string    `json:"wake_prompt,omitempty"`
+	BlockedReason   string    `json:"blocked_reason,omitempty"`
+	BlockedCode     string    `json:"blocked_code,omitempty"`
+	BlockedClass    string    `json:"blocked_class,omitempty"`
+	RecoveryHint    string    `json:"recovery_hint,omitempty"`
+	DependsOn       []string  `json:"depends_on,omitempty"`
+	TargetRepos     []string  `json:"target_repos,omitempty"`
+	WriteScope      []string  `json:"write_scope,omitempty"`
+	DispatchState   string    `json:"dispatch_state,omitempty"`
+	ReviewStatus    string    `json:"review_status,omitempty"`
+	ExecutionRound  int       `json:"execution_round,omitempty"`
+	ReviewRound     int       `json:"review_round,omitempty"`
+	HeadCommit      string    `json:"head_commit,omitempty"`
+	LastReviewPath  string    `json:"last_review_path,omitempty"`
+	LastReceiptPath string    `json:"last_receipt_path,omitempty"`
 }
 
 type WakeTaskSpec struct {

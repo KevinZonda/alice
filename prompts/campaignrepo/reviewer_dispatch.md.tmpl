@@ -7,6 +7,11 @@ Task ID: {{ .TaskID }}
 Task 标题: {{ .TaskTitle }}
 评审角色: {{ .ReviewerRole }}
 评审轮次: {{ .ReviewRound }}
+派发深度: {{ .DispatchDepth }}
+回合内修复预算: {{ .RepairBudget }}
+收尾自检预算: {{ .SelfCheckBudget }}
+本轮 receipt 路径: {{ .ReceiptPath }}
+上一次 receipt 路径: {{ .LastReceiptPath }}
 收尾自检命令: {{ .SelfCheckCommand }}
 评审状态: {{ .ReviewStatus }}
 目标 commit: {{ .TargetCommit }}
@@ -14,6 +19,10 @@ Task 标题: {{ .TaskTitle }}
 集成冲突恢复次数: {{ .IntegrationRetryCount }}
 阻塞指导次数: {{ .BlockGuidanceCount }}
 上次阻塞原因: {{ .LastBlockedReason }}
+上次阻塞代码: {{ .LastBlockedCode }}
+Fact digest: {{ .FactDigest }}
+Fact snapshot:
+{{ .FactSnapshot }}
 {{- if .IntegrationConflictRecovery }}
 这是一次集成冲突恢复后的评审。你要确认新的 `target_commit` 既保留了此前已批准改动的意图，也兼容默认分支的新变化，没有把冲突修复扩散到 `write_scope` 之外。
 {{- end }}
@@ -43,6 +52,8 @@ Source repos:
 7. `created_at` 使用 RFC3339，例如 `2026-03-28T14:57:39+08:00`。
 8. 不要自己改 task status；review verdict 由 Alice judge 应用。
 9. 在结束本轮前，必须运行一次收尾自检命令并确认退出码为 0；如果失败，先修 review/task frontmatter，再重复运行，直到通过。自检没过时，不允许结束本轮，也不要手工伪造 `self_check_*` 字段。
+   - 在最后一次 self-check 之前，先把本轮结构化 receipt 写到 `{{ .ReceiptPath }}`；frontmatter 至少包含 `kind`、`task_id`、`round`、`artifact_paths`、`requested_handoff`、`repair_attempts`、`self_check_attempts`、`created_at`。
+   - receipt 的 `artifact_paths` 至少覆盖本轮新 review 文件；如果 task 已记录 `last_review_path`，receipt 也要覆盖它。
 10. 只有当当前 `review_round` 对应的一份新 task-local review 文件已经存在、其中 verdict 非空、且 `reviewer.role` 与 task reviewer 合同匹配时，本轮才算完成。不要在 `reviews/` 里留下 executor 风格的响应文件。
 11. 如果你无法产出合法 review artifact，请发送 `/alice blocked ...` 或 `/alice needs-human ...`，不要假装 review 已完成。
     - 但对可等待、可继续运行、可重试解决的问题，不要建议 `needs-human`，也不要用 `blocking` 放大；应明确写成 `concern`，并指出 executor 应继续执行、重跑 self-check，或把 task 留在 `waiting_external` 等待唤醒。

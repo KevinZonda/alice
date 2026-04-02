@@ -39,7 +39,7 @@ func integrateAcceptedTasks(repo *Repository, campaignID string) (int, []Reconci
 			task.Frontmatter.Status = TaskStatusDone
 			task.Frontmatter.DispatchState = "integration_not_required"
 			task.Frontmatter.IntegrationRetryCount = 0
-			task.Frontmatter.LastBlockedReason = ""
+			clearBlockedReasonMetadata(task)
 			task.Frontmatter.OwnerAgent = ""
 			task.LeaseUntil = time.Time{}
 			if err := persistTaskDocument(repo, idx); err != nil {
@@ -60,7 +60,7 @@ func integrateAcceptedTasks(repo *Repository, campaignID string) (int, []Reconci
 		mergeCommit, err := integrateTaskIntoTargetRepos(*task, targetRepos)
 		if err != nil {
 			if integrationFailureLooksLikeMergeConflict(err.Error()) {
-				task.Frontmatter.LastBlockedReason = err.Error()
+				applyBlockedReasonMetadata(task, err.Error())
 			}
 			if integrationFailureLooksLikeMergeConflict(err.Error()) && queueIntegrationConflictRecovery(task) {
 				if err := persistTaskDocument(repo, idx); err != nil {
@@ -79,7 +79,7 @@ func integrateAcceptedTasks(repo *Repository, campaignID string) (int, []Reconci
 			}
 			task.Frontmatter.Status = TaskStatusBlocked
 			task.Frontmatter.DispatchState = "integration_blocked"
-			task.Frontmatter.LastBlockedReason = err.Error()
+			applyBlockedReasonMetadata(task, err.Error())
 			task.Frontmatter.OwnerAgent = ""
 			task.LeaseUntil = time.Time{}
 			task.WakeAt = time.Time{}
@@ -105,7 +105,7 @@ func integrateAcceptedTasks(repo *Repository, campaignID string) (int, []Reconci
 		task.Frontmatter.Status = TaskStatusDone
 		task.Frontmatter.DispatchState = "integrated"
 		task.Frontmatter.IntegrationRetryCount = 0
-		task.Frontmatter.LastBlockedReason = ""
+		clearBlockedReasonMetadata(task)
 		task.Frontmatter.OwnerAgent = ""
 		task.LeaseUntil = time.Time{}
 		task.WakeAt = time.Time{}
