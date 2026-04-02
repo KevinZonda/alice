@@ -252,6 +252,7 @@ func (b *connectorRuntimeBuilder) reconcileCampaignRepo(item campaign.Campaign, 
 type campaignAutomationTaskState struct {
 	target          automationTaskTarget
 	existingByState map[string]automation.Task
+	duplicateTasks  []automation.Task
 }
 
 func shouldAutoReconcileCampaign(item campaign.Campaign) bool {
@@ -337,9 +338,16 @@ func (b *connectorRuntimeBuilder) loadCampaignAutomationTaskState(item campaign.
 		return campaignAutomationTaskState{}, false, err
 	}
 	existingByState := make(map[string]automation.Task, len(existing))
+	var duplicateTasks []automation.Task
 	for _, task := range existing {
 		stateKey := strings.TrimSpace(task.Action.StateKey)
 		if !strings.HasPrefix(stateKey, prefix) {
+			continue
+		}
+		if current, ok := existingByState[stateKey]; ok {
+			preferred, duplicate := preferredCampaignAutomationTask(current, task)
+			existingByState[stateKey] = preferred
+			duplicateTasks = append(duplicateTasks, duplicate)
 			continue
 		}
 		existingByState[stateKey] = task
@@ -347,7 +355,75 @@ func (b *connectorRuntimeBuilder) loadCampaignAutomationTaskState(item campaign.
 	return campaignAutomationTaskState{
 		target:          target,
 		existingByState: existingByState,
+		duplicateTasks:  duplicateTasks,
 	}, true, nil
+}
+
+func preferredCampaignAutomationTask(left, right automation.Task) (automation.Task, automation.Task) {
+	left = automation.NormalizeTask(left)
+	right = automation.NormalizeTask(right)
+	if compareCampaignAutomationTaskPriority(left, right) >= 0 {
+		return left, right
+	}
+	return right, left
+}
+
+func compareCampaignAutomationTaskPriority(left, right automation.Task) int {
+	left = automation.NormalizeTask(left)
+	right = automation.NormalizeTask(right)
+
+	if diff := campaignAutomationTaskStatusPriority(left.Status) - campaignAutomationTaskStatusPriority(right.Status); diff != 0 {
+		return diff
+	}
+	if left.Running != right.Running {
+		if left.Running {
+			return 1
+		}
+		return -1
+	}
+	if !left.UpdatedAt.Equal(right.UpdatedAt) {
+		if left.UpdatedAt.After(right.UpdatedAt) {
+			return 1
+		}
+		return -1
+	}
+	if !left.CreatedAt.Equal(right.CreatedAt) {
+		if left.CreatedAt.After(right.CreatedAt) {
+			return 1
+		}
+		return -1
+	}
+	return strings.Compare(strings.TrimSpace(left.ID), strings.TrimSpace(right.ID))
+}
+
+func campaignAutomationTaskStatusPriority(status automation.TaskStatus) int {
+	switch status {
+	case automation.TaskStatusActive:
+		return 3
+	case automation.TaskStatusPaused:
+		return 2
+	case automation.TaskStatusDeleted:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (b *connectorRuntimeBuilder) deleteDuplicateCampaignAutomationTasks(tasks []automation.Task) error {
+	for _, task := range tasks {
+		task = automation.NormalizeTask(task)
+		if strings.TrimSpace(task.ID) == "" || task.Status == automation.TaskStatusDeleted {
+			continue
+		}
+		if _, err := b.automationStore.PatchTask(task.ID, func(current *automation.Task) error {
+			current.Status = automation.TaskStatusDeleted
+			current.NextRunAt = time.Time{}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *connectorRuntimeBuilder) deleteStaleCampaignAutomationTasks(existingByState map[string]automation.Task, desired map[string]struct{}) error {
@@ -376,6 +452,9 @@ func (b *connectorRuntimeBuilder) syncCampaignDispatchTasks(item campaign.Campai
 	}
 	if !ok {
 		return nil
+	}
+	if err := b.deleteDuplicateCampaignAutomationTasks(state.duplicateTasks); err != nil {
+		return err
 	}
 
 	desired := make(map[string]struct{}, len(specs))
@@ -409,6 +488,9 @@ func (b *connectorRuntimeBuilder) syncCampaignWakeTasks(item campaign.Campaign, 
 	}
 	if !ok {
 		return nil
+	}
+	if err := b.deleteDuplicateCampaignAutomationTasks(state.duplicateTasks); err != nil {
+		return err
 	}
 
 	desired := make(map[string]struct{}, len(summary.WakeTasks))

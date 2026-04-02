@@ -622,6 +622,118 @@ execution_round: 1
 	}
 }
 
+func TestSyncCampaignDispatchTasks_DeletesDuplicateStateKeyTasks(t *testing.T) {
+	automationStore := automation.NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	builder := &connectorRuntimeBuilder{
+		automationStore: automationStore,
+	}
+	now := time.Date(2026, 4, 2, 12, 10, 0, 0, time.FixedZone("CST", 8*3600))
+	item := campaign.Campaign{
+		ID:    "camp_demo",
+		Title: "Demo Campaign",
+		Session: campaign.SessionRoute{
+			ScopeKey:      "chat_id:oc_chat|scene:work|thread:omt_demo",
+			ReceiveIDType: "chat_id",
+			ReceiveID:     "oc_chat",
+			ChatType:      "group",
+		},
+		Creator: campaign.Actor{
+			OpenID: "ou_actor",
+		},
+		ManageMode: campaign.ManageModeCreatorOnly,
+	}
+	spec := campaignrepo.DispatchTaskSpec{
+		StateKey: "campaign_dispatch:camp_demo:reviewer:T301:r4",
+		Kind:     campaignrepo.DispatchKindReviewer,
+		TaskID:   "T301",
+		Title:    "Demo Campaign · T301 · 评审 · 第 4 轮",
+		Prompt:   "review prompt",
+		Role: campaignrepo.RoleConfig{
+			Role:            "reviewer",
+			Workflow:        "code_army",
+			Provider:        "codex",
+			Model:           "gpt-5.4",
+			Profile:         "reviewer",
+			ReasoningEffort: "high",
+			Personality:     "pragmatic",
+		},
+	}
+
+	activeTask, err := automationStore.CreateTask(automation.Task{
+		Title:      spec.Title,
+		Scope:      automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
+		Route:      automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:    automation.Actor{OpenID: "ou_actor"},
+		ManageMode: automation.ManageModeCreatorOnly,
+		Schedule: automation.Schedule{
+			Type:         automation.ScheduleTypeInterval,
+			EverySeconds: 60,
+		},
+		Action: automation.Action{
+			Type:            automation.ActionTypeRunWorkflow,
+			Prompt:          spec.Prompt,
+			Provider:        spec.Role.Provider,
+			Model:           spec.Role.Model,
+			Profile:         spec.Role.Profile,
+			Workflow:        spec.Role.Workflow,
+			StateKey:        spec.StateKey,
+			SessionKey:      item.Session.ScopeKey,
+			ReasoningEffort: spec.Role.ReasoningEffort,
+			Personality:     spec.Role.Personality,
+		},
+		Status:    automation.TaskStatusActive,
+		MaxRuns:   1,
+		NextRunAt: now,
+	})
+	if err != nil {
+		t.Fatalf("create active task failed: %v", err)
+	}
+	duplicateTask, err := automationStore.CreateTask(automation.Task{
+		Title:      spec.Title,
+		Scope:      automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
+		Route:      automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:    automation.Actor{OpenID: "ou_actor"},
+		ManageMode: automation.ManageModeCreatorOnly,
+		Schedule: automation.Schedule{
+			Type:         automation.ScheduleTypeInterval,
+			EverySeconds: 60,
+		},
+		Action: automation.Action{
+			Type:       automation.ActionTypeRunWorkflow,
+			Prompt:     "stale review prompt",
+			Workflow:   spec.Role.Workflow,
+			StateKey:   spec.StateKey,
+			SessionKey: item.Session.ScopeKey,
+		},
+		Status:    automation.TaskStatusPaused,
+		MaxRuns:   1,
+		NextRunAt: now,
+	})
+	if err != nil {
+		t.Fatalf("create duplicate task failed: %v", err)
+	}
+
+	if err := builder.syncCampaignDispatchTasks(item, []campaignrepo.DispatchTaskSpec{spec}, now); err != nil {
+		t.Fatalf("sync dispatch tasks failed: %v", err)
+	}
+
+	updatedActive, err := automationStore.GetTask(activeTask.ID)
+	if err != nil {
+		t.Fatalf("get active task failed: %v", err)
+	}
+	if updatedActive.Status != automation.TaskStatusActive {
+		t.Fatalf("expected canonical task to stay active, got %s", updatedActive.Status)
+	}
+
+	updatedDuplicate, err := automationStore.GetTask(duplicateTask.ID)
+	if err != nil {
+		t.Fatalf("get duplicate task failed: %v", err)
+	}
+	if updatedDuplicate.Status != automation.TaskStatusDeleted {
+		t.Fatalf("expected duplicate task to be deleted, got %s", updatedDuplicate.Status)
+	}
+}
+
 func TestNewCampaignCompletedEvent(t *testing.T) {
 	item := campaign.Campaign{
 		ID:     "camp_demo",

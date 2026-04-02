@@ -2061,6 +2061,100 @@ human_approved: false
 	}
 }
 
+func TestReconcileAndPrepare_PlanningPhaseStillAppliesCompletedReviewVerdicts(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+plan_round: 4
+plan_status: planning
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Review completed before replanning finishes"
+phase: P01
+status: reviewing
+dispatch_state: reviewer_dispatched
+reviewer:
+  role: reviewer.codex
+write_scope: [campaign:reports/live-report.md]
+execution_round: 2
+review_round: 4
+review_status: reviewing
+owner_agent: reviewer.codex
+lease_until: "2026-03-24T12:00:00+08:00"
+last_run_path: "results/summary.md"
+last_review_path: "phases/P01/tasks/T001/reviews/R003.md"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "results", "summary.md"), "# Summary\n")
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R003.md"), `---
+review_id: R003
+target_task: T001
+review_round: 3
+reviewer:
+  role: reviewer.codex
+verdict: approve
+blocking: false
+created_at: "2026-03-24T10:00:00+08:00"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R004.md"), `---
+review_id: R004
+target_task: T001
+review_round: 4
+reviewer:
+  role: reviewer.codex
+verdict: concern
+blocking: false
+created_at: "2026-03-24T10:30:00+08:00"
+---
+`)
+
+	checkedAt := time.Date(2026, 3, 24, 10, 45, 0, 0, time.FixedZone("CST", 8*3600))
+	validation, err := RunTaskSelfCheck(root, "T001", DispatchKindReviewer, checkedAt)
+	if err != nil {
+		t.Fatalf("reviewer self-check failed: %v", err)
+	}
+	if !validation.Valid {
+		t.Fatalf("expected reviewer self-check to pass, got %+v", validation.Issues)
+	}
+
+	now := time.Date(2026, 3, 24, 11, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	result, err := ReconcileAndPrepare(root, now, 2, time.Hour, pragmaticReviewerRoleDefaults())
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if result.AppliedReviews != 1 {
+		t.Fatalf("expected completed review verdict to be applied during planning, got %d", result.AppliedReviews)
+	}
+	if result.ClaimedExecutors != 0 || result.ClaimedReviewers != 0 {
+		t.Fatalf("did not expect planning reconcile to claim new tasks, got executors=%d reviewers=%d", result.ClaimedExecutors, result.ClaimedReviewers)
+	}
+	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindPlanner {
+		t.Fatalf("expected only planner dispatch to remain during planning, got %+v", result.DispatchTasks)
+	}
+
+	task := result.Repository.Tasks[0]
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusRework {
+		t.Fatalf("expected task to move to rework after concern verdict, got %s", got)
+	}
+	if task.Frontmatter.ReviewStatus != "changes_requested" {
+		t.Fatalf("expected review_status=changes_requested, got %q", task.Frontmatter.ReviewStatus)
+	}
+	if task.Frontmatter.LastReviewPath != "phases/P01/tasks/T001/reviews/R004.md" {
+		t.Fatalf("expected last_review_path to advance to R004, got %q", task.Frontmatter.LastReviewPath)
+	}
+}
+
 func TestReconcileAndPrepare_ClearsExecutorLeaseBeforeReviewerDispatch(t *testing.T) {
 	root := t.TempDir()
 	sourceRoot := filepath.Join(root, "source")

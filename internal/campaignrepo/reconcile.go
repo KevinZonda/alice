@@ -66,20 +66,7 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 		}
 	}
 
-	if isPlanningPhase(repo.Campaign.Frontmatter.PlanStatus) {
-		summary := Summarize(repo, now, maxParallel)
-		dispatchTasks, err := buildDispatchSpecs(repo, now)
-		if err != nil {
-			return ReconcileResult{}, err
-		}
-		return ReconcileResult{
-			Repository:    repo,
-			Summary:       summary,
-			DispatchTasks: dispatchTasks,
-			Changed:       changed,
-			Events:        events,
-		}, nil
-	}
+	planningPhase := isPlanningPhase(repo.Campaign.Frontmatter.PlanStatus)
 
 	repairedPostRunBlocks, err := repairTerminalPostRunValidationBlocks(&repo)
 	if err != nil {
@@ -149,6 +136,20 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 	}
 
 	summary := Summarize(repo, now, maxParallel)
+	if planningPhase {
+		dispatchTasks, err := buildDispatchSpecs(repo, now)
+		if err != nil {
+			return ReconcileResult{}, err
+		}
+		return ReconcileResult{
+			Repository:     repo,
+			Summary:        summary,
+			DispatchTasks:  dispatchTasks,
+			Changed:        changed,
+			AppliedReviews: appliedReviews,
+			Events:         events,
+		}, nil
+	}
 	claimedExecutors, executorEvents, err := claimSelectedExecutorTasks(&repo, summary, now, leaseDuration, campaignID)
 	if err != nil {
 		return ReconcileResult{}, err
