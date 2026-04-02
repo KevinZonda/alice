@@ -118,6 +118,46 @@ func TestDispatchCompletionTargetFromStateKey(t *testing.T) {
 	}
 }
 
+func TestNewCampaignAutomationFailureEvent(t *testing.T) {
+	event, ok := newCampaignAutomationFailureEvent("camp_demo", automation.Task{
+		ID:                  "task_dispatch",
+		Title:               "Demo Campaign · T304 · 评审 · 第 8 轮",
+		Status:              automation.TaskStatusPaused,
+		MaxRuns:             1,
+		ConsecutiveFailures: 3,
+		LastResult:          "error: codex exec failed: exit status 1",
+		Action: automation.Action{
+			Type:     automation.ActionTypeRunWorkflow,
+			Workflow: "code_army",
+			StateKey: "campaign_dispatch:camp_demo:reviewer:T304:r8",
+		},
+	})
+	if !ok {
+		t.Fatal("expected third failed internal workflow task to emit automation failure event")
+	}
+	if event.Kind != campaignrepo.EventAutomationFailed {
+		t.Fatalf("unexpected event kind: %+v", event)
+	}
+	if event.TaskID != "T304" {
+		t.Fatalf("unexpected event task id: %q", event.TaskID)
+	}
+	if event.Title != "内部调度连续失败，已暂停" {
+		t.Fatalf("unexpected event title: %q", event.Title)
+	}
+	if !strings.Contains(event.Detail, "连续失败 3 次") {
+		t.Fatalf("expected failure count in detail, got %q", event.Detail)
+	}
+	if !strings.Contains(event.Detail, "campaign_dispatch:camp_demo:reviewer:T304:r8") {
+		t.Fatalf("expected state key in detail, got %q", event.Detail)
+	}
+	if !strings.Contains(event.Detail, "codex exec failed: exit status 1") {
+		t.Fatalf("expected last error in detail, got %q", event.Detail)
+	}
+	if !strings.Contains(event.Detail, "repo-reconcile") {
+		t.Fatalf("expected suggested action in detail, got %q", event.Detail)
+	}
+}
+
 func TestShouldKeepExistingDispatchTask_RespectsFailureCooldown(t *testing.T) {
 	now := time.Date(2026, 3, 25, 10, 0, 0, 0, time.UTC)
 	spec := campaignrepo.DispatchTaskSpec{

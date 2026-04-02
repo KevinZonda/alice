@@ -22,9 +22,12 @@ func TestCampaignEventCardTitle_UsesCampaignName(t *testing.T) {
 	}
 }
 
-func TestShouldEscalateCampaignEvent_OnlyTaskBlocked(t *testing.T) {
+func TestShouldEscalateCampaignEvent_TaskBlockedAndAutomationFailure(t *testing.T) {
 	if !shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskBlocked}) {
 		t.Fatal("expected task_blocked to trigger urgent escalation")
+	}
+	if !shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventAutomationFailed}) {
+		t.Fatal("expected automation_failed to trigger urgent escalation")
 	}
 	if shouldEscalateCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskRetrying}) {
 		t.Fatal("did not expect task_retrying to trigger urgent escalation")

@@ -303,6 +303,12 @@ func (s *Store) RecordTaskResult(taskID string, at time.Time, runErr error) erro
 		if runErr != nil {
 			task.ConsecutiveFailures++
 			task.LastResult = "error: " + strings.TrimSpace(runErr.Error())
+			if shouldRetrySingleRunInternalWorkflowTask(*task) && task.ConsecutiveFailures < maxConsecutiveTaskFailures {
+				task.Status = TaskStatusActive
+				task.RunCount = 0
+				task.NextRunAt = NextRunAt(at, task.Schedule)
+				return nil
+			}
 			if task.ConsecutiveFailures >= maxConsecutiveTaskFailures {
 				task.Status = TaskStatusPaused
 				task.NextRunAt = time.Time{}
@@ -324,6 +330,25 @@ func (s *Store) RecordTaskResult(taskID string, at time.Time, runErr error) erro
 		return nil
 	}
 	return err
+}
+
+func shouldRetrySingleRunInternalWorkflowTask(task Task) bool {
+	task = NormalizeTask(task)
+	if task.Action.Type != ActionTypeRunWorkflow {
+		return false
+	}
+	if task.MaxRuns != 1 {
+		return false
+	}
+	stateKey := strings.TrimSpace(task.Action.StateKey)
+	return strings.HasPrefix(stateKey, "campaign_dispatch:") || strings.HasPrefix(stateKey, "campaign_wake:")
+}
+
+func ShouldEscalateInternalWorkflowFailure(task Task) bool {
+	task = NormalizeTask(task)
+	return shouldRetrySingleRunInternalWorkflowTask(task) &&
+		task.Status == TaskStatusPaused &&
+		task.ConsecutiveFailures == maxConsecutiveTaskFailures
 }
 
 func applyDeletedTaskState(task Task, now time.Time) Task {

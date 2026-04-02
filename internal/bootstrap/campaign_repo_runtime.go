@@ -62,23 +62,124 @@ func (b *connectorRuntimeBuilder) handleCampaignRepoAutomationTaskCompletion(tas
 	if campaignID == "" {
 		return
 	}
+	task = b.loadCampaignAutomationTaskSnapshot(task)
 	b.campaignRepoMu.Lock()
 	defer b.campaignRepoMu.Unlock()
 	b.handleCampaignRepoTaskSignals(campaignID, task)
-	if runErr == nil {
-		item, err := b.campaignStore.GetCampaign(campaignID)
-		if err != nil {
-			logging.Warnf("load campaign for post-run validation failed campaign=%s: %v", campaignID, err)
-		} else {
-			item = campaign.NormalizeCampaign(item)
-			if event, ok, err := validateCampaignRepoTaskCompletion(item, task); err != nil {
-				logging.Warnf("campaign repo post-run validation failed campaign=%s state_key=%s: %v", campaignID, task.Action.StateKey, err)
-			} else if ok {
-				b.sendCampaignNotifications(item, []campaignrepo.ReconcileEvent{event})
-			}
+	if runErr != nil {
+		b.handleCampaignRepoAutomationTaskFailure(campaignID, task)
+	} else if item, err := b.campaignStore.GetCampaign(campaignID); err != nil {
+		logging.Warnf("load campaign for post-run validation failed campaign=%s: %v", campaignID, err)
+	} else {
+		item = campaign.NormalizeCampaign(item)
+		if event, ok, err := validateCampaignRepoTaskCompletion(item, task); err != nil {
+			logging.Warnf("campaign repo post-run validation failed campaign=%s state_key=%s: %v", campaignID, task.Action.StateKey, err)
+		} else if ok {
+			b.sendCampaignNotifications(item, []campaignrepo.ReconcileEvent{event})
 		}
 	}
 	b.reconcileCampaignRepoLocked(campaignID)
+}
+
+func (b *connectorRuntimeBuilder) loadCampaignAutomationTaskSnapshot(task automation.Task) automation.Task {
+	task = automation.NormalizeTask(task)
+	if b == nil || b.automationStore == nil || strings.TrimSpace(task.ID) == "" {
+		return task
+	}
+	stored, err := b.automationStore.GetTask(task.ID)
+	if err != nil {
+		logging.Warnf("load automation task snapshot failed id=%s state_key=%s: %v", task.ID, task.Action.StateKey, err)
+		return task
+	}
+	return stored
+}
+
+func (b *connectorRuntimeBuilder) handleCampaignRepoAutomationTaskFailure(campaignID string, task automation.Task) {
+	if b == nil || b.campaignStore == nil {
+		return
+	}
+	event, ok := newCampaignAutomationFailureEvent(campaignID, task)
+	if !ok {
+		return
+	}
+	item, err := b.campaignStore.GetCampaign(campaignID)
+	if err != nil {
+		logging.Warnf("load campaign for automation failure notification failed campaign=%s: %v", campaignID, err)
+		return
+	}
+	b.sendCampaignNotifications(campaign.NormalizeCampaign(item), []campaignrepo.ReconcileEvent{event})
+}
+
+func newCampaignAutomationFailureEvent(campaignID string, task automation.Task) (campaignrepo.ReconcileEvent, bool) {
+	task = automation.NormalizeTask(task)
+	if !automation.ShouldEscalateInternalWorkflowFailure(task) {
+		return campaignrepo.ReconcileEvent{}, false
+	}
+	stateKey := strings.TrimSpace(task.Action.StateKey)
+	taskID := campaignAutomationFailureTaskID(stateKey)
+	alertKind := "内部调度任务"
+	switch {
+	case strings.HasPrefix(stateKey, campaignDispatchStatePrefix):
+		alertKind = "内部派发调度"
+	case strings.HasPrefix(stateKey, campaignWakeStatePrefix):
+		alertKind = "内部唤醒调度"
+	}
+	lead := fmt.Sprintf("%s连续失败 %d 次，已自动暂停并停止重试。", alertKind, task.ConsecutiveFailures)
+	if taskID != "" {
+		lead = fmt.Sprintf("任务 **%s** 的%s连续失败 %d 次，已自动暂停并停止重试。", taskID, alertKind, task.ConsecutiveFailures)
+	}
+	return campaignrepo.ReconcileEvent{
+		Kind:       campaignrepo.EventAutomationFailed,
+		CampaignID: campaignID,
+		TaskID:     taskID,
+		Title:      "内部调度连续失败，已暂停",
+		Detail: fmt.Sprintf(
+			"%s\n\n**自动化任务**: %s\n\n**state_key**: `%s`\n\n**最后错误**: %s\n\n**建议动作**: 检查上游执行错误后，执行 `repo-reconcile` 或手动恢复该调度任务。",
+			lead,
+			campaignAutomationFailureTaskLabel(task),
+			stateKey,
+			campaignAutomationFailureError(task),
+		),
+		Severity: "error",
+	}, true
+}
+
+func campaignAutomationFailureTaskID(stateKey string) string {
+	stateKey = strings.TrimSpace(stateKey)
+	if stateKey == "" {
+		return ""
+	}
+	if target, ok := dispatchCompletionTargetFromStateKey(stateKey); ok && strings.TrimSpace(target.TaskID) != "" {
+		return strings.TrimSpace(target.TaskID)
+	}
+	parts := strings.Split(stateKey, ":")
+	if len(parts) >= 3 && parts[0] == strings.TrimSuffix(campaignWakeStatePrefix, ":") {
+		return strings.TrimSpace(parts[2])
+	}
+	return ""
+}
+
+func campaignAutomationFailureTaskLabel(task automation.Task) string {
+	task = automation.NormalizeTask(task)
+	switch {
+	case strings.TrimSpace(task.Title) != "":
+		return strings.TrimSpace(task.Title)
+	case strings.TrimSpace(task.ID) != "":
+		return strings.TrimSpace(task.ID)
+	default:
+		return strings.TrimSpace(task.Action.StateKey)
+	}
+}
+
+func campaignAutomationFailureError(task automation.Task) string {
+	lastResult := strings.TrimSpace(task.LastResult)
+	if strings.HasPrefix(strings.ToLower(lastResult), "error:") {
+		lastResult = strings.TrimSpace(lastResult[len("error:"):])
+	}
+	if lastResult == "" {
+		return "unknown error"
+	}
+	return lastResult
 }
 
 func (b *connectorRuntimeBuilder) runCampaignRepoReconcileCampaign(campaignID string) {

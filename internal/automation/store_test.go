@@ -229,6 +229,113 @@ func TestStore_ClaimDueTasks_MaxRunsPausesTask(t *testing.T) {
 	}
 }
 
+func TestStore_RecordTaskResult_RetriesFailedCampaignDispatchTaskBeforePausing(t *testing.T) {
+	base := time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC)
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	store.now = func() time.Time { return base }
+
+	created, err := store.CreateTask(Task{
+		Title: "dispatch once",
+		Scope: Scope{Kind: ScopeKindChat, ID: "oc_chat"},
+		Route: Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator: Actor{
+			UserID: "ou_actor",
+		},
+		Schedule: Schedule{Type: ScheduleTypeInterval, EverySeconds: 60},
+		Action: Action{
+			Type:     ActionTypeRunWorkflow,
+			Prompt:   "review task",
+			Workflow: "code_army",
+			StateKey: "campaign_dispatch:camp_demo:reviewer:T001:r1",
+		},
+		MaxRuns: 1,
+	})
+	if err != nil {
+		t.Fatalf("create task failed: %v", err)
+	}
+
+	claimedAt := base.Add(2 * time.Minute)
+	claimed, err := store.ClaimDueTasks(claimedAt, 10)
+	if err != nil {
+		t.Fatalf("claim due tasks failed: %v", err)
+	}
+	if len(claimed) != 1 || claimed[0].ID != created.ID {
+		t.Fatalf("unexpected claimed tasks: %+v", claimed)
+	}
+
+	failedAt := claimedAt.Add(10 * time.Second)
+	if err := store.RecordTaskResult(created.ID, failedAt, errors.New("runner failed")); err != nil {
+		t.Fatalf("record failed result failed: %v", err)
+	}
+
+	updated, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get updated task failed: %v", err)
+	}
+	if updated.Status != TaskStatusActive {
+		t.Fatalf("expected task to stay active for retry, got %s", updated.Status)
+	}
+	if updated.RunCount != 0 {
+		t.Fatalf("expected run_count reset for retry, got %d", updated.RunCount)
+	}
+	if updated.ConsecutiveFailures != 1 {
+		t.Fatalf("expected failure count 1, got %d", updated.ConsecutiveFailures)
+	}
+	wantNext := failedAt.Add(60 * time.Second)
+	if !updated.NextRunAt.Equal(wantNext) {
+		t.Fatalf("unexpected next_run_at: got=%s want=%s", updated.NextRunAt.Format(time.RFC3339), wantNext.Format(time.RFC3339))
+	}
+
+	none, err := store.ClaimDueTasks(wantNext.Add(-time.Second), 10)
+	if err != nil {
+		t.Fatalf("claim before retry due failed: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("expected no claimed tasks before retry due, got %+v", none)
+	}
+
+	retryClaim, err := store.ClaimDueTasks(wantNext, 10)
+	if err != nil {
+		t.Fatalf("claim retry due tasks failed: %v", err)
+	}
+	if len(retryClaim) != 1 || retryClaim[0].ID != created.ID {
+		t.Fatalf("unexpected retry claim: %+v", retryClaim)
+	}
+}
+
+func TestShouldEscalateInternalWorkflowFailure(t *testing.T) {
+	task := Task{
+		Status:              TaskStatusPaused,
+		MaxRuns:             1,
+		ConsecutiveFailures: maxConsecutiveTaskFailures,
+		Action: Action{
+			Type:     ActionTypeRunWorkflow,
+			Workflow: "code_army",
+			StateKey: "campaign_dispatch:camp_demo:reviewer:T001:r1",
+		},
+	}
+	if !ShouldEscalateInternalWorkflowFailure(task) {
+		t.Fatal("expected paused campaign dispatch task on third failure to escalate")
+	}
+
+	task.ConsecutiveFailures = maxConsecutiveTaskFailures - 1
+	if ShouldEscalateInternalWorkflowFailure(task) {
+		t.Fatal("did not expect escalation before the third failure")
+	}
+
+	task.ConsecutiveFailures = maxConsecutiveTaskFailures
+	task.Status = TaskStatusActive
+	if ShouldEscalateInternalWorkflowFailure(task) {
+		t.Fatal("did not expect escalation while task is still active")
+	}
+
+	task.Status = TaskStatusPaused
+	task.Action.StateKey = "automation:other"
+	if ShouldEscalateInternalWorkflowFailure(task) {
+		t.Fatal("did not expect non-campaign workflow task to escalate")
+	}
+}
+
 func TestStore_RecordTaskResult_DeletedTaskIsIgnored(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 0, 0, 0, time.UTC)
 	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
