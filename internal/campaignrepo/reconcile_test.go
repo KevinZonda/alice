@@ -807,6 +807,132 @@ role: source
 	}
 }
 
+func TestReconcileAndPrepare_RetriesIntegrationBlockBySkippingReadContextRepo(t *testing.T) {
+	writeRepo := t.TempDir()
+	initGitRepo(t, writeRepo)
+	mustWriteTestFile(t, filepath.Join(writeRepo, "README.md"), "write repo base\n")
+	runGitOrFail(t, writeRepo, "add", "README.md")
+	runGitOrFail(t, writeRepo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "seed write repo")
+	writeBase := gitHeadCommit(t, writeRepo)
+
+	readRepo := t.TempDir()
+	initGitRepo(t, readRepo)
+	mustWriteTestFile(t, filepath.Join(readRepo, "README.md"), "read repo base\n")
+	runGitOrFail(t, readRepo, "add", "README.md")
+	runGitOrFail(t, readRepo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "seed read repo")
+	readBase := gitHeadCommit(t, readRepo)
+
+	root := t.TempDir()
+	writeBranch := "codearmy/camp_demo/t001/repo-write"
+	writeWorktree := filepath.Join(root, ".worktrees", "repo-write", "t001")
+	if err := ensureGitTaskWorktree(writeRepo, writeWorktree, writeBranch, writeBase); err != nil {
+		t.Fatalf("create write repo worktree failed: %v", err)
+	}
+	readBranch := "codearmy/camp_demo/t001/repo-read"
+	readWorktree := filepath.Join(root, ".worktrees", "repo-read", "t001")
+	if err := ensureGitTaskWorktree(readRepo, readWorktree, readBranch, readBase); err != nil {
+		t.Fatalf("create read repo worktree failed: %v", err)
+	}
+
+	mustWriteTestFile(t, filepath.Join(writeWorktree, "README.md"), "write repo task change\n")
+	runGitOrFail(t, writeWorktree, "add", "README.md")
+	runGitOrFail(t, writeWorktree, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "task change")
+	taskHead := gitHeadCommit(t, writeWorktree)
+
+	now := time.Date(2026, 3, 31, 17, 22, 0, 0, time.FixedZone("CST", 8*3600))
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+source_repos: [repo-write, repo-read]
+plan_status: human_approved
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "repos", "repo-write.md"), `---
+repo_id: repo-write
+local_path: "`+writeRepo+`"
+default_branch: dev
+base_commit: "`+writeBase+`"
+role: source
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "repos", "repo-read.md"), `---
+repo_id: repo-read
+local_path: "`+readRepo+`"
+default_branch: dev
+base_commit: "`+readBase+`"
+role: source
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Skip read-context repo during integration retry"
+phase: P01
+status: blocked
+target_repos: [repo-write, repo-read]
+working_branches:
+  - repo-write:`+writeBranch+`
+  - repo-read:`+readBranch+`
+worktree_paths:
+  - repo-write:`+writeWorktree+`
+  - repo-read:`+readWorktree+`
+write_scope:
+  - campaign:phases/P01/tasks/T001/**
+  - repo-write:README.md
+review_round: 1
+base_commit: "`+writeBase+`"
+head_commit: "`+taskHead+`"
+last_run_path: "results/summary.md"
+last_review_path: "phases/P01/tasks/T001/reviews/R001.md"
+review_status: approved
+dispatch_state: integration_blocked
+last_blocked_reason: task T001 repo repo-read working_branch `+readBranch+` does not contain reviewed head_commit `+taskHead+`
+self_check_kind: reviewer
+self_check_round: 1
+self_check_status: passed
+self_check_at: "2026-03-31T17:21:00+08:00"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "results", "summary.md"), "# Summary\n")
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R001.md"), `---
+review_id: R001
+target_task: T001
+review_round: 1
+verdict: approve
+blocking: false
+target_commit: "`+taskHead+`"
+created_at: "2026-03-31T17:20:00+08:00"
+---
+`)
+
+	result, err := ReconcileAndPrepare(root, now, 1, time.Hour)
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	task := result.Repository.Tasks[0]
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusDone {
+		t.Fatalf("expected task done after retrying with writable repo only, got %s", got)
+	}
+	if task.Frontmatter.DispatchState != "integrated" {
+		t.Fatalf("expected dispatch_state=integrated, got %q", task.Frontmatter.DispatchState)
+	}
+	if task.Frontmatter.LastBlockedReason != "" {
+		t.Fatalf("expected blocker cleared, got %q", task.Frontmatter.LastBlockedReason)
+	}
+	if !gitBranchContainsCommit(writeRepo, "dev", taskHead) {
+		t.Fatalf("expected writable default branch to contain task head %s", taskHead)
+	}
+	if got := gitHeadCommit(t, readRepo); got != readBase {
+		t.Fatalf("expected read-context repo head to stay at %s, got %s", readBase, got)
+	}
+}
+
 func TestReconcileAndPrepare_RequeuesMergeConflictIntoExecutorRecovery(t *testing.T) {
 	sourceRoot := t.TempDir()
 	initGitRepo(t, sourceRoot)
@@ -1932,6 +2058,100 @@ human_approved: false
 	}
 	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindPlannerReviewer {
 		t.Fatalf("expected planner reviewer dispatch after self-check, got %+v", result.DispatchTasks)
+	}
+}
+
+func TestReconcileAndPrepare_PlanningPhaseStillAppliesCompletedReviewVerdicts(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(root, "campaign.md"), `---
+campaign_id: camp_demo
+title: "Demo Campaign"
+current_phase: P01
+plan_round: 4
+plan_status: planning
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "phase.md"), `---
+phase: P01
+status: active
+goal: "Ship the first phase"
+---
+`)
+	mustWriteTestTaskPackage(t, root, "P01", "T001", `---
+task_id: T001
+title: "Review completed before replanning finishes"
+phase: P01
+status: reviewing
+dispatch_state: reviewer_dispatched
+reviewer:
+  role: reviewer.codex
+write_scope: [campaign:reports/live-report.md]
+execution_round: 2
+review_round: 4
+review_status: reviewing
+owner_agent: reviewer.codex
+lease_until: "2026-03-24T12:00:00+08:00"
+last_run_path: "results/summary.md"
+last_review_path: "phases/P01/tasks/T001/reviews/R003.md"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "results", "summary.md"), "# Summary\n")
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R003.md"), `---
+review_id: R003
+target_task: T001
+review_round: 3
+reviewer:
+  role: reviewer.codex
+verdict: approve
+blocking: false
+created_at: "2026-03-24T10:00:00+08:00"
+---
+`)
+	mustWriteTestFile(t, filepath.Join(root, "phases", "P01", "tasks", "T001", "reviews", "R004.md"), `---
+review_id: R004
+target_task: T001
+review_round: 4
+reviewer:
+  role: reviewer.codex
+verdict: concern
+blocking: false
+created_at: "2026-03-24T10:30:00+08:00"
+---
+`)
+
+	checkedAt := time.Date(2026, 3, 24, 10, 45, 0, 0, time.FixedZone("CST", 8*3600))
+	validation, err := RunTaskSelfCheck(root, "T001", DispatchKindReviewer, checkedAt)
+	if err != nil {
+		t.Fatalf("reviewer self-check failed: %v", err)
+	}
+	if !validation.Valid {
+		t.Fatalf("expected reviewer self-check to pass, got %+v", validation.Issues)
+	}
+
+	now := time.Date(2026, 3, 24, 11, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	result, err := ReconcileAndPrepare(root, now, 2, time.Hour, pragmaticReviewerRoleDefaults())
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if result.AppliedReviews != 1 {
+		t.Fatalf("expected completed review verdict to be applied during planning, got %d", result.AppliedReviews)
+	}
+	if result.ClaimedExecutors != 0 || result.ClaimedReviewers != 0 {
+		t.Fatalf("did not expect planning reconcile to claim new tasks, got executors=%d reviewers=%d", result.ClaimedExecutors, result.ClaimedReviewers)
+	}
+	if len(result.DispatchTasks) != 1 || result.DispatchTasks[0].Kind != DispatchKindPlanner {
+		t.Fatalf("expected only planner dispatch to remain during planning, got %+v", result.DispatchTasks)
+	}
+
+	task := result.Repository.Tasks[0]
+	if got := normalizeTaskStatus(task.Frontmatter.Status); got != TaskStatusRework {
+		t.Fatalf("expected task to move to rework after concern verdict, got %s", got)
+	}
+	if task.Frontmatter.ReviewStatus != "changes_requested" {
+		t.Fatalf("expected review_status=changes_requested, got %q", task.Frontmatter.ReviewStatus)
+	}
+	if task.Frontmatter.LastReviewPath != "phases/P01/tasks/T001/reviews/R004.md" {
+		t.Fatalf("expected last_review_path to advance to R004, got %q", task.Frontmatter.LastReviewPath)
 	}
 }
 
