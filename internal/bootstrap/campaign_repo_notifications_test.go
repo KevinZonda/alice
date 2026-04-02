@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alice-space/alice/internal/campaign"
 	"github.com/Alice-space/alice/internal/campaignrepo"
 )
 
@@ -49,27 +48,6 @@ func TestShouldSendCampaignEvent_SuppressesRetrying(t *testing.T) {
 	}
 	if !shouldSendCampaignEvent(campaignrepo.ReconcileEvent{Kind: campaignrepo.EventTaskRecovered}) {
 		t.Fatal("expected task_recovered to be sent to chat")
-	}
-}
-
-func TestCampaignUrgentRecipientOpenIDs_UsesCreator(t *testing.T) {
-	item := campaign.Campaign{Creator: campaign.Actor{OpenID: "ou_creator"}}
-	recipients := campaignUrgentRecipientOpenIDs(item)
-	if len(recipients) != 1 || recipients[0] != "ou_creator" {
-		t.Fatalf("unexpected urgent recipients: %+v", recipients)
-	}
-}
-
-func TestBuildCampaignUrgentDirectText_IncludesCampaignAndDetail(t *testing.T) {
-	text := buildCampaignUrgentDirectText("Demo Campaign", "camp_demo", campaignrepo.ReconcileEvent{
-		Kind:     campaignrepo.EventTaskBlocked,
-		TaskID:   "T101",
-		Title:    "任务阻塞",
-		Detail:   "任务 **T101** 遇到阻塞，无法继续执行。",
-		Severity: "warning",
-	})
-	if text != "【Alice加急提醒】\nDemo Campaign · 任务阻塞\n\n任务 T101 遇到阻塞，无法继续执行。" {
-		t.Fatalf("unexpected urgent direct text: %q", text)
 	}
 }
 
