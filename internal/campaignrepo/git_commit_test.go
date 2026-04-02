@@ -61,6 +61,7 @@ func TestCommitRepoChanges_UsesGlobalIdentityWhenLocalMissing(t *testing.T) {
 	setupIsolatedGitConfigHome(t)
 	root := t.TempDir()
 	initGitRepo(t, root)
+	clearLocalGitIdentity(t, root)
 	runGitOrFail(t, root, "config", "--global", "user.name", "Global Test")
 	runGitOrFail(t, root, "config", "--global", "user.email", "global@example.com")
 
@@ -85,6 +86,7 @@ func TestCommitRepoChanges_FailsWithoutGitIdentity(t *testing.T) {
 	setupIsolatedGitConfigHome(t)
 	root := t.TempDir()
 	initGitRepo(t, root)
+	clearLocalGitIdentity(t, root)
 
 	mustWriteTestFile(t, filepath.Join(root, "notes.md"), "hello\n")
 	head, committed, err := CommitRepoChanges(root, "chore(campaign): should fail")
@@ -110,6 +112,7 @@ func TestCommitRepoChanges_RejectsIncompleteLocalIdentity(t *testing.T) {
 	setupIsolatedGitConfigHome(t)
 	root := t.TempDir()
 	initGitRepo(t, root)
+	clearLocalGitIdentity(t, root)
 	runGitOrFail(t, root, "config", "--global", "user.name", "Global Test")
 	runGitOrFail(t, root, "config", "--global", "user.email", "global@example.com")
 	runGitOrFail(t, root, "config", "user.name", "Partial Local")
@@ -140,4 +143,10 @@ func setupIsolatedGitConfigHome(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
+func clearLocalGitIdentity(t *testing.T, root string) {
+	t.Helper()
+	runGitOrFail(t, root, "config", "--unset-all", "user.name")
+	runGitOrFail(t, root, "config", "--unset-all", "user.email")
 }
