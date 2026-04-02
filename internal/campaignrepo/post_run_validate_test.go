@@ -651,6 +651,11 @@ created_at: "2026-04-01T10:30:00+08:00"
 ## Conclusion
 - approve
 `)
+	mustWriteTestPlanReceipt(t, root, DispatchKindPlannerReviewer, 2, []string{
+		"plans/proposals/round-002-plan.md",
+		"plans/merged/master-plan.md",
+		"plans/reviews/round-002-review.md",
+	}, PlanStatusPlanApproved)
 
 	checkedAt := time.Date(2026, 4, 1, 10, 35, 0, 0, time.FixedZone("CST", 8*3600))
 	validation, err := RunPlanSelfCheck(root, DispatchKindPlannerReviewer, 2, checkedAt)

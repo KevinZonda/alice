@@ -57,6 +57,9 @@ func loadCampaignDocument(path, root string) (CampaignDocument, error) {
 	frontmatter.SourceRepos = normalizeStringList(frontmatter.SourceRepos)
 	frontmatter.ReviewMode = strings.TrimSpace(frontmatter.ReviewMode)
 	frontmatter.ReportMode = strings.TrimSpace(frontmatter.ReportMode)
+	frontmatter.DispatchDepth = normalizeDispatchDepth(frontmatter.DispatchDepth)
+	frontmatter.PlannerReceiptPath = filepath.ToSlash(strings.TrimSpace(frontmatter.PlannerReceiptPath))
+	frontmatter.PlannerReviewerReceiptPath = filepath.ToSlash(strings.TrimSpace(frontmatter.PlannerReviewerReceiptPath))
 	if frontmatter.PlanRound < 0 {
 		frontmatter.PlanRound = 0
 	}
@@ -192,10 +195,15 @@ func loadTaskDocuments(root string) ([]TaskDocument, []ValidationIssue, error) {
 			frontmatter.HumanGuidanceRound = 0
 		}
 		frontmatter.HumanGuidanceStatus = normalizeTaskHumanGuidanceAction(frontmatter.HumanGuidanceStatus)
+		frontmatter.DispatchDepth = normalizeDispatchDepth(frontmatter.DispatchDepth)
 		frontmatter.BaseCommit = strings.TrimSpace(frontmatter.BaseCommit)
 		frontmatter.HeadCommit = strings.TrimSpace(frontmatter.HeadCommit)
 		frontmatter.LastRunPath = filepath.ToSlash(strings.TrimSpace(frontmatter.LastRunPath))
 		frontmatter.LastReviewPath = filepath.ToSlash(strings.TrimSpace(frontmatter.LastReviewPath))
+		frontmatter.LastReceiptPath = filepath.ToSlash(strings.TrimSpace(frontmatter.LastReceiptPath))
+		frontmatter.BlockedCode = strings.TrimSpace(frontmatter.BlockedCode)
+		frontmatter.BlockedClass = strings.TrimSpace(frontmatter.BlockedClass)
+		frontmatter.RecoveryHint = strings.TrimSpace(frontmatter.RecoveryHint)
 		frontmatter.LastHumanGuidancePath = filepath.ToSlash(strings.TrimSpace(frontmatter.LastHumanGuidancePath))
 		frontmatter.LastHumanGuidanceSummary = strings.TrimSpace(frontmatter.LastHumanGuidanceSummary)
 		frontmatter.SelfCheckKind = strings.ToLower(strings.TrimSpace(frontmatter.SelfCheckKind))
@@ -210,6 +218,18 @@ func loadTaskDocuments(root string) ([]TaskDocument, []ValidationIssue, error) {
 		frontmatter.ReportSnippetPath = strings.TrimSpace(frontmatter.ReportSnippetPath)
 		frontmatter.Artifacts = normalizeStringList(frontmatter.Artifacts)
 		frontmatter.ResultPaths = normalizeStringList(frontmatter.ResultPaths)
+		if frontmatter.BlockedCode == "" || frontmatter.BlockedClass == "" || frontmatter.RecoveryHint == "" {
+			meta := classifyBlockedReason(frontmatter.LastBlockedReason)
+			if frontmatter.BlockedCode == "" {
+				frontmatter.BlockedCode = meta.Code
+			}
+			if frontmatter.BlockedClass == "" {
+				frontmatter.BlockedClass = meta.Class
+			}
+			if frontmatter.RecoveryHint == "" {
+				frontmatter.RecoveryHint = meta.RecoveryHint
+			}
+		}
 		leaseUntil, err := parseFlexibleTime(frontmatter.LeaseUntilRaw)
 		if err != nil {
 			issues = append(issues, loadIssue(

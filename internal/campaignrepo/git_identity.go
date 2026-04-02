@@ -165,10 +165,3 @@ func LooksLikeGitIdentityProblem(text string) bool {
 		strings.Contains(normalized, "committer identity unknown") ||
 		strings.Contains(normalized, "unable to auto-detect email address")
 }
-
-func blockedReasonSeverity(reason string) string {
-	if LooksLikeGitIdentityProblem(reason) {
-		return "error"
-	}
-	return "warning"
-}

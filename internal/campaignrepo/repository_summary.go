@@ -253,26 +253,30 @@ func (s Summary) SummaryLine() string {
 
 func taskSummary(task TaskDocument) TaskSummary {
 	return TaskSummary{
-		TaskID:         strings.TrimSpace(task.Frontmatter.TaskID),
-		Title:          strings.TrimSpace(task.Frontmatter.Title),
-		Phase:          strings.TrimSpace(task.Frontmatter.Phase),
-		Status:         normalizeTaskStatus(task.Frontmatter.Status),
-		Path:           filepath.ToSlash(task.Path),
-		Dir:            filepath.ToSlash(task.Dir),
-		OwnerAgent:     strings.TrimSpace(task.Frontmatter.OwnerAgent),
-		LeaseUntil:     task.LeaseUntil,
-		WakeAt:         task.WakeAt,
-		WakePrompt:     strings.TrimSpace(task.Frontmatter.WakePrompt),
-		BlockedReason:  strings.TrimSpace(task.Frontmatter.LastBlockedReason),
-		DependsOn:      append([]string(nil), task.Frontmatter.DependsOn...),
-		TargetRepos:    append([]string(nil), task.Frontmatter.TargetRepos...),
-		WriteScope:     append([]string(nil), task.Frontmatter.WriteScope...),
-		DispatchState:  strings.TrimSpace(task.Frontmatter.DispatchState),
-		ReviewStatus:   normalizeReviewStatus(task.Frontmatter.ReviewStatus),
-		ExecutionRound: task.Frontmatter.ExecutionRound,
-		ReviewRound:    task.Frontmatter.ReviewRound,
-		HeadCommit:     strings.TrimSpace(task.Frontmatter.HeadCommit),
-		LastReviewPath: filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath)),
+		TaskID:          strings.TrimSpace(task.Frontmatter.TaskID),
+		Title:           strings.TrimSpace(task.Frontmatter.Title),
+		Phase:           strings.TrimSpace(task.Frontmatter.Phase),
+		Status:          normalizeTaskStatus(task.Frontmatter.Status),
+		Path:            filepath.ToSlash(task.Path),
+		Dir:             filepath.ToSlash(task.Dir),
+		OwnerAgent:      strings.TrimSpace(task.Frontmatter.OwnerAgent),
+		LeaseUntil:      task.LeaseUntil,
+		WakeAt:          task.WakeAt,
+		WakePrompt:      strings.TrimSpace(task.Frontmatter.WakePrompt),
+		BlockedReason:   strings.TrimSpace(task.Frontmatter.LastBlockedReason),
+		BlockedCode:     strings.TrimSpace(task.Frontmatter.BlockedCode),
+		BlockedClass:    strings.TrimSpace(task.Frontmatter.BlockedClass),
+		RecoveryHint:    strings.TrimSpace(task.Frontmatter.RecoveryHint),
+		DependsOn:       append([]string(nil), task.Frontmatter.DependsOn...),
+		TargetRepos:     append([]string(nil), task.Frontmatter.TargetRepos...),
+		WriteScope:      append([]string(nil), task.Frontmatter.WriteScope...),
+		DispatchState:   strings.TrimSpace(task.Frontmatter.DispatchState),
+		ReviewStatus:    normalizeReviewStatus(task.Frontmatter.ReviewStatus),
+		ExecutionRound:  task.Frontmatter.ExecutionRound,
+		ReviewRound:     task.Frontmatter.ReviewRound,
+		HeadCommit:      strings.TrimSpace(task.Frontmatter.HeadCommit),
+		LastReviewPath:  filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReviewPath)),
+		LastReceiptPath: filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReceiptPath)),
 	}
 }
 
@@ -281,6 +285,18 @@ func withBlockedReason(task TaskSummary, reason string) TaskSummary {
 	task.BlockedReason = strings.TrimSpace(reason)
 	if task.BlockedReason == "" {
 		task.BlockedReason = "status is blocked"
+	}
+	if task.BlockedCode == "" || task.BlockedClass == "" || task.RecoveryHint == "" {
+		meta := classifyBlockedReason(task.BlockedReason)
+		if task.BlockedCode == "" {
+			task.BlockedCode = meta.Code
+		}
+		if task.BlockedClass == "" {
+			task.BlockedClass = meta.Class
+		}
+		if task.RecoveryHint == "" {
+			task.RecoveryHint = meta.RecoveryHint
+		}
 	}
 	return task
 }

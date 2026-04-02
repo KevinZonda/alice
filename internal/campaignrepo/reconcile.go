@@ -88,6 +88,15 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 		changed = true
 	}
 
+	autoAcceptedFastTrack, fastTrackEvents, err := autoAcceptFastTrackTasks(&repo, campaignID)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	if autoAcceptedFastTrack > 0 {
+		changed = true
+		events = append(events, fastTrackEvents...)
+	}
+
 	appliedReviews, verdictEvents, err := applyReviewVerdicts(&repo, campaignID)
 	if err != nil {
 		return ReconcileResult{}, err
@@ -216,6 +225,52 @@ func ReconcileAndPrepare(root string, now time.Time, maxParallel int, leaseDurat
 	}, nil
 }
 
+func autoAcceptFastTrackTasks(repo *Repository, campaignID string) (int, []ReconcileEvent, error) {
+	if repo == nil || len(repo.Tasks) == 0 {
+		return 0, nil, nil
+	}
+	accepted := 0
+	var events []ReconcileEvent
+	for idx := range repo.Tasks {
+		task := &repo.Tasks[idx]
+		if normalizeTaskStatus(task.Frontmatter.Status) != TaskStatusReviewPending {
+			continue
+		}
+		if !taskUsesFastDispatchDepth(*repo, *task) {
+			continue
+		}
+		if !taskHasPassedPostRunSelfCheck(*task, DispatchKindExecutor) {
+			continue
+		}
+		if reason := taskRoundReceiptGateReason(repo.Root, *task, DispatchKindExecutor, "fast-track"); reason != "" {
+			applyTaskJudgeDeferredTransition(task, reason)
+			if err := persistTaskDocument(repo, idx); err != nil {
+				return accepted, events, err
+			}
+			continue
+		}
+		if strings.TrimSpace(task.Frontmatter.LastRunPath) == "" {
+			continue
+		}
+		applyTaskFastTrackAcceptedTransition(task)
+		if err := persistTaskDocument(repo, idx); err != nil {
+			return accepted, events, err
+		}
+		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+		taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+		events = append(events, ReconcileEvent{
+			Kind:       EventReviewVerdictApplied,
+			CampaignID: campaignID,
+			TaskID:     taskID,
+			Title:      "Fast-track 自动接受",
+			Detail:     fmt.Sprintf("任务 **%s** %s 使用 fast 派发深度，executor 自检通过后直接进入 accepted。", taskID, taskTitle),
+			Severity:   "success",
+		})
+		accepted++
+	}
+	return accepted, events, nil
+}
+
 func retryResolvedIntegrationBlocks(repo *Repository) (int, error) {
 	if repo == nil || len(repo.Tasks) == 0 {
 		return 0, nil
@@ -262,7 +317,7 @@ func retryResolvedIntegrationBlocks(repo *Repository) (int, error) {
 		task.Frontmatter.Status = TaskStatusAccepted
 		task.Frontmatter.DispatchState = "integration_retry_pending"
 		task.Frontmatter.IntegrationRetryCount = 0
-		task.Frontmatter.LastBlockedReason = ""
+		clearBlockedReasonMetadata(task)
 		task.Frontmatter.OwnerAgent = ""
 		task.LeaseUntil = time.Time{}
 		task.WakeAt = time.Time{}
@@ -338,14 +393,14 @@ func retryReviewPendingArtifactBlockers(repo *Repository) (int, error) {
 			if strings.TrimSpace(task.Frontmatter.LastBlockedReason) == "" && task.Frontmatter.AutoRetryCount == 0 {
 				continue
 			}
-			task.Frontmatter.LastBlockedReason = ""
+			clearBlockedReasonMetadata(task)
 			task.Frontmatter.AutoRetryCount = 0
 			if err := persistTaskDocument(repo, idx); err != nil {
 				return retried, err
 			}
 			continue
 		}
-		task.Frontmatter.LastBlockedReason = reason
+		applyBlockedReasonMetadata(task, reason)
 		if task.Frontmatter.AutoRetryCount >= maxSummaryBlockAutoRetries {
 			if err := persistTaskDocument(repo, idx); err != nil {
 				return retried, err
@@ -438,11 +493,7 @@ func escalateLoopingTasksToHuman(repo *Repository, campaignID string) (int, []Re
 			strings.TrimSpace(task.Frontmatter.LastBlockedReason) == reason {
 			continue
 		}
-		task.Frontmatter.Status = TaskStatusBlocked
-		task.Frontmatter.DispatchState = dispatchStateNeedsHuman
-		task.Frontmatter.ReviewStatus = "blocked"
-		task.Frontmatter.LastBlockedReason = reason
-		clearTaskAssignment(task)
+		applyTaskNeedsHumanTransition(task, reason)
 		if err := persistTaskDocument(repo, idx); err != nil {
 			return escalated, events, err
 		}
@@ -608,7 +659,7 @@ func taskEligibleForPostRunValidationRepair(task TaskDocument) bool {
 	if normalizeTaskStatus(task.Frontmatter.Status) != TaskStatusBlocked {
 		return false
 	}
-	if strings.TrimSpace(task.Frontmatter.DispatchState) != "signal_blocked_terminal" {
+	if strings.TrimSpace(task.Frontmatter.DispatchState) != dispatchStateSignalBlockedTerminal {
 		return false
 	}
 	reason := strings.ToLower(strings.TrimSpace(task.Frontmatter.LastBlockedReason))
@@ -633,9 +684,7 @@ func recoverTerminalPostRunValidationBlock(task *TaskDocument, reviews []ReviewD
 				task.Frontmatter.ReviewRound = round
 			}
 		}
-		task.Frontmatter.Status = TaskStatusReviewPending
-		task.Frontmatter.DispatchState = "executor_completed"
-		task.Frontmatter.ReviewStatus = "pending"
+		applyTaskReviewPendingTransition(task, dispatchStateExecutorCompleted, true)
 	case DispatchKindReviewer:
 		if !taskHasPassedPostRunSelfCheck(*task, DispatchKindReviewer) {
 			return false
@@ -647,15 +696,10 @@ func recoverTerminalPostRunValidationBlock(task *TaskDocument, reviews []ReviewD
 		if normalizeReviewVerdict(review.Frontmatter.Verdict, review.Frontmatter.Blocking) == "" {
 			return false
 		}
-		task.Frontmatter.Status = TaskStatusReviewPending
-		task.Frontmatter.DispatchState = "reviewer_completed_recovered"
-		task.Frontmatter.ReviewStatus = "pending"
+		applyTaskReviewPendingTransition(task, dispatchStateReviewerCompletedRecovered, true)
 	default:
 		return false
 	}
-
-	task.Frontmatter.LastBlockedReason = ""
-	clearTaskAssignment(task)
 	return true
 }
 
@@ -697,8 +741,7 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 				strings.TrimSpace(task.Frontmatter.DispatchState) == dispatchStateJudgeWaitingReviewer {
 				continue
 			}
-			task.Frontmatter.LastBlockedReason = reason
-			task.Frontmatter.DispatchState = dispatchStateJudgeWaitingReviewer
+			applyTaskJudgeDeferredTransition(task, reason)
 			if err := persistTaskDocument(repo, idx); err != nil {
 				return applied, events, err
 			}
@@ -714,6 +757,27 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 			})
 			continue
 		}
+		if reason := taskRoundReceiptGateReason(repo.Root, *task, DispatchKindReviewer, "judge"); reason != "" {
+			if strings.TrimSpace(task.Frontmatter.LastBlockedReason) == reason &&
+				strings.TrimSpace(task.Frontmatter.DispatchState) == dispatchStateJudgeWaitingReviewer {
+				continue
+			}
+			applyTaskJudgeDeferredTransition(task, reason)
+			if err := persistTaskDocument(repo, idx); err != nil {
+				return applied, events, err
+			}
+			taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+			taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+			events = append(events, ReconcileEvent{
+				Kind:       EventJudgeDeferred,
+				CampaignID: campaignID,
+				TaskID:     taskID,
+				Title:      "Judge 等待 reviewer receipt",
+				Detail:     fmt.Sprintf("任务 **%s** %s 的评审结论暂不应用：%s", taskID, taskTitle, reason),
+				Severity:   "warning",
+			})
+			continue
+		}
 		verdict := normalizeReviewVerdict(review.Frontmatter.Verdict, review.Frontmatter.Blocking)
 		if verdict == "" {
 			continue
@@ -721,10 +785,9 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 		taskID := strings.TrimSpace(task.Frontmatter.TaskID)
 		taskTitle := strings.TrimSpace(task.Frontmatter.Title)
 		blockedGuidanceLoop := taskInBlockedGuidanceLoop(*task)
+		applyTaskReviewVerdictTransition(task, review, verdict, blockedGuidanceLoop)
 		switch verdict {
 		case "approve":
-			task.Frontmatter.Status = TaskStatusAccepted
-			task.Frontmatter.ReviewStatus = "approved"
 			events = append(events, ReconcileEvent{
 				Kind:       EventReviewVerdictApplied,
 				CampaignID: campaignID,
@@ -735,8 +798,6 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 			})
 		case "blocking":
 			if blockedGuidanceLoop {
-				task.Frontmatter.Status = TaskStatusRework
-				task.Frontmatter.ReviewStatus = "changes_requested"
 				events = append(events, ReconcileEvent{
 					Kind:       EventReviewVerdictApplied,
 					CampaignID: campaignID,
@@ -747,8 +808,6 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 				})
 				break
 			}
-			task.Frontmatter.Status = TaskStatusBlocked
-			task.Frontmatter.ReviewStatus = "blocked"
 			events = append(events, ReconcileEvent{
 				Kind:       EventReviewVerdictApplied,
 				CampaignID: campaignID,
@@ -758,8 +817,6 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 				Severity:   "error",
 			})
 		case "reject":
-			task.Frontmatter.Status = TaskStatusRejected
-			task.Frontmatter.ReviewStatus = "blocked"
 			events = append(events, ReconcileEvent{
 				Kind:       EventReviewVerdictApplied,
 				CampaignID: campaignID,
@@ -769,8 +826,6 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 				Severity:   "error",
 			})
 		default:
-			task.Frontmatter.Status = TaskStatusRework
-			task.Frontmatter.ReviewStatus = "changes_requested"
 			events = append(events, ReconcileEvent{
 				Kind:       EventReviewVerdictApplied,
 				CampaignID: campaignID,
@@ -779,23 +834,6 @@ func applyReviewVerdicts(repo *Repository, campaignID string) (int, []ReconcileE
 				Detail:     fmt.Sprintf("任务 **%s** %s 评审结果：需要修改", taskID, taskTitle),
 				Severity:   "warning",
 			})
-		}
-		task.Frontmatter.DispatchState = "judge_applied"
-		if verdict == "blocking" && blockedGuidanceLoop {
-			task.Frontmatter.DispatchState = "blocked_guidance_applied"
-		}
-		task.Frontmatter.LastBlockedReason = ""
-		task.Frontmatter.LastReviewPath = filepath.ToSlash(review.Path)
-		task.Frontmatter.OwnerAgent = ""
-		task.LeaseUntil = time.Time{}
-		task.WakeAt = time.Time{}
-		task.Frontmatter.WakePrompt = ""
-		if taskRequiresSourceRepoEvidence(*task) {
-			if commit := strings.TrimSpace(review.Frontmatter.TargetCommit); commit != "" {
-				task.Frontmatter.HeadCommit = commit
-			}
-		} else {
-			task.Frontmatter.HeadCommit = ""
 		}
 		if err := persistTaskDocument(repo, idx); err != nil {
 			return applied, events, err
@@ -834,6 +872,20 @@ func reviewVerdictGateReason(task TaskDocument, review ReviewDocument) string {
 	default:
 		return ""
 	}
+}
+
+func taskRoundReceiptGateReason(root string, task TaskDocument, kind DispatchKind, owner string) string {
+	var issues []ValidationIssue
+	validateTaskRoundReceipt(root, task, kind, &issues)
+	if len(issues) == 0 {
+		return ""
+	}
+	round := taskPostRunRound(task, kind)
+	label := strings.TrimSpace(owner)
+	if label == "" {
+		label = string(kind)
+	}
+	return fmt.Sprintf("%s is waiting for %s round receipt for task %s round %d: %s", label, kind, strings.TrimSpace(task.Frontmatter.TaskID), round, issues[0].Message)
 }
 
 func requeueBlockedTasksForReviewerGuidance(repo *Repository, campaignID string) (int, []ReconcileEvent, error) {
@@ -891,13 +943,7 @@ func repairDanglingExecutorReviewHandOff(repo *Repository) (int, error) {
 				task.Frontmatter.ReviewRound = round
 			}
 		}
-		task.Frontmatter.Status = TaskStatusReviewPending
-		task.Frontmatter.DispatchState = "executor_completed"
-		task.Frontmatter.ReviewStatus = "pending"
-		task.Frontmatter.OwnerAgent = ""
-		task.LeaseUntil = time.Time{}
-		task.WakeAt = time.Time{}
-		task.Frontmatter.WakePrompt = ""
+		applyTaskReviewPendingTransition(task, dispatchStateExecutorCompleted, false)
 		if err := persistTaskDocument(repo, idx); err != nil {
 			return repaired, err
 		}
@@ -933,7 +979,21 @@ func claimSelectedExecutorTasks(repo *Repository, summary Summary, now time.Time
 		task := &repo.Tasks[taskIndex]
 		role := resolveExecutorRole(*repo, *task)
 		if err := ensureTaskExecutionWorkspaces(repo, task); err != nil {
-			return claimed, events, err
+			applyTaskBlockedTransition(task, dispatchStateWorkspaceSetupFailed, "task workspace setup failed: "+err.Error())
+			if persistErr := persistTaskDocument(repo, taskIndex); persistErr != nil {
+				return claimed, events, persistErr
+			}
+			taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+			taskTitle := strings.TrimSpace(task.Frontmatter.Title)
+			events = append(events, ReconcileEvent{
+				Kind:       EventTaskBlocked,
+				CampaignID: campaignID,
+				TaskID:     taskID,
+				Title:      "任务工作区准备失败",
+				Detail:     fmt.Sprintf("任务 **%s** %s 在派发前准备 task worktree 失败，已降级为 task-local blocked。\n\n**原因**: %s", taskID, taskTitle, blankForSummary(task.Frontmatter.LastBlockedReason)),
+				Severity:   blockedReasonSeverity(task.Frontmatter.LastBlockedReason),
+			})
+			continue
 		}
 		artifactRepairOnly := taskDispatchesArtifactRepair(*task)
 		if !artifactRepairOnly {
@@ -945,12 +1005,13 @@ func claimSelectedExecutorTasks(repo *Repository, summary Summary, now time.Time
 			task.Frontmatter.DispatchState = dispatchStateArtifactRepairDispatched
 		}
 		clearTaskSelfCheck(task)
+		recordTaskRoundReceiptPath(task, DispatchKindExecutor)
 		task.Frontmatter.OwnerAgent = roleLabel(role)
 		task.LeaseUntil = now.Add(leaseDuration)
 		task.WakeAt = time.Time{}
 		task.Frontmatter.WakePrompt = ""
 		if !artifactRepairOnly && !taskNeedsIntegrationConflictRecovery(*task) {
-			task.Frontmatter.LastBlockedReason = ""
+			clearBlockedReasonMetadata(task)
 		}
 		if task.Frontmatter.ReviewStatus == "" {
 			task.Frontmatter.ReviewStatus = "pending"
@@ -999,11 +1060,12 @@ func claimSelectedReviewTasks(repo *Repository, summary Summary, now time.Time, 
 		task.Frontmatter.DispatchState = "reviewer_dispatched"
 		task.Frontmatter.ReviewStatus = "reviewing"
 		clearTaskSelfCheck(task)
+		recordTaskRoundReceiptPath(task, DispatchKindReviewer)
 		task.Frontmatter.OwnerAgent = roleLabel(role)
 		task.LeaseUntil = now.Add(leaseDuration)
 		task.WakeAt = time.Time{}
 		task.Frontmatter.WakePrompt = ""
-		task.Frontmatter.LastBlockedReason = ""
+		clearBlockedReasonMetadata(task)
 		if err := persistTaskDocument(repo, taskIndex); err != nil {
 			return claimed, events, err
 		}

@@ -25,6 +25,7 @@ func RunPlanSelfCheck(root string, kind DispatchKind, round int, checkedAt time.
 	if checkedAt.IsZero() {
 		checkedAt = time.Now().Local()
 	}
+	recordPlanRoundReceiptPath(&repo.Campaign.Frontmatter, kind, round)
 	recordPlanSelfCheck(&repo.Campaign.Frontmatter, kind, round, validation.Valid, checkedAt)
 	if _, err := persistCampaignDocument(&repo); err != nil {
 		return ValidationResult{}, err
@@ -57,6 +58,7 @@ func validatePlanPostRun(repo Repository, kind DispatchKind, round int, requireS
 	case DispatchKindPlannerReviewer:
 		validatePlannerReviewerRoundArtifacts(repo, round, &issues)
 	}
+	validatePlanRoundReceipt(repo.Root, repo.Campaign.Frontmatter, kind, round, &issues)
 
 	if requireSelfCheckProof {
 		validatePlanSelfCheckProof(repo, kind, round, &issues)
@@ -86,10 +88,12 @@ func planningSelfCheckIssues(repo Repository) []ValidationIssue {
 	switch normalizePlanStatus(repo.Campaign.Frontmatter.PlanStatus) {
 	case PlanStatusPlanning:
 		if hasSubmittedProposal(repo.PlanProposals, round) {
+			validatePlanRoundReceipt(repo.Root, repo.Campaign.Frontmatter, DispatchKindPlanner, round, &issues)
 			validatePlanSelfCheckProof(repo, DispatchKindPlanner, round, &issues)
 		}
 	case PlanStatusPlanReviewPending, PlanStatusPlanReviewing:
 		if _, ok := latestPlanReviewForRound(repo.PlanReviews, round); ok {
+			validatePlanRoundReceipt(repo.Root, repo.Campaign.Frontmatter, DispatchKindPlannerReviewer, round, &issues)
 			validatePlanSelfCheckProof(repo, DispatchKindPlannerReviewer, round, &issues)
 		}
 	}
@@ -335,6 +339,92 @@ func validatePlanSelfCheckProof(repo Repository, kind DispatchKind, round int, i
 			Message: fmt.Sprintf("%s round %d self_check_at is empty", label, round),
 		})
 	}
+}
+
+func validatePlanRoundReceipt(root string, campaign CampaignFrontmatter, kind DispatchKind, round int, issues *[]ValidationIssue) {
+	expectedPath := planRoundReceiptPath(kind, round)
+	receipt, ok, err := loadPlanRoundReceipt(root, kind, round)
+	if err != nil {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_invalid",
+			Path:    expectedPath,
+			Message: fmt.Sprintf("%s round %d receipt could not be parsed: %v", kind, round, err),
+		})
+		return
+	}
+	if !ok {
+		if !planRoundReceiptRequired(campaign, kind, round) {
+			return
+		}
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_missing",
+			Path:    expectedPath,
+			Message: fmt.Sprintf("%s round %d must write receipt %s", kind, round, expectedPath),
+		})
+		return
+	}
+	recordedKind := DispatchKind(strings.ToLower(strings.TrimSpace(receipt.Frontmatter.Kind)))
+	if recordedKind != kind {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_kind_mismatch",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("%s round %d receipt recorded kind %q", kind, round, blankForSummary(receipt.Frontmatter.Kind)),
+		})
+	}
+	if receipt.Frontmatter.PlanRound != round || receipt.Frontmatter.Round != round {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_round_mismatch",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("%s round %d receipt recorded plan_round=%d round=%d", kind, round, receipt.Frontmatter.PlanRound, receipt.Frontmatter.Round),
+		})
+	}
+	if strings.TrimSpace(receipt.Frontmatter.CreatedAtRaw) == "" {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_created_at_missing",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("%s round %d receipt must set created_at", kind, round),
+		})
+	}
+	if len(receipt.Frontmatter.ArtifactPaths) == 0 {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "plan_round_receipt_artifacts_missing",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("%s round %d receipt must list at least one artifact path", kind, round),
+		})
+	}
+	switch kind {
+	case DispatchKindPlanner:
+		validatePlanRoundReceiptHandoff(kind, round, receipt, []string{PlanStatusPlanReviewPending}, issues)
+	case DispatchKindPlannerReviewer:
+		validatePlanRoundReceiptHandoff(kind, round, receipt, []string{PlanStatusPlanApproved, PlanStatusPlanning}, issues)
+	}
+	_ = campaign
+}
+
+func planRoundReceiptRequired(campaign CampaignFrontmatter, kind DispatchKind, round int) bool {
+	expectedPath := planRoundReceiptPath(kind, round)
+	switch kind {
+	case DispatchKindPlanner:
+		return filepath.ToSlash(strings.TrimSpace(campaign.PlannerReceiptPath)) == expectedPath
+	case DispatchKindPlannerReviewer:
+		return filepath.ToSlash(strings.TrimSpace(campaign.PlannerReviewerReceiptPath)) == expectedPath
+	default:
+		return false
+	}
+}
+
+func validatePlanRoundReceiptHandoff(kind DispatchKind, round int, receipt RoundReceiptDocument, allowed []string, issues *[]ValidationIssue) {
+	handoff := strings.TrimSpace(receipt.Frontmatter.RequestedHandoff)
+	for _, candidate := range allowed {
+		if handoff == candidate {
+			return
+		}
+	}
+	*issues = append(*issues, ValidationIssue{
+		Code:    "plan_round_receipt_handoff_invalid",
+		Path:    receipt.Path,
+		Message: fmt.Sprintf("%s round %d receipt requested_handoff %q is not in %v", kind, round, blankForSummary(handoff), allowed),
+	})
 }
 
 func planSelfCheckProof(frontmatter CampaignFrontmatter, kind DispatchKind) (int, string, string) {

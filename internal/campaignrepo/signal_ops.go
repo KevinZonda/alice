@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type BlockedTaskOutcome struct {
@@ -39,11 +38,7 @@ func MarkTaskBlocked(root, taskID, reason string) error {
 		default:
 			continue
 		}
-		task.Frontmatter.Status = TaskStatusBlocked
-		task.Frontmatter.DispatchState = "signal_blocked_terminal"
-		task.Frontmatter.ReviewStatus = "blocked"
-		recordBlockedReason(task, reason)
-		clearTaskAssignment(task)
+		applyTaskTerminalBlockedTransition(task, reason)
 		if err := writeTaskDocument(root, *task); err != nil {
 			return fmt.Errorf("write task document failed: %w", err)
 		}
@@ -89,43 +84,6 @@ func HandleTaskBlocked(root, taskID, reason string) (BlockedTaskOutcome, error) 
 	return BlockedTaskOutcome{}, nil
 }
 
-func applyBlockedGuidanceTransition(task *TaskDocument, reason string) BlockedTaskOutcome {
-	if task == nil {
-		return BlockedTaskOutcome{}
-	}
-	recordBlockedReason(task, reason)
-	clearTaskAssignment(task)
-	if task.Frontmatter.BlockGuidanceCount < maxBlockedGuidanceRetries {
-		task.Frontmatter.BlockGuidanceCount++
-		task.Frontmatter.Status = TaskStatusReviewPending
-		task.Frontmatter.DispatchState = "blocked_guidance_requested"
-		task.Frontmatter.ReviewStatus = "pending"
-		return BlockedTaskOutcome{
-			GuidanceRequested: true,
-			GuidanceAttempt:   task.Frontmatter.BlockGuidanceCount,
-			Reason:            task.Frontmatter.LastBlockedReason,
-		}
-	}
-	task.Frontmatter.Status = TaskStatusBlocked
-	task.Frontmatter.DispatchState = "signal_blocked_terminal"
-	task.Frontmatter.ReviewStatus = "blocked"
-	return BlockedTaskOutcome{
-		TerminalBlocked: true,
-		GuidanceAttempt: task.Frontmatter.BlockGuidanceCount,
-		Reason:          task.Frontmatter.LastBlockedReason,
-	}
-}
-
-func clearTaskAssignment(task *TaskDocument) {
-	if task == nil {
-		return
-	}
-	task.Frontmatter.OwnerAgent = ""
-	task.LeaseUntil = time.Time{}
-	task.WakeAt = time.Time{}
-	task.Frontmatter.WakePrompt = ""
-}
-
 func recordBlockedReason(task *TaskDocument, reason string) {
 	if task == nil {
 		return
@@ -134,7 +92,7 @@ func recordBlockedReason(task *TaskDocument, reason string) {
 	if reason == "" {
 		reason = strings.TrimSpace(task.Frontmatter.LastBlockedReason)
 	}
-	task.Frontmatter.LastBlockedReason = reason
+	applyBlockedReasonMetadata(task, reason)
 	if reason == "" {
 		return
 	}

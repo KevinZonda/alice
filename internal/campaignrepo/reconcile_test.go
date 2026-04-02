@@ -2199,6 +2199,12 @@ human_approved: false
 ## Risks
 - tracked
 `)
+	mustWriteTestPlanReceipt(t, root, DispatchKindPlanner, 1, []string{
+		"plans/proposals/round-001-plan.md",
+		"plans/merged/master-plan.md",
+		"phases/P01/phase.md",
+		"phases/P01/tasks/T001/task.md",
+	}, PlanStatusPlanReviewPending)
 
 	result, err := ReconcileAndPrepare(root, now, 2, defaultDispatchLease)
 	if err != nil {

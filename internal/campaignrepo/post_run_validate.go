@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,7 @@ func RunTaskSelfCheck(root, taskID string, kind DispatchKind, checkedAt time.Tim
 	if checkedAt.IsZero() {
 		checkedAt = time.Now().Local()
 	}
+	recordTaskRoundReceiptPath(&task, kind)
 	task.Frontmatter.SelfCheckKind = string(kind)
 	task.Frontmatter.SelfCheckRound = taskPostRunRound(task, kind)
 	task.Frontmatter.SelfCheckStatus = taskSelfCheckStatusFailed
@@ -72,6 +74,7 @@ func validateTaskPostRun(repo Repository, task TaskDocument, kind DispatchKind, 
 	default:
 		return ValidationResult{Valid: true}
 	}
+	validateTaskRoundReceipt(repo.Root, task, kind, &issues)
 	if requireSelfCheckProof {
 		validateTaskSelfCheckProof(task, kind, &issues)
 	}
@@ -231,6 +234,125 @@ func validateTaskSelfCheckProof(task TaskDocument, kind DispatchKind, issues *[]
 	}
 }
 
+func validateTaskRoundReceipt(root string, task TaskDocument, kind DispatchKind, issues *[]ValidationIssue) {
+	taskID := strings.TrimSpace(task.Frontmatter.TaskID)
+	expectedPath := taskRoundReceiptPath(task, kind)
+	receipt, ok, err := loadTaskRoundReceipt(root, task, kind)
+	if err != nil {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_invalid",
+			Path:    expectedPath,
+			Message: fmt.Sprintf("task %s %s round receipt could not be parsed: %v", taskID, kind, err),
+		})
+		return
+	}
+	if !ok {
+		if !taskRoundReceiptRequired(task, kind) {
+			return
+		}
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_missing",
+			Path:    expectedPath,
+			Message: fmt.Sprintf("task %s finished a %s round but did not write receipt %s", taskID, kind, expectedPath),
+		})
+		return
+	}
+	recordedKind := DispatchKind(strings.ToLower(strings.TrimSpace(receipt.Frontmatter.Kind)))
+	if recordedKind != kind {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_kind_mismatch",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("task %s round receipt %s recorded kind %q instead of %q", taskID, receipt.Path, blankForSummary(receipt.Frontmatter.Kind), kind),
+		})
+	}
+	if strings.TrimSpace(receipt.Frontmatter.TaskID) != taskID {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_task_mismatch",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("task %s round receipt %s recorded task_id %q", taskID, receipt.Path, blankForSummary(receipt.Frontmatter.TaskID)),
+		})
+	}
+	expectedRound := taskPostRunRound(task, kind)
+	if receipt.Frontmatter.Round != expectedRound {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_round_mismatch",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("task %s round receipt %s recorded round %d instead of %d", taskID, receipt.Path, receipt.Frontmatter.Round, expectedRound),
+		})
+	}
+	if strings.TrimSpace(receipt.Frontmatter.CreatedAtRaw) == "" {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_created_at_missing",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("task %s round receipt %s must set created_at", taskID, receipt.Path),
+		})
+	}
+	if len(receipt.Frontmatter.ArtifactPaths) == 0 {
+		*issues = append(*issues, ValidationIssue{
+			Code:    "task_round_receipt_artifacts_missing",
+			Path:    receipt.Path,
+			Message: fmt.Sprintf("task %s round receipt %s must list at least one artifact path", taskID, receipt.Path),
+		})
+	}
+	switch kind {
+	case DispatchKindExecutor:
+		validateTaskRoundReceiptHandoff(taskID, receipt, []string{TaskStatusReviewPending, TaskStatusWaitingExternal, TaskStatusBlocked}, issues)
+		lastRunPath := strings.TrimSpace(task.Frontmatter.LastRunPath)
+		if lastRunPath != "" && !roundReceiptContainsPath(receipt.Frontmatter.ArtifactPaths, lastRunPath) {
+			*issues = append(*issues, ValidationIssue{
+				Code:    "task_round_receipt_last_run_missing",
+				Path:    receipt.Path,
+				Message: fmt.Sprintf("task %s round receipt %s must include last_run_path %s", taskID, receipt.Path, lastRunPath),
+			})
+		}
+	case DispatchKindReviewer:
+		validateTaskRoundReceiptHandoff(taskID, receipt, []string{"judge_apply", TaskStatusBlocked, TaskStatusReviewPending}, issues)
+		lastReviewPath := strings.TrimSpace(task.Frontmatter.LastReviewPath)
+		if lastReviewPath != "" && !roundReceiptContainsPath(receipt.Frontmatter.ArtifactPaths, lastReviewPath) {
+			*issues = append(*issues, ValidationIssue{
+				Code:    "task_round_receipt_last_review_missing",
+				Path:    receipt.Path,
+				Message: fmt.Sprintf("task %s round receipt %s must include last_review_path %s", taskID, receipt.Path, lastReviewPath),
+			})
+		}
+	}
+}
+
+func taskRoundReceiptRequired(task TaskDocument, kind DispatchKind) bool {
+	expectedPath := taskRoundReceiptPath(task, kind)
+	if expectedPath == "" {
+		return false
+	}
+	return filepath.ToSlash(strings.TrimSpace(task.Frontmatter.LastReceiptPath)) == expectedPath
+}
+
+func validateTaskRoundReceiptHandoff(taskID string, receipt RoundReceiptDocument, allowed []string, issues *[]ValidationIssue) {
+	handoff := strings.TrimSpace(receipt.Frontmatter.RequestedHandoff)
+	for _, candidate := range allowed {
+		if handoff == candidate {
+			return
+		}
+	}
+	*issues = append(*issues, ValidationIssue{
+		Code:    "task_round_receipt_handoff_invalid",
+		Path:    receipt.Path,
+		Message: fmt.Sprintf("task %s round receipt %s requested_handoff %q is not in %v", taskID, receipt.Path, blankForSummary(handoff), allowed),
+	})
+}
+
+func roundReceiptContainsPath(paths []string, expected string) bool {
+	expected = filepath.ToSlash(strings.TrimSpace(expected))
+	if expected == "" {
+		return true
+	}
+	for _, path := range normalizeStringList(paths) {
+		if filepath.ToSlash(strings.TrimSpace(path)) == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func taskPostRunRound(task TaskDocument, kind DispatchKind) int {
 	switch kind {
 	case DispatchKindExecutor:
@@ -285,6 +407,7 @@ func taskSelfCheckSubjectDigest(task TaskDocument, kind DispatchKind) string {
 		"head_commit=" + strings.TrimSpace(task.Frontmatter.HeadCommit),
 		"last_run_path=" + strings.TrimSpace(task.Frontmatter.LastRunPath),
 		"last_review_path=" + strings.TrimSpace(task.Frontmatter.LastReviewPath),
+		"last_receipt_path=" + strings.TrimSpace(task.Frontmatter.LastReceiptPath),
 	}
 	switch kind {
 	case DispatchKindExecutor:

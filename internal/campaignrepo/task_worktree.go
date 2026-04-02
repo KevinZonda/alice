@@ -413,7 +413,12 @@ func repairTaskExecutionWorkspaces(repo *Repository) (int, error) {
 		beforeBranches := strings.Join(task.Frontmatter.WorkingBranches, "\x00")
 		beforeWorktrees := strings.Join(task.Frontmatter.WorktreePaths, "\x00")
 		if err := ensureTaskExecutionWorkspaces(repo, task); err != nil {
-			return repaired, err
+			applyTaskBlockedTransition(task, dispatchStateWorkspaceSetupFailed, "task workspace repair failed: "+err.Error())
+			if persistErr := persistTaskDocument(repo, idx); persistErr != nil {
+				return repaired, persistErr
+			}
+			repaired++
+			continue
 		}
 		if beforeBranches == strings.Join(task.Frontmatter.WorkingBranches, "\x00") &&
 			beforeWorktrees == strings.Join(task.Frontmatter.WorktreePaths, "\x00") {
