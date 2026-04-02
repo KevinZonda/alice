@@ -17,6 +17,7 @@ const (
 	EventReviewVerdictApplied ReconcileEventKind = "review_verdict_applied"
 	EventReplanRequested      ReconcileEventKind = "replan_requested"
 	EventTaskBlocked          ReconcileEventKind = "task_blocked"
+	EventAutomationFailed     ReconcileEventKind = "automation_failed"
 	EventDiscoveryReported    ReconcileEventKind = "discovery_reported"
 	EventCampaignCompleted    ReconcileEventKind = "campaign_completed"
 )

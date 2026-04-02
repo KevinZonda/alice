@@ -175,6 +175,68 @@ func TestEngine_RunUserTask_RunWorkflow_WorkSceneUsesCard(t *testing.T) {
 	}
 }
 
+func TestEngine_RunUserTask_RunWorkflow_FailedCampaignDispatchRetries(t *testing.T) {
+	base := time.Date(2026, 2, 23, 10, 2, 3, 0, time.UTC)
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	store.now = func() time.Time { return base }
+
+	created, err := store.CreateTask(Task{
+		Title:    "Demo Campaign · T001 · 评审 · 第 1 轮",
+		Scope:    Scope{Kind: ScopeKindChat, ID: "oc_chat"},
+		Route:    Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:  Actor{UserID: "ou_actor"},
+		Schedule: Schedule{Type: ScheduleTypeInterval, EverySeconds: 1},
+		Action: Action{
+			Type:       ActionTypeRunWorkflow,
+			Prompt:     "请推进代码军队流程",
+			Workflow:   "code_army",
+			StateKey:   "campaign_dispatch:camp_demo:reviewer:T001:r1",
+			SessionKey: "chat_id:oc_chat|scene:work|thread:omt_alpha",
+		},
+		MaxRuns: 1,
+	})
+	if err != nil {
+		t.Fatalf("create run_workflow task failed: %v", err)
+	}
+
+	sender := &senderStub{}
+	runner := &workflowRunnerStub{err: errors.New("workflow crashed")}
+	engine := NewEngine(store, sender)
+	engine.SetWorkflowRunner(runner)
+	engine.now = func() time.Time { return base.Add(2 * time.Second) }
+
+	claimed, err := store.ClaimDueTasks(base.Add(2*time.Second), 10)
+	if err != nil {
+		t.Fatalf("claim due tasks failed: %v", err)
+	}
+	if len(claimed) != 1 || claimed[0].ID != created.ID {
+		t.Fatalf("unexpected claimed tasks: %+v", claimed)
+	}
+
+	engine.runUserTask(context.Background(), claimed[0])
+
+	stored, err := store.GetTask(created.ID)
+	if err != nil {
+		t.Fatalf("get task failed: %v", err)
+	}
+	if stored.Status != TaskStatusActive {
+		t.Fatalf("expected failed dispatch task to remain active for retry, got %s", stored.Status)
+	}
+	if stored.RunCount != 0 {
+		t.Fatalf("expected run_count reset, got %d", stored.RunCount)
+	}
+	if stored.ConsecutiveFailures != 1 {
+		t.Fatalf("expected consecutive_failures=1, got %d", stored.ConsecutiveFailures)
+	}
+	wantNext := base.Add(2 * time.Second).Add(1 * time.Second)
+	if !stored.NextRunAt.Equal(wantNext) {
+		t.Fatalf("unexpected next_run_at: got=%s want=%s", stored.NextRunAt.Format(time.RFC3339), wantNext.Format(time.RFC3339))
+	}
+	if !strings.Contains(stored.LastResult, "workflow crashed") {
+		t.Fatalf("unexpected last_result: %q", stored.LastResult)
+	}
+}
+
 func TestEngine_RunUserTask_RunWorkflow_NeedsHumanPausesTaskAndWarns(t *testing.T) {
 	base := time.Date(2026, 2, 23, 10, 2, 3, 0, time.UTC)
 	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
