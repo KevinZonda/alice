@@ -18,6 +18,7 @@ type postMessageInline struct {
 	Tag      string `json:"tag"`
 	Text     string `json:"text"`
 	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
 	ImageKey string `json:"image_key"`
 	FileKey  string `json:"file_key"`
 }
@@ -130,7 +131,7 @@ func hasPostContent(payload postMessagePayload) bool {
 	return false
 }
 
-func extractPostMentionUserIDs(raw string) []string {
+func extractPostMentions(raw string) []MentionedUser {
 	payload, err := decodePostPayloadRaw(strings.TrimSpace(raw))
 	if err != nil {
 		if !errors.Is(err, ErrIgnoreMessage) {
@@ -139,7 +140,7 @@ func extractPostMentionUserIDs(raw string) []string {
 		return nil
 	}
 
-	userIDs := make([]string, 0, 2)
+	mentioned := make([]MentionedUser, 0, 2)
 	seen := make(map[string]struct{})
 	for _, row := range payload.Content {
 		for _, inline := range row {
@@ -150,12 +151,40 @@ func extractPostMentionUserIDs(raw string) []string {
 			if userID == "" {
 				continue
 			}
-			if _, ok := seen[userID]; ok {
+			userName := strings.TrimSpace(inline.UserName)
+			dedupeKey := userID + "\x00" + userName
+			if _, ok := seen[dedupeKey]; ok {
 				continue
 			}
-			seen[userID] = struct{}{}
-			userIDs = append(userIDs, userID)
+			seen[dedupeKey] = struct{}{}
+			candidate := MentionedUser{Name: userName}
+			switch {
+			case strings.HasPrefix(userID, "ou_"):
+				candidate.OpenID = userID
+			case strings.HasPrefix(userID, "on_"):
+				candidate.UnionID = userID
+			default:
+				candidate.UserID = userID
+			}
+			mentioned = append(mentioned, candidate)
 		}
+	}
+	return mentioned
+}
+
+func extractPostMentionUserIDs(raw string) []string {
+	postMentions := extractPostMentions(raw)
+	if len(postMentions) == 0 {
+		return nil
+	}
+
+	userIDs := make([]string, 0, len(postMentions))
+	for _, mention := range postMentions {
+		id := preferredID(mention.OpenID, mention.UserID, mention.UnionID)
+		if id == "" {
+			continue
+		}
+		userIDs = append(userIDs, id)
 	}
 	return userIDs
 }

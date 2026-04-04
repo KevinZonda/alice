@@ -36,7 +36,33 @@ func extractMentionedUsers(message *larkim.EventMessage) []MentionedUser {
 		appendMentionedUser(&mentioned, seen, candidate)
 	}
 
-	for _, rawID := range extractMentionUserIDs(message.Content) {
+	if len(mentioned) == 0 {
+		for _, candidate := range extractContentMentionedUsers(message) {
+			appendMentionedUser(&mentioned, seen, candidate)
+		}
+	}
+	return mentioned
+}
+
+func extractContentMentionedUsers(message *larkim.EventMessage) []MentionedUser {
+	if message == nil {
+		return nil
+	}
+	rawContent := strings.TrimSpace(deref(message.Content))
+	if rawContent == "" {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(deref(message.MessageType)), "post") {
+		return extractPostMentions(rawContent)
+	}
+
+	rawIDs := extractMentionUserIDs(message.Content)
+	if len(rawIDs) == 0 {
+		return nil
+	}
+
+	mentioned := make([]MentionedUser, 0, len(rawIDs))
+	for _, rawID := range rawIDs {
 		id := strings.TrimSpace(rawID)
 		if id == "" {
 			continue
@@ -50,7 +76,7 @@ func extractMentionedUsers(message *larkim.EventMessage) []MentionedUser {
 		default:
 			candidate.UserID = id
 		}
-		appendMentionedUser(&mentioned, seen, candidate)
+		mentioned = append(mentioned, candidate)
 	}
 	return mentioned
 }
