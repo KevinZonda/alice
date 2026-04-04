@@ -24,6 +24,7 @@ type WorkflowRunRequest struct {
 	TaskID          string
 	StateKey        string
 	SessionKey      string
+	ResumeThreadID  string
 	Scene           string
 	Prompt          string
 	WorkspaceDir    string
@@ -37,8 +38,9 @@ type WorkflowRunRequest struct {
 }
 
 type WorkflowRunResult struct {
-	Message  string
-	Commands []WorkflowCommand
+	Message      string
+	NextThreadID string
+	Commands     []WorkflowCommand
 }
 
 type WorkflowCommand struct {
@@ -84,7 +86,7 @@ func (r *PromptWorkflowRunner) Run(ctx context.Context, req WorkflowRunRequest) 
 	prompt = applyWorkflowSkillHint(workflow, prompt, env)
 
 	result, err := r.backend.Run(ctx, llm.RunRequest{
-		ThreadID:        workflowThreadID(req.Provider, req.StateKey),
+		ThreadID:        workflowEffectiveThreadID(req.Provider, req.StateKey, req.ResumeThreadID),
 		AgentName:       workflowAgentName(workflow),
 		UserText:        prompt,
 		Scene:           normalizeWorkflowScene(req.Scene, req.SessionKey),
@@ -102,8 +104,9 @@ func (r *PromptWorkflowRunner) Run(ctx context.Context, req WorkflowRunRequest) 
 	}
 	reply := strings.TrimSpace(result.Reply)
 	return WorkflowRunResult{
-		Message:  stripWorkflowCommandBlocks(reply),
-		Commands: extractWorkflowCommands(reply),
+		Message:      stripWorkflowCommandBlocks(reply),
+		NextThreadID: strings.TrimSpace(result.NextThreadID),
+		Commands:     extractWorkflowCommands(reply),
 	}, nil
 }
 
@@ -178,12 +181,15 @@ func applyWorkflowSkillHint(workflow string, prompt string, env map[string]strin
 	return hint + "\n\n" + prompt
 }
 
-func workflowThreadID(provider, stateKey string) string {
+// workflowEffectiveThreadID returns the thread ID to pass to the LLM backend.
+// For Codex/Kimi the state_key is the thread (existing behaviour).
+// For Claude (and other providers), resumeThreadID is used when set.
+func workflowEffectiveThreadID(provider, stateKey, resumeThreadID string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case llm.ProviderCodex, llm.ProviderKimi:
 		return strings.TrimSpace(stateKey)
 	default:
-		return ""
+		return strings.TrimSpace(resumeThreadID)
 	}
 }
 

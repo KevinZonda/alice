@@ -66,12 +66,13 @@ type taskSignal struct {
 }
 
 type taskDispatch struct {
-	text        string
-	cardContent string
-	forceCard   bool
-	signal      *taskSignal
-	signals     []taskSignal
-	completed   bool
+	text         string
+	cardContent  string
+	forceCard    bool
+	signal       *taskSignal
+	signals      []taskSignal
+	completed    bool
+	nextThreadID string
 }
 
 func primaryWorkflowSignal(signals []taskSignal) *taskSignal {

@@ -103,6 +103,13 @@ func (e *Engine) recordUserTaskOutcome(task Task, dispatch taskDispatch, err err
 	if recordErr != nil {
 		logging.Errorf("record automation result failed id=%s err=%v", task.ID, recordErr)
 	}
+	// Persist the new Claude thread ID for the next run (sticky thread).
+	if err == nil && strings.TrimSpace(dispatch.nextThreadID) != "" &&
+		strings.TrimSpace(dispatch.nextThreadID) != strings.TrimSpace(task.Action.ResumeThreadID) {
+		if patchErr := e.store.RecordTaskResumeThreadID(task.ID, dispatch.nextThreadID); patchErr != nil {
+			logging.Warnf("persist resume_thread_id failed id=%s err=%v", task.ID, patchErr)
+		}
+	}
 }
 
 func (e *Engine) notifyUserTaskCompletion(task Task, err error) {
@@ -377,6 +384,7 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			TaskID:          task.ID,
 			StateKey:        task.Action.StateKey,
 			SessionKey:      task.Action.SessionKey,
+			ResumeThreadID:  task.Action.ResumeThreadID,
 			Scene:           taskScene(task),
 			Prompt:          prompt,
 			Provider:        task.Action.Provider,
@@ -416,10 +424,11 @@ func (e *Engine) buildTaskDispatch(ctx context.Context, task Task) (taskDispatch
 			return taskDispatch{}, err
 		}
 		dispatch := taskDispatch{
-			text:      text,
-			signal:    signal,
-			signals:   signals,
-			completed: true,
+			text:         text,
+			signal:       signal,
+			signals:      signals,
+			completed:    true,
+			nextThreadID: result.NextThreadID,
 		}
 		if signal != nil {
 			cardContent, cardErr := buildSignalCardContent(task, text, signal)
