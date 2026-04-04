@@ -1,14 +1,6 @@
 {{- /* Stage: Raw inbound message normalization; used by Processor.buildCurrentUserInput before reply-context enrichment. */ -}}
-{{- if .UserMappings -}}
-{{- range .UserMappings }}
-用户{{ .Name }}的id是{{ .ID }}
-{{- end }}
-
-@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。
-
-{{- end -}}
 {{- if .HasIdentityContext -}}
-{{ .SenderName }}说：{{ .SpeechText }}
+`{{ .SenderName }}`说：{{ .SpeechText }}
 {{- else -}}
 {{ .BaseText }}
 {{- end -}}

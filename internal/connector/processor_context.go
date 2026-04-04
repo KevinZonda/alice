@@ -326,14 +326,7 @@ func (p *Processor) buildCurrentUserInputWithThread(job Job, threadID string) st
 	senderName := normalizeUserDisplayName(strings.TrimSpace(job.SenderName), "用户")
 	mentionedNames := buildMentionDisplayNames(job.MentionedUsers, botOpenID, botUserID)
 	speakerKnown := strings.TrimSpace(job.SenderName) != ""
-	mappings := buildUserIDMappings(
-		job,
-		senderName,
-		botOpenID,
-		botUserID,
-		strings.TrimSpace(threadID) == "",
-	)
-	identityContextEnabled := speakerKnown || len(mentionedNames) > 0 || len(mappings) > 0
+	identityContextEnabled := speakerKnown || len(mentionedNames) > 0
 
 	speechText := baseText
 	if len(mentionedNames) > 0 {
@@ -353,7 +346,6 @@ func (p *Processor) buildCurrentUserInputWithThread(job Job, threadID string) st
 		SenderName:         senderName,
 		SpeechText:         speechText,
 		BaseText:           baseText,
-		UserMappings:       mappings,
 		Attachments:        buildAttachmentPromptData(job.Attachments),
 	})
 	if err != nil {
@@ -361,43 +353,6 @@ func (p *Processor) buildCurrentUserInputWithThread(job Job, threadID string) st
 		return baseText
 	}
 	return rendered
-}
-
-func buildUserIDMappings(
-	job Job,
-	senderName string,
-	botOpenID string,
-	botUserID string,
-	includeSender bool,
-) []userMappingPromptData {
-	senderID := preferredID(job.SenderOpenID, job.SenderUserID, job.SenderUnionID)
-	mappings := make([]userMappingPromptData, 0, len(job.MentionedUsers)+1)
-	seen := make(map[string]struct{}, len(job.MentionedUsers)+1)
-
-	if includeSender && senderID != "" && !isBotIdentity(job.SenderOpenID, job.SenderUserID, senderID, botOpenID, botUserID) {
-		key := senderName + "\x00" + senderID
-		mappings = append(mappings, userMappingPromptData{Name: senderName, ID: senderID})
-		seen[key] = struct{}{}
-	}
-
-	for _, mentioned := range job.MentionedUsers {
-		name := strings.TrimSpace(mentioned.Name)
-		if name == "" {
-			name = "用户"
-		}
-		name = normalizeUserDisplayName(name, "用户")
-		id := preferredID(mentioned.OpenID, mentioned.UserID, mentioned.UnionID)
-		if id == "" || isBotIdentity(mentioned.OpenID, mentioned.UserID, id, botOpenID, botUserID) {
-			continue
-		}
-		key := name + "\x00" + id
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		mappings = append(mappings, userMappingPromptData{Name: name, ID: id})
-	}
-	return mappings
 }
 
 func buildAttachmentPromptData(attachments []Attachment) []attachmentPromptData {

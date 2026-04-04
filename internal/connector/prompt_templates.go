@@ -19,13 +19,7 @@ type currentUserInputPromptData struct {
 	SenderName         string
 	SpeechText         string
 	BaseText           string
-	UserMappings       []userMappingPromptData
 	Attachments        []attachmentPromptData
-}
-
-type userMappingPromptData struct {
-	Name string
-	ID   string
 }
 
 type attachmentPromptData struct {

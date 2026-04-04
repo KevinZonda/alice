@@ -32,16 +32,7 @@ func TestProcessor_BuildsIdentityAwareUserContext(t *testing.T) {
 		Text: "这是xxx",
 	})
 
-	if !strings.Contains(fakeCodex.lastInput, "用户Bob的id是ou_bob") {
-		t.Fatalf("missing sender id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
-		t.Fatalf("missing mentioned user id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
-		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 这是xxx") {
+	if !strings.Contains(fakeCodex.lastInput, "`Bob`说：@Carlo 这是xxx") {
 		t.Fatalf("missing expected speech context in input: %s", fakeCodex.lastInput)
 	}
 }
@@ -72,16 +63,7 @@ func TestProcessor_BuildsIdentityAwareUserContext_WithChatMembersFallback(t *tes
 		Text: "这是xxx",
 	})
 
-	if !strings.Contains(fakeCodex.lastInput, "用户Bob的id是ou_bob") {
-		t.Fatalf("missing sender id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
-		t.Fatalf("missing mentioned user id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
-		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 这是xxx") {
+	if !strings.Contains(fakeCodex.lastInput, "`Bob`说：@Carlo 这是xxx") {
 		t.Fatalf("missing expected speech context in input: %s", fakeCodex.lastInput)
 	}
 	if sender.resolveChatMemberNameCalls == 0 {
@@ -117,19 +99,7 @@ func TestProcessor_BuildsIdentityAwareUserContext_SkipsBotIdentity(t *testing.T)
 		Text: "这是xxx",
 	})
 
-	if !strings.Contains(fakeCodex.lastInput, "用户Bob的id是ou_bob") {
-		t.Fatalf("missing sender id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "用户Carlo的id是ou_carlo") {
-		t.Fatalf("missing non-bot mentioned user id mapping in input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人，请直接写 @姓名 或 @用户id（如 @ou_xxx），系统会自动转换为飞书 mention。") {
-		t.Fatalf("missing mention usage hint in input: %s", fakeCodex.lastInput)
-	}
-	if strings.Contains(fakeCodex.lastInput, "用户Alice的id是ou_alice") {
-		t.Fatalf("bot id mapping should be filtered from input: %s", fakeCodex.lastInput)
-	}
-	if !strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 这是xxx") {
+	if !strings.Contains(fakeCodex.lastInput, "`Bob`说：@Carlo 这是xxx") {
 		t.Fatalf("non-bot mention should remain in speech context: %s", fakeCodex.lastInput)
 	}
 	if strings.Contains(fakeCodex.lastInput, "@Alice") {
@@ -172,16 +142,13 @@ func TestProcessor_ResumeThreadSkipsRepeatedSenderMappingHint(t *testing.T) {
 	if len(fakeCodex.receivedInputs) != 2 {
 		t.Fatalf("expected 2 codex inputs, got %d", len(fakeCodex.receivedInputs))
 	}
-	if !strings.Contains(fakeCodex.receivedInputs[0], "用户Bob的id是ou_bob") {
-		t.Fatalf("first input should include sender mapping hint, got %q", fakeCodex.receivedInputs[0])
-	}
-	if strings.Contains(fakeCodex.receivedInputs[1], "用户Bob的id是ou_bob") {
-		t.Fatalf("resume input should not repeat sender mapping hint, got %q", fakeCodex.receivedInputs[1])
+	if fakeCodex.receivedInputs[0] != "`Bob`说：第一次" {
+		t.Fatalf("first input should be plain speaker context, got %q", fakeCodex.receivedInputs[0])
 	}
 	if strings.Contains(fakeCodex.receivedInputs[1], "@提及规则：若需要在回复中艾特某人") {
 		t.Fatalf("resume input should not repeat mention rule, got %q", fakeCodex.receivedInputs[1])
 	}
-	if fakeCodex.receivedInputs[1] != "Bob说：第二次" {
+	if fakeCodex.receivedInputs[1] != "`Bob`说：第二次" {
 		t.Fatalf("unexpected resume input: %q", fakeCodex.receivedInputs[1])
 	}
 }
@@ -211,10 +178,10 @@ func TestProcessor_PreservesMentionOrderWhenTextAlreadyContainsMention(t *testin
 		Text: "我是谁？@Carlo 又是谁？",
 	})
 
-	if !strings.Contains(fakeCodex.lastInput, "Bob说：我是谁？@Carlo 又是谁？") {
+	if !strings.Contains(fakeCodex.lastInput, "`Bob`说：我是谁？@Carlo 又是谁？") {
 		t.Fatalf("missing expected preserved mention order in input: %s", fakeCodex.lastInput)
 	}
-	if strings.Contains(fakeCodex.lastInput, "Bob说：@Carlo 我是谁？") {
+	if strings.Contains(fakeCodex.lastInput, "`Bob`说：@Carlo 我是谁？") {
 		t.Fatalf("mention should not be duplicated or re-prefixed in input: %s", fakeCodex.lastInput)
 	}
 }
@@ -272,7 +239,7 @@ func TestProcessor_ReplyParentContextFetchFailureFallsBackToUserText(t *testing.
 		Text:                 "继续",
 	})
 
-	if !strings.Contains(fakeCodex.lastInput, "alice-message skill") ||
+	if !strings.Contains(fakeCodex.lastInput, "@提及规则：若需要在回复中艾特某人") ||
 		!strings.Contains(fakeCodex.lastInput, "继续") {
 		t.Fatalf("expected fallback input to include concise tool hint and user text, got: %s", fakeCodex.lastInput)
 	}
@@ -324,7 +291,7 @@ func TestProcessor_ResumesCodexThreadWithinSameSession(t *testing.T) {
 	if len(fakeCodex.receivedInputs) != 2 {
 		t.Fatalf("expected 2 codex inputs, got %d", len(fakeCodex.receivedInputs))
 	}
-	if !strings.Contains(fakeCodex.receivedInputs[0], "alice-message skill") ||
+	if !strings.Contains(fakeCodex.receivedInputs[0], "@提及规则：若需要在回复中艾特某人") ||
 		!strings.Contains(fakeCodex.receivedInputs[0], "A") {
 		t.Fatalf("first input should include concise mcp auto-route hint and first text, got %q", fakeCodex.receivedInputs[0])
 	}
