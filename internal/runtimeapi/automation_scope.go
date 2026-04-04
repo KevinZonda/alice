@@ -12,6 +12,7 @@ import (
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimecfg"
+	"github.com/Alice-space/alice/internal/sessionkey"
 )
 
 type automationScopeContext struct {
@@ -102,6 +103,17 @@ func (s *Server) buildTaskFromRequest(req CreateTaskRequest, scopeCtx automation
 	}
 	applySceneLLMProfileDefaults(&task, scopeCtx, s.runtimeConfig())
 	task.Action.SessionKey = scopeSessionKey(scopeCtx.session)
+	if resumeKey := strings.TrimSpace(req.ResumeSessionKey); resumeKey != "" {
+		resumeRoute, resumeScope, err := routeAndScopeFromSessionKey(resumeKey)
+		if err != nil {
+			return automation.Task{}, fmt.Errorf("invalid resume_session_key: %w", err)
+		}
+		if err := validateResumeScope(resumeScope, scopeCtx); err != nil {
+			return automation.Task{}, fmt.Errorf("resume_session_key out of scope: %w", err)
+		}
+		task.Route = resumeRoute
+		task.Action.SessionKey = sessionkey.WithoutMessage(resumeKey)
+	}
 	if err := validateMentionPermission(scopeCtx, task.Action.MentionUserIDs); err != nil {
 		return automation.Task{}, err
 	}
@@ -211,7 +223,18 @@ func applyTaskPatch(current automation.Task, patchBytes []byte, contentType stri
 	next.ConsecutiveFailures = current.ConsecutiveFailures
 	next.Running = current.Running
 	next.Revision = current.Revision
-	next.Action.SessionKey = scopeSessionKey(scopeCtx.session)
+	// If the task's route matches the caller's current scope route, this is a
+	// normal (non-resume) task and we refresh the session key from the caller's
+	// current session as before.
+	// If the routes differ the task was created with resume_session_key (e.g.
+	// the route is thread_id:omt_xxx while the caller's scope is chat_id:oc_xxx).
+	// In that case the stored session key must be preserved so that env/scene
+	// stay consistent with the delivery route.
+	if next.Route == scopeCtx.route {
+		next.Action.SessionKey = scopeSessionKey(scopeCtx.session)
+	} else {
+		next.Action.SessionKey = current.Action.SessionKey
+	}
 	if err := validateMentionPermission(scopeCtx, next.Action.MentionUserIDs); err != nil {
 		return automation.Task{}, err
 	}
@@ -236,4 +259,78 @@ func canManageTask(task automation.Task, actorID string) bool {
 		return false
 	}
 	return actorID == task.Creator.PreferredID() || task.ManageMode == automation.ManageModeScopeAll
+}
+
+// routeAndScopeFromSessionKey derives the Feishu Route and automation Scope from
+// a session key such as "chat_id:oc_xxx|scene:work|thread:omt_yyy".
+//
+// If a thread token is present the Route targets the thread directly
+// (receive_id_type=thread_id), so automation messages land in the correct
+// Feishu thread rather than the top-level chat.  The Scope is always anchored
+// to the base channel (chat_id or user/open_id) for access-control purposes.
+func routeAndScopeFromSessionKey(sk string) (automation.Route, automation.Scope, error) {
+	sk = strings.TrimSpace(sk)
+	if sk == "" {
+		return automation.Route{}, automation.Scope{}, errors.New("session key is empty")
+	}
+	base := sessionkey.VisibilityKey(sk) // "chat_id:oc_xxx" or "open_id:ou_xxx"
+	colonIdx := strings.Index(base, ":")
+	if colonIdx <= 0 || colonIdx == len(base)-1 {
+		return automation.Route{}, automation.Scope{}, fmt.Errorf("malformed session key %q: expected type:id format", sk)
+	}
+	receiveIDType := strings.TrimSpace(base[:colonIdx])
+	receiveID := strings.TrimSpace(base[colonIdx+1:])
+	if receiveIDType == "" || receiveID == "" {
+		return automation.Route{}, automation.Scope{}, fmt.Errorf("malformed session key %q: empty type or id", sk)
+	}
+
+	var scope automation.Scope
+	if receiveIDType == "chat_id" {
+		scope = automation.Scope{Kind: automation.ScopeKindChat, ID: receiveID}
+	} else {
+		// user_id / open_id — scope ID is the channel ID itself; validation
+		// against the creator's actorID is done by validateResumeScope.
+		scope = automation.Scope{Kind: automation.ScopeKindUser, ID: receiveID}
+	}
+
+	// If the session key encodes a Feishu thread, send directly to that thread.
+	if threadID := sessionkey.ExtractThreadID(sk); threadID != "" {
+		route := automation.Route{ReceiveIDType: "thread_id", ReceiveID: threadID}
+		return route, scope, nil
+	}
+	route := automation.Route{ReceiveIDType: receiveIDType, ReceiveID: receiveID}
+	return route, scope, nil
+}
+
+// validateResumeScope ensures the resume session is within the caller's own
+// scope so that a task cannot be redirected to an unrelated channel.
+//
+//   - Group scope: the resume session key must belong to the same chat_id.
+//   - User scope: the resume session key must belong to the same actor.
+func validateResumeScope(resumeScope automation.Scope, scopeCtx automationScopeContext) error {
+	if scopeCtx.isGroup {
+		// Creator is in a group; resume key must refer to the same group.
+		if resumeScope.Kind != automation.ScopeKindChat {
+			return errors.New("group scope can only resume a chat session key")
+		}
+		if resumeScope.ID != scopeCtx.scope.ID {
+			return errors.New("resume session key does not belong to the current group")
+		}
+		return nil
+	}
+	// Creator is in a P2P chat; resume key must identify the same actor.
+	// We compare against scopeCtx.actorID (the normalized identity preferred
+	// by resolveRuntimeSessionContext: ActorUserID first, then ActorOpenID)
+	// rather than the raw route.ReceiveID, because the session key and the
+	// current runtime context may use different Feishu ID types (user_id vs
+	// open_id) for the same person.
+	if resumeScope.Kind != automation.ScopeKindUser {
+		return errors.New("user scope can only resume a user (P2P) session key")
+	}
+	if resumeScope.ID != scopeCtx.actorID &&
+		resumeScope.ID != strings.TrimSpace(scopeCtx.session.ActorUserID) &&
+		resumeScope.ID != strings.TrimSpace(scopeCtx.session.ActorOpenID) {
+		return errors.New("resume session key does not belong to the current user")
+	}
+	return nil
 }

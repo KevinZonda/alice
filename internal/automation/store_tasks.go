@@ -387,6 +387,30 @@ func shouldPurgeDeletedTask(task Task, cutoff time.Time) bool {
 	return deletedAt.Before(cutoff)
 }
 
+func (s *Store) RecordTaskResumeThreadID(taskID, nextThreadID string) error {
+	if s == nil {
+		return errors.New("store is nil")
+	}
+	nextThreadID = strings.TrimSpace(nextThreadID)
+	if nextThreadID == "" {
+		return nil
+	}
+	_, err := s.PatchTask(taskID, func(task *Task) error {
+		if task.Status == TaskStatusDeleted {
+			return errSkipDeletedTaskMutation
+		}
+		task.Action.ResumeThreadID = nextThreadID
+		return nil
+	})
+	if errors.Is(err, ErrTaskNotFound) {
+		return nil
+	}
+	if errors.Is(err, errSkipDeletedTaskMutation) {
+		return nil
+	}
+	return err
+}
+
 func (s *Store) RecordTaskSignal(taskID string, at time.Time, kind, message string, pause bool) error {
 	if s == nil {
 		return errors.New("store is nil")
