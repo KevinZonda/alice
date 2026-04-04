@@ -154,16 +154,16 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplateLeavesPhaseCountToPlanne
 		}
 	}
 
-	raw, err := os.ReadFile(filepath.Join(skillRoot, "plans", "merged", "master-plan.md"))
+	raw, err := os.ReadFile(filepath.Join(skillRoot, "plan.md"))
 	if err != nil {
-		t.Fatalf("read master plan template failed: %v", err)
+		t.Fatalf("read plan template failed: %v", err)
 	}
 	content := string(raw)
 	if strings.Contains(content, "total_phases: 7") {
-		t.Fatalf("master plan template should not pin total phases, got %q", content)
+		t.Fatalf("plan template should not pin total phases, got %q", content)
 	}
-	if !strings.Contains(content, "phase 数量由 planner") {
-		t.Fatalf("master plan template should defer phase count to planner, got %q", content)
+	if !strings.Contains(content, "Phase P01") || !strings.Contains(content, "Phase P02") {
+		t.Fatalf("plan template should provide planner-owned phase skeleton, got %q", content)
 	}
 
 	readmeRaw, err := os.ReadFile(filepath.Join(skillRoot, "README.md"))
@@ -192,10 +192,10 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGen
 	skillRoot := filepath.Join(aliceHome, "skills", "alice-code-army", "templates", "campaign-repo")
 	for _, path := range []string{
 		filepath.Join(skillRoot, "campaign.md"),
-		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task.md"),
-		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task-context.md"),
-		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "task-plan.md"),
-		filepath.Join("..", "..", "skills", "alice-code-army", "templates", "campaign-repo", "_templates", "review.md"),
+		filepath.Join(skillRoot, "_templates", "task.md"),
+		filepath.Join(skillRoot, "_templates", "phase.md"),
+		filepath.Join(skillRoot, "_templates", "review.md"),
+		filepath.Join(skillRoot, "_templates", "plan-review.md"),
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -211,7 +211,7 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGen
 			}
 			continue
 		}
-		if strings.HasSuffix(path, "task-context.md") || strings.HasSuffix(path, "task-plan.md") {
+		if strings.HasSuffix(path, "phase.md") {
 			continue
 		}
 		if !strings.Contains(content, "role: executor") && !strings.Contains(content, "role: reviewer") && !strings.Contains(content, "role: planner") {
