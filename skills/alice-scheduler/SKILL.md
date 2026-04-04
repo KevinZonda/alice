@@ -36,7 +36,37 @@ description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化
 - `action.workflow`：`run_workflow` 必填；用于指定 workflow 名，例如 `code_army`
 - `action.prompt`：`run_llm` / `run_workflow` 必填；workflow 的目标、命令或运行准则都由这里注入
 - `action.state_key`：可选；给 workflow 一个稳定状态槽位，便于同一类任务持续推进
+- `action.resume_thread_id`：可选；Claude Code session UUID，用于 `--resume`，实现跨次运行的对话续接（sticky thread）；每次成功执行后系统自动更新为最新 session ID
+- `resume_session_key`：可选顶层字段；指定要 Resume 的原始会话键（如 `chat_id:oc_xxx|scene:work|thread:omt_yyy`）；系统自动从中解析发送渠道（含 thread）和 `session_key`，覆盖默认的当前会话路由
 - `manage_mode`：`creator_only` 或 `scope_all`（`scope_all` 仅群聊有意义）
+
+## Resume 模式
+
+Resume 模式允许定时任务在特定已有会话上下文中执行，并把结果回送到该会话的原始渠道（群 + thread）。
+
+**创建 Resume workflow 任务示例**（从群里的 work thread 定时续接）：
+
+```
+scripts/alice-scheduler.sh create <<'JSON'
+{
+  "title": "每日 thread 续跑",
+  "resume_session_key": "chat_id:oc_xxx|scene:work|thread:omt_yyy",
+  "schedule": { "type": "cron", "cron_expr": "0 9 * * *" },
+  "action": {
+    "type": "run_workflow",
+    "workflow": "code_army",
+    "prompt": "继续推进昨天的工作，检查 CI 状态并处理 pending 任务。"
+  }
+}
+JSON
+```
+
+触发时的行为：
+1. 若 `action.resume_thread_id` 非空，以 `claude --resume <id>` 续接 Claude 会话；首次可为空（全新开始）
+2. 消息发到 `chat_id:oc_xxx` 群的 `omt_yyy` thread（`receive_id_type=thread_id`）
+3. 每次成功后，系统自动把新 Claude session ID 写回 `action.resume_thread_id`，下次继续续接
+
+**安全约束**：`resume_session_key` 的 channel 必须与创建请求的当前 scope 一致（同一个群或同一个 P2P 会话），不能跨渠道重定向。
 
 ## 工作流
 
