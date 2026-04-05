@@ -105,7 +105,7 @@ func TestEngine_RunUserTask_RunLLM(t *testing.T) {
 		runner.mu.Unlock()
 		t.Fatalf("unexpected llm scene: %q", runner.lastReq.Scene)
 	}
-	if got := runner.lastReq.Env["ALICE_MCP_RECEIVE_ID"]; got != "ou_actor" {
+	if got := runner.lastReq.Env["ALICE_RECEIVE_ID"]; got != "ou_actor" {
 		runner.mu.Unlock()
 		t.Fatalf("unexpected llm env receive id: %q", got)
 	}
@@ -174,7 +174,7 @@ func TestEngine_RunUserTask_RunLLM_WorkSceneUsesCardAndWorkScene(t *testing.T) {
 		runner.mu.Unlock()
 		t.Fatalf("unexpected llm scene: %q", runner.lastReq.Scene)
 	}
-	if got := runner.lastReq.Env["ALICE_MCP_SESSION_KEY"]; got != "chat_id:oc_chat|scene:work|thread:omt_alpha" {
+	if got := runner.lastReq.Env["ALICE_SESSION_KEY"]; got != "chat_id:oc_chat|scene:work|thread:omt_alpha" {
 		runner.mu.Unlock()
 		t.Fatalf("unexpected llm session key env: %q", got)
 	}

@@ -210,12 +210,12 @@ Different scenes may use different providers and different CLI commands.
 
 ## 7. `SOUL.md`
 
-Each bot can define persona and machine-readable reply metadata in `workspace/SOUL.md`.
+Each bot can define persona and machine-readable reply metadata in its configured `soul_path`.
+The example config keeps this at `workspace/SOUL.md`; if `soul_path` is omitted entirely, Alice defaults to `<alice_home>/run/SOUL.md`.
 
 Current frontmatter keys:
 
 - `image_refs`
-- `image_generation`
 - `output_contract`
 
 Example:
@@ -225,8 +225,6 @@ Example:
 image_refs:
   - refs/base.png
   - refs/closeup.jpg
-image_generation:
-  min_reply_will: 50
 output_contract:
   hidden_tags:
     - reply_will
@@ -259,8 +257,6 @@ Current bundled skills in this repository:
 
 - `alice-message`
 - `alice-scheduler`
-- `alice-code-army`
-- `file-printing`
 
 Current runtime permissions:
 
@@ -283,7 +279,7 @@ Important boundary: plain text replies normally go through the main reply pipeli
 ## 10. Troubleshooting
 
 - Bot never responds in group chats:
-  Check `group_scenes`, `trigger_mode`, and whether `feishu_bot_open_id` / `feishu_bot_user_id` are configured correctly.
+  Check `group_scenes` and `trigger_mode`. Bot `open_id` is fetched automatically at startup now, so there is no manual `feishu_bot_open_id` / `feishu_bot_user_id` knob anymore.
 - `work` mode never starts:
   Check that `group_scenes.work.enabled` is true, `trigger_tag` is set, and the triggering message actually matches the expected pattern.
 - Wrong model or reasoning level:

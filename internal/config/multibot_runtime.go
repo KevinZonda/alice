@@ -91,8 +91,6 @@ func (cfg Config) deriveBotRuntimeConfig(botID string, bot BotConfig, index int)
 	runtime.FeishuAppID = bot.FeishuAppID
 	runtime.FeishuAppSecret = bot.FeishuAppSecret
 	runtime.FeishuBaseURL = bot.FeishuBaseURL
-	runtime.FeishuBotOpenID = bot.FeishuBotOpenID
-	runtime.FeishuBotUserID = bot.FeishuBotUserID
 	runtime.TriggerMode = bot.TriggerMode
 	runtime.TriggerPrefix = bot.TriggerPrefix
 	runtime.ImmediateFeedbackMode = bot.ImmediateFeedbackMode
@@ -112,7 +110,7 @@ func (cfg Config) deriveBotRuntimeConfig(botID string, bot BotConfig, index int)
 	runtime.WorkspaceDir = deriveBotWorkspaceDir(bot, runtime.AliceHome)
 	runtime.PromptDir = deriveBotPromptDir(bot, runtime.AliceHome)
 	runtime.CodexHome = deriveBotCodexHome(bot, runtime.AliceHome)
-	runtime.SoulPath = deriveBotSoulPath(bot, runtime.WorkspaceDir)
+	runtime.SoulPath = deriveBotSoulPath(bot, runtime.AliceHome)
 	runtime.CodexEnv = mergeStringMap(nil, bot.Env)
 	runtime.QueueCapacity = bot.QueueCapacity
 	runtime.WorkerConcurrency = bot.WorkerConcurrency
@@ -163,11 +161,11 @@ func deriveBotCodexHome(bot BotConfig, _ string) string {
 	return DefaultCodexHome()
 }
 
-func deriveBotSoulPath(bot BotConfig, workspaceDir string) string {
+func deriveBotSoulPath(bot BotConfig, aliceHome string) string {
 	if bot.SoulPath != "" {
 		return bot.SoulPath
 	}
-	return filepath.Join(workspaceDir, "SOUL.md")
+	return SoulPathForAliceHome(aliceHome)
 }
 
 func deriveBotRuntimeHTTPAddr(bot BotConfig, index int) (string, error) {

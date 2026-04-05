@@ -48,8 +48,6 @@ func TestApplyReloadableFields(t *testing.T) {
 	current := config.Config{
 		TriggerMode:               config.TriggerModeAt,
 		TriggerPrefix:             "",
-		FeishuBotOpenID:           "ou_old",
-		FeishuBotUserID:           "bot_user_old",
 		FailureMessage:            "old fail",
 		ThinkingMessage:           "old thinking",
 		ImmediateFeedbackMode:     config.ImmediateFeedbackModeReply,
@@ -82,8 +80,6 @@ func TestApplyReloadableFields(t *testing.T) {
 	next := current
 	next.TriggerMode = config.TriggerModePrefix
 	next.TriggerPrefix = "!alice"
-	next.FeishuBotOpenID = "ou_new"
-	next.FeishuBotUserID = "bot_user_new"
 	next.CodexEnv = map[string]string{"HTTPS_PROXY": "http://127.0.0.1:9999", "ALL_PROXY": "socks5://127.0.0.1:1080"}
 	next.LogLevel = "debug"
 	next.AutomationTaskTimeoutSecs = 900

@@ -87,7 +87,7 @@ The source tree also embeds:
 - `prompts/`
 - `skills/`
 - `config.example.yaml`
-- `SOUL.md.example`
+- `prompts/SOUL.md.example`
 
 Disk files override embedded prompt files when present; embedded assets are the fallback.
 
@@ -102,7 +102,7 @@ Core packages:
 - `internal/config`
   Config schema, validation, defaults, path derivation, and multi-bot expansion.
 - `internal/connector`
-  Feishu ingress, message normalization, scene routing, queueing, session serialization, interruption, prompt assembly, reply dispatch, attachment download, session persistence, built-in commands, and optional image generation.
+  Feishu ingress, message normalization, scene routing, queueing, session serialization, interruption, prompt assembly, reply dispatch, attachment download, session persistence, and built-in commands.
 - `internal/llm`
   Provider-agnostic backend contract plus provider adapters for `codex`, `claude`, `gemini`, and `kimi`.
 - `internal/prompting`
@@ -117,13 +117,13 @@ Core packages:
   Repo-first campaign loader, validator, reconciler, dispatch planner, post-run validation, and live-report generation.
 - `internal/statusview`
   Aggregates usage, automation, and campaign data for `/status` and related cards.
-- `internal/imagegen`
-  Optional OpenAI-backed image generation and edit pipeline.
+- `internal/platform/feishu`
+  Feishu sender implementation, attachment I/O, bot self-info lookup, message lookup, and user-name resolution helpers.
 
 Support packages:
 
-- `internal/mcpbridge`
-  Session-context environment bridge; the `ALICE_MCP_*` names are still used for backward compatibility even though business logic no longer runs through MCP.
+- `internal/sessionctx`
+  Session-context environment bridge for runtime API calls and bundled skills.
 - `internal/runtimecfg`
   Helpers for scene-derived profile selection and thread-reply preference.
 - `internal/sessionkey`
@@ -234,7 +234,7 @@ Currently supported providers:
 - `gemini`
 - `kimi`
 
-## 8. Reply Dispatch And Optional Image Generation
+## 8. Reply Dispatch
 
 Alice distinguishes between:
 
@@ -249,7 +249,6 @@ Current behavior:
 - backend progress messages are sent as threaded replies when possible
 - final replies are posted via the reply dispatcher
 - thread replies fall back to direct replies when Feishu does not support threaded replies for that target
-- optional roleplay image generation can run after the textual reply is produced
 
 `internal/connector/sender.go` and related files own:
 
@@ -289,21 +288,19 @@ Bundled skills shipped in the current tree:
 
 - `skills/alice-message`
 - `skills/alice-scheduler`
-- `skills/alice-code-army`
-- `skills/file-printing`
 
 Runtime context is injected through:
 
 - `ALICE_RUNTIME_API_BASE_URL`
 - `ALICE_RUNTIME_API_TOKEN`
 - `ALICE_RUNTIME_BIN`
-- `ALICE_MCP_RECEIVE_ID_TYPE`
-- `ALICE_MCP_RECEIVE_ID`
-- `ALICE_MCP_SOURCE_MESSAGE_ID`
-- `ALICE_MCP_ACTOR_USER_ID`
-- `ALICE_MCP_ACTOR_OPEN_ID`
-- `ALICE_MCP_CHAT_TYPE`
-- `ALICE_MCP_SESSION_KEY`
+- `ALICE_RECEIVE_ID_TYPE`
+- `ALICE_RECEIVE_ID`
+- `ALICE_SOURCE_MESSAGE_ID`
+- `ALICE_ACTOR_USER_ID`
+- `ALICE_ACTOR_OPEN_ID`
+- `ALICE_CHAT_TYPE`
+- `ALICE_SESSION_KEY`
 
 ## 10. Automation Subsystem
 

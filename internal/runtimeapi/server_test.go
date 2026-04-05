@@ -6,7 +6,7 @@ import (
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func TestBuildTaskFromRequest_UsesWorkSceneLLMProfile(t *testing.T) {
@@ -48,7 +48,7 @@ func TestBuildTaskFromRequest_UsesWorkSceneLLMProfile(t *testing.T) {
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|seed:om_1"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|seed:om_1"},
 		},
 	)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestBuildTaskFromRequest_PreservesExplicitRunLLMSelectors(t *testing.T) {
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|seed:om_1"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|seed:om_1"},
 		},
 	)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestBuildTaskFromRequest_InferRunLLMAndSetSessionKey(t *testing.T) {
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
 		},
 	)
 	if err != nil {
@@ -244,7 +244,7 @@ func TestBuildTaskFromRequest_RunLLMExplicitProfileOverridesSceneDefaults(t *tes
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
 		},
 	)
 	if err != nil {
@@ -284,7 +284,7 @@ func TestBuildTaskFromRequest_PreservesExplicitNextRunAt(t *testing.T) {
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1"},
 		},
 	)
 	if err != nil {
@@ -334,7 +334,7 @@ func TestBuildTaskFromRequest_RunLLMExplicitProviderDoesNotInheritSceneModel(t *
 			scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 			route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 			creator: automation.Actor{OpenID: "ou_actor"},
-			session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
+			session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
 		},
 	)
 	if err != nil {
@@ -370,7 +370,7 @@ func TestApplyTaskPatch_PreservesScopedSessionKeyForRunLLM(t *testing.T) {
 		scope:   automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
 		route:   automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 		creator: automation.Actor{OpenID: "ou_actor"},
-		session: mcpbridge.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
+		session: sessionctx.SessionContext{SessionKey: "chat_id:oc_chat|scene:work|thread:omt_1|message:om_2"},
 	})
 	if err != nil {
 		t.Fatalf("apply task patch failed: %v", err)

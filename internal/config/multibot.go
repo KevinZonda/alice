@@ -26,7 +26,6 @@ type bundledSkillSpec struct {
 var defaultBundledSkills = []bundledSkillSpec{
 	{Name: "alice-message", Allowed: allowRuntimeMessageSkill},
 	{Name: "alice-scheduler", Allowed: allowRuntimeAutomationSkill},
-	{Name: "file-printing"},
 }
 
 func allowRuntimeMessageSkill(cfg Config) bool {

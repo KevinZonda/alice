@@ -213,12 +213,12 @@ group_scenes:
 
 ## 7. `SOUL.md`
 
-每个 bot 的人格和机器可读回复元数据都可以写在 `workspace/SOUL.md`。
+每个 bot 的人格和机器可读回复元数据都可以写在自己配置的 `soul_path`。
+示例配置把它放在 `workspace/SOUL.md`；如果完全省略 `soul_path`，Alice 默认会使用 `<alice_home>/run/SOUL.md`。
 
 当前 frontmatter 键：
 
 - `image_refs`
-- `image_generation`
 - `output_contract`
 
 示例：
@@ -228,8 +228,6 @@ group_scenes:
 image_refs:
   - refs/base.png
   - refs/closeup.jpg
-image_generation:
-  min_reply_will: 50
 output_contract:
   hidden_tags:
     - reply_will
@@ -262,8 +260,6 @@ Alice 会暴露本地 runtime API。bundled skill 通过它来：
 
 - `alice-message`
 - `alice-scheduler`
-- `alice-code-army`
-- `file-printing`
 
 当前 runtime 权限控制：
 
@@ -289,7 +285,7 @@ Alice 会暴露本地 runtime API。bundled skill 通过它来：
 ## 10. 排障
 
 - 群里完全不回复：
-  先检查 `group_scenes`、`trigger_mode`，以及 `feishu_bot_open_id` / `feishu_bot_user_id` 是否配置正确。
+  先检查 `group_scenes` 和 `trigger_mode` 是否配置正确。机器人的 open_id 现在由系统自动 fetch，无需手动填写。
 - `work` 模式起不来：
   检查 `group_scenes.work.enabled` 是否为 true，`trigger_tag` 是否设置，触发消息是否真的匹配。
 - 模型或推理强度不对：

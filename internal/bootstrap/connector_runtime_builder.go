@@ -15,6 +15,7 @@ import (
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/logging"
+	feishu "github.com/Alice-space/alice/internal/platform/feishu"
 	"github.com/Alice-space/alice/internal/prompting"
 	"github.com/Alice-space/alice/internal/runtimeapi"
 )
@@ -32,9 +33,10 @@ type connectorRuntimeBuilder struct {
 	cfg       config.Config
 	backend   agentbridge.Backend
 	paths     connectorRuntimePaths
-	sender    *connector.LarkSender
+	sender    *feishu.FeishuSender
 	processor *connector.Processor
 	app       *connector.App
+	botOpenID string
 
 	automationStore  *automation.Store
 	automationEngine *automation.Engine
@@ -71,6 +73,7 @@ func newConnectorRuntimePaths(cfg config.Config) connectorRuntimePaths {
 func (b *connectorRuntimeBuilder) Build() (*ConnectorRuntime, error) {
 	b.promptLoader = prompting.NewLoader(b.paths.promptDir)
 	b.buildSender()
+	b.fetchBotIdentity()
 	b.buildAutomationStore()
 
 	if err := b.buildProcessor(); err != nil {
@@ -104,7 +107,24 @@ func (b *connectorRuntimeBuilder) buildSender() {
 		b.cfg.FeishuAppSecret,
 		lark.WithOpenBaseUrl(b.cfg.FeishuBaseURL),
 	)
-	b.sender = connector.NewLarkSender(botClient, b.paths.resourceDir)
+	b.sender = feishu.NewFeishuSender(botClient, b.paths.resourceDir)
+}
+
+func (b *connectorRuntimeBuilder) fetchBotIdentity() {
+	if b.sender == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	info, err := feishu.FetchBotSelfInfo(ctx, b.sender.Client())
+	if err != nil {
+		logging.Warnf("fetch bot identity failed (degraded mode): %v", err)
+		return
+	}
+	b.botOpenID = info.OpenID
+	if b.botOpenID != "" {
+		logging.Infof("bot identity fetched open_id=%s", b.botOpenID)
+	}
 }
 
 func (b *connectorRuntimeBuilder) buildAutomationStore() {
@@ -140,6 +160,7 @@ func (b *connectorRuntimeBuilder) buildProcessor() error {
 func (b *connectorRuntimeBuilder) buildApp() error {
 	app := connector.NewApp(b.cfg, b.processor)
 	app.SetPromptLoader(b.promptLoader)
+	app.SetBotOpenID(b.botOpenID)
 	loadOptionalState("runtime state", b.paths.runtimeStatePath, app.LoadRuntimeState)
 	b.app = app
 	return nil

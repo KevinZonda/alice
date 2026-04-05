@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimeapi"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func newRuntimeAutomationCmd() *cobra.Command {
@@ -37,7 +37,7 @@ func newRuntimeAutomationListCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			_ []string,
 		) error {
@@ -61,7 +61,7 @@ func newRuntimeAutomationCreateCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			args []string,
 		) error {
@@ -90,7 +90,7 @@ func newRuntimeAutomationGetCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			args []string,
 		) error {
@@ -113,7 +113,7 @@ func newRuntimeAutomationPatchCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			args []string,
 		) error {
@@ -144,7 +144,7 @@ func newRuntimeAutomationDeleteCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			args []string,
 		) error {

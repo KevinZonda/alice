@@ -47,8 +47,8 @@ func (a *App) routeIncomingJob(job *Job, event *larkim.P2MessageReceiveV1) bool 
 		event,
 		cfg.triggerMode,
 		cfg.triggerPrefix,
-		cfg.feishuBotOpenID,
-		cfg.feishuBotUserID,
+		a.getBotOpenID(),
+		"",
 	)
 	if !accepted {
 		return false
@@ -71,8 +71,8 @@ func (a *App) routeGroupSceneJob(job *Job, event *larkim.P2MessageReceiveV1, mes
 			event,
 			cfg.triggerMode,
 			cfg.triggerPrefix,
-			cfg.feishuBotOpenID,
-			cfg.feishuBotUserID,
+			a.getBotOpenID(),
+			"",
 		)
 		if sessionKey := a.resolveExistingWorkSession(job, event, message); sessionKey != "" {
 			// Existing work threads should accept attachment-only followups even

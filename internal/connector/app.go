@@ -26,6 +26,9 @@ type App struct {
 	processor *Processor
 	workerWG  sync.WaitGroup
 
+	botOpenIDMu sync.RWMutex
+	botOpenID   string
+
 	state            *runtimeStore
 	now              func() time.Time
 	automationMu     sync.Mutex
@@ -36,16 +39,14 @@ type App struct {
 }
 
 type appRuntimeConfig struct {
-	botID           string
-	botName         string
-	soulPath        string
-	triggerMode     string
-	triggerPrefix   string
-	llmProvider     string
-	llmProfiles     map[string]config.LLMProfileConfig
-	groupScenes     config.GroupScenesConfig
-	feishuBotOpenID string
-	feishuBotUserID string
+	botID         string
+	botName       string
+	soulPath      string
+	triggerMode   string
+	triggerPrefix string
+	llmProvider   string
+	llmProfiles   map[string]config.LLMProfileConfig
+	groupScenes   config.GroupScenesConfig
 }
 
 const (
@@ -70,16 +71,14 @@ func NewApp(cfg config.Config, processor *Processor) *App {
 
 func newAppRuntimeConfig(cfg config.Config) appRuntimeConfig {
 	return appRuntimeConfig{
-		botID:           strings.TrimSpace(cfg.BotID),
-		botName:         strings.TrimSpace(cfg.BotName),
-		soulPath:        strings.TrimSpace(cfg.SoulPath),
-		triggerMode:     cfg.TriggerMode,
-		triggerPrefix:   cfg.TriggerPrefix,
-		llmProvider:     cfg.LLMProvider,
-		llmProfiles:     runtimecfg.CloneLLMProfiles(cfg.LLMProfiles),
-		groupScenes:     cfg.GroupScenes,
-		feishuBotOpenID: cfg.FeishuBotOpenID,
-		feishuBotUserID: cfg.FeishuBotUserID,
+		botID:         strings.TrimSpace(cfg.BotID),
+		botName:       strings.TrimSpace(cfg.BotName),
+		soulPath:      strings.TrimSpace(cfg.SoulPath),
+		triggerMode:   cfg.TriggerMode,
+		triggerPrefix: cfg.TriggerPrefix,
+		llmProvider:   cfg.LLMProvider,
+		llmProfiles:   runtimecfg.CloneLLMProfiles(cfg.LLMProfiles),
+		groupScenes:   cfg.GroupScenes,
 	}
 }
 
@@ -102,6 +101,24 @@ func (a *App) UpdateRuntimeConfig(cfg config.Config) {
 	if a.processor != nil {
 		a.processor.SetBuiltinHelpConfig(cfg)
 	}
+}
+
+func (a *App) SetBotOpenID(openID string) {
+	if a == nil {
+		return
+	}
+	a.botOpenIDMu.Lock()
+	a.botOpenID = strings.TrimSpace(openID)
+	a.botOpenIDMu.Unlock()
+}
+
+func (a *App) getBotOpenID() string {
+	if a == nil {
+		return ""
+	}
+	a.botOpenIDMu.RLock()
+	defer a.botOpenIDMu.RUnlock()
+	return a.botOpenID
 }
 
 func (a *App) SetPromptLoader(loader *prompting.Loader) {
@@ -330,8 +347,7 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 		)
 		return nil
 	}
-	job.BotOpenID = strings.TrimSpace(runtimeCfg.feishuBotOpenID)
-	job.BotUserID = strings.TrimSpace(runtimeCfg.feishuBotUserID)
+	job.BotOpenID = a.getBotOpenID()
 	job.BotID = strings.TrimSpace(runtimeCfg.botID)
 	job.BotName = strings.TrimSpace(runtimeCfg.botName)
 	job.SoulPath = strings.TrimSpace(runtimeCfg.soulPath)

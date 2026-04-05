@@ -144,8 +144,6 @@ func applyReloadableFields(dst *config.Config, src config.Config, changed map[st
 	}
 	applyStringField(&dst.TriggerMode, src.TriggerMode, "trigger_mode", changed)
 	applyStringField(&dst.TriggerPrefix, src.TriggerPrefix, "trigger_prefix", changed)
-	applyStringField(&dst.FeishuBotOpenID, src.FeishuBotOpenID, "feishu_bot_open_id", changed)
-	applyStringField(&dst.FeishuBotUserID, src.FeishuBotUserID, "feishu_bot_user_id", changed)
 	applyStringField(&dst.FailureMessage, src.FailureMessage, "failure_message", changed)
 	applyStringField(&dst.ThinkingMessage, src.ThinkingMessage, "thinking_message", changed)
 	applyStringField(&dst.ImmediateFeedbackMode, src.ImmediateFeedbackMode, "immediate_feedback_mode", changed)

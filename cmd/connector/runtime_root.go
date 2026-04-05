@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimeapi"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func newRuntimeCmd() *cobra.Command {
@@ -28,7 +28,7 @@ func newRuntimeCmd() *cobra.Command {
 }
 
 func withRuntimeClient(
-	run func(context.Context, *runtimeapi.Client, mcpbridge.SessionContext, *cobra.Command, []string) error,
+	run func(context.Context, *runtimeapi.Client, sessionctx.SessionContext, *cobra.Command, []string) error,
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		client, session, err := loadRuntimeClient()
@@ -39,18 +39,18 @@ func withRuntimeClient(
 	}
 }
 
-func loadRuntimeClient() (*runtimeapi.Client, mcpbridge.SessionContext, error) {
+func loadRuntimeClient() (*runtimeapi.Client, sessionctx.SessionContext, error) {
 	baseURL := strings.TrimSpace(os.Getenv(runtimeapi.EnvBaseURL))
 	if baseURL == "" {
-		return nil, mcpbridge.SessionContext{}, fmt.Errorf("missing %s", runtimeapi.EnvBaseURL)
+		return nil, sessionctx.SessionContext{}, fmt.Errorf("missing %s", runtimeapi.EnvBaseURL)
 	}
 	client := runtimeapi.NewClient(baseURL, os.Getenv(runtimeapi.EnvToken))
 	if client == nil || !client.IsEnabled() {
-		return nil, mcpbridge.SessionContext{}, fmt.Errorf("runtime api client is unavailable")
+		return nil, sessionctx.SessionContext{}, fmt.Errorf("runtime api client is unavailable")
 	}
-	session := mcpbridge.SessionContextFromEnv(os.Getenv)
+	session := sessionctx.SessionContextFromEnv(os.Getenv)
 	if err := session.Validate(); err != nil {
-		return nil, mcpbridge.SessionContext{}, fmt.Errorf("invalid current alice session: %w", err)
+		return nil, sessionctx.SessionContext{}, fmt.Errorf("invalid current alice session: %w", err)
 	}
 	return client, session, nil
 }

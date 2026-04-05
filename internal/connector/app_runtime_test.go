@@ -303,8 +303,6 @@ func TestApp_WorkerLoopInterruptsSameSessionAndResumesLatest(t *testing.T) {
 
 func TestApp_WorkerLoopInterruptsGroupThreadReplyMappedBackToRootSession(t *testing.T) {
 	cfg := configForTest()
-	cfg.FeishuBotOpenID = "ou_bot"
-
 	interruptibleCodex := newInterruptibleResumableCodexStub()
 	sender := &senderStub{}
 	processor := NewProcessor(
@@ -314,6 +312,7 @@ func TestApp_WorkerLoopInterruptsGroupThreadReplyMappedBackToRootSession(t *test
 		"正在思考中...",
 	)
 	app := NewApp(cfg, processor)
+	app.SetBotOpenID("ou_bot")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -13,7 +13,6 @@ import (
 func configForGroupScenesTest() config.Config {
 	cfg := configForTest()
 	cfg.LLMProvider = "codex"
-	cfg.FeishuBotOpenID = "ou_bot"
 	cfg.LLMProfiles = map[string]config.LLMProfileConfig{
 		"chat": {
 			Provider:        "codex",
@@ -54,9 +53,15 @@ func configForWorkOnlyGroupScenesTest() config.Config {
 	return cfg
 }
 
+func newGroupScenesApp(cfg config.Config, processor *Processor) *App {
+	app := NewApp(cfg, processor)
+	app.SetBotOpenID("ou_bot")
+	return app
+}
+
 func TestApp_OnMessageReceive_GroupChatSceneSharesSessionAcrossMessages(t *testing.T) {
 	cfg := configForGroupScenesTest()
-	app := NewApp(cfg, nil)
+	app := newGroupScenesApp(cfg, nil)
 
 	first := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_chat_1"}},
@@ -137,7 +142,7 @@ func TestApp_OnMessageReceive_GroupChatSceneSharesSessionAcrossMessages(t *testi
 
 func TestApp_RouteBuiltinStopToExistingWorkSession(t *testing.T) {
 	cfg := configForGroupScenesTest()
-	app := NewApp(cfg, nil)
+	app := newGroupScenesApp(cfg, nil)
 
 	sessionKey := buildWorkSceneSessionKey("chat_id", "oc_chat", "om_work_root")
 	app.state.latest[sessionKey] = 1
@@ -179,7 +184,7 @@ func TestApp_RouteBuiltinStopToExistingWorkSession(t *testing.T) {
 func TestApp_OnMessageReceive_WorkSceneUsesDedicatedThreadSession(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	start := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_start"}},
@@ -293,7 +298,7 @@ func TestApp_OnMessageReceive_GroupScenesUseDifferentProvidersPerScene(t *testin
 	}
 
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	chatEvent := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_chat_provider"}},
@@ -344,7 +349,7 @@ func TestApp_OnMessageReceive_GroupScenesUseDifferentProvidersPerScene(t *testin
 
 func TestApp_OnMessageReceive_WorkOnlySceneIgnoresMentionWithoutTriggerTag(t *testing.T) {
 	cfg := configForWorkOnlyGroupScenesTest()
-	app := NewApp(cfg, nil)
+	app := newGroupScenesApp(cfg, nil)
 
 	event := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_only_without_tag"}},
@@ -375,7 +380,7 @@ func TestApp_OnMessageReceive_WorkOnlySceneIgnoresMentionWithoutTriggerTag(t *te
 func TestApp_OnMessageReceive_WorkSceneThreadFollowupRequiresMention(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	start := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_followup_requires_mention_start"}},
@@ -432,7 +437,7 @@ func TestApp_OnMessageReceive_WorkSceneThreadFollowupRequiresMention(t *testing.
 func TestApp_OnMessageReceive_WorkSceneThreadFileFollowupWithoutMention(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	start := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_file_followup_start"}},
@@ -512,7 +517,7 @@ func TestApp_OnMessageReceive_WorkSceneThreadFileFollowupWithoutMention(t *testi
 func TestApp_OnMessageReceive_GroupChatSceneUsesRotatedSessionAfterClear(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	baseSessionKey := buildChatSceneSessionKey("chat_id", "oc_chat")
 	oldThreadID := "thread_old"
@@ -559,7 +564,7 @@ func TestApp_OnMessageReceive_GroupChatSceneUsesRotatedSessionAfterClear(t *test
 func TestApp_OnMessageReceive_WorkSceneParentOnlyFollowupReusesSessionWithMention(t *testing.T) {
 	cfg := configForGroupScenesTest()
 	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
-	app := NewApp(cfg, processor)
+	app := newGroupScenesApp(cfg, processor)
 
 	start := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_parent_only_with_mention_start"}},

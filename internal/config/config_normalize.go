@@ -6,8 +6,6 @@ func normalizeLoadedConfig(cfg Config, rootEnv map[string]string) Config {
 	cfg.FeishuAppID = strings.TrimSpace(cfg.FeishuAppID)
 	cfg.FeishuAppSecret = strings.TrimSpace(cfg.FeishuAppSecret)
 	cfg.FeishuBaseURL = strings.TrimSpace(cfg.FeishuBaseURL)
-	cfg.FeishuBotOpenID = strings.TrimSpace(cfg.FeishuBotOpenID)
-	cfg.FeishuBotUserID = strings.TrimSpace(cfg.FeishuBotUserID)
 	cfg.TriggerMode = strings.ToLower(strings.TrimSpace(cfg.TriggerMode))
 	cfg.TriggerPrefix = strings.TrimSpace(cfg.TriggerPrefix)
 	cfg.ImmediateFeedbackMode = strings.ToLower(strings.TrimSpace(cfg.ImmediateFeedbackMode))

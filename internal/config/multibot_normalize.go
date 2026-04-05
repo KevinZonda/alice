@@ -16,8 +16,6 @@ func normalizeBots(in map[string]BotConfig) map[string]BotConfig {
 		bot.FeishuAppID = strings.TrimSpace(bot.FeishuAppID)
 		bot.FeishuAppSecret = strings.TrimSpace(bot.FeishuAppSecret)
 		bot.FeishuBaseURL = strings.TrimSpace(bot.FeishuBaseURL)
-		bot.FeishuBotOpenID = strings.TrimSpace(bot.FeishuBotOpenID)
-		bot.FeishuBotUserID = strings.TrimSpace(bot.FeishuBotUserID)
 		bot.TriggerMode = strings.ToLower(strings.TrimSpace(bot.TriggerMode))
 		bot.TriggerPrefix = strings.TrimSpace(bot.TriggerPrefix)
 		bot.ImmediateFeedbackMode = strings.ToLower(strings.TrimSpace(bot.ImmediateFeedbackMode))

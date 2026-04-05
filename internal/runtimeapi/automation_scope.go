@@ -10,8 +10,8 @@ import (
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
-	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimecfg"
+	"github.com/Alice-space/alice/internal/sessionctx"
 	"github.com/Alice-space/alice/internal/sessionkey"
 )
 
@@ -21,10 +21,10 @@ type automationScopeContext struct {
 	creator automation.Actor
 	actorID string
 	isGroup bool
-	session mcpbridge.SessionContext
+	session sessionctx.SessionContext
 }
 
-func resolveAutomationScope(session mcpbridge.SessionContext) (automationScopeContext, error) {
+func resolveAutomationScope(session sessionctx.SessionContext) (automationScopeContext, error) {
 	runtimeCtx, err := resolveRuntimeSessionContext(session)
 	if err != nil {
 		return automationScopeContext{}, err

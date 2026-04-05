@@ -23,10 +23,7 @@ For Chinese documentation, see [README.zh-CN.md](./README.zh-CN.md).
 - Scene-aware routing for casual chat and explicit work threads
 - Runtime HTTP API for bundled skills and automation
 - Bundled skills are materialized under `${ALICE_HOME:-~/.alice}/skills`, linked into `~/.agents/skills`, and exposed to Claude via `~/.claude/skills`
-- `alice-code-army` uses Alice runtime role dispatch for planner / reviewer / executor flows; templates no longer hardwire concrete models
-- `alice-code-army` campaign repos now validate refined task packages (`task.md` / `context.md` / `plan.md`) via `repo-lint`, require review before `approve-plan`, and keep review files inside each task folder
-- `alice-code-army` now enforces post-run task invariants after each executor / reviewer round: executor rounds must hand off legally (`review_pending`, `waiting_external`, or `blocked`), and reviewer rounds must leave a valid task-local review artifact
-- `alice-code-army` waiting-for-human-approval cards now expose direct `Approve` / `Reject` buttons in Feishu, with stale-round protection
+- The `alice-code-army` skill has moved to https://github.com/Alice-space/codearmy
 - Embedded prompts, skills, config example, and `SOUL.md` example
 - Release installer for `systemd --user` deployments
 
@@ -86,8 +83,6 @@ Important concepts:
 - `trigger_mode`: legacy fallback when both scenes are disabled
 - `workspace_dir` / `prompt_dir`: per-bot runtime directories
 - `codex_home`: optional per-bot override for the shared `CODEX_HOME` (default: `~/.codex`)
-- `image_generation`: optional roleplay image generation pipeline
-
 Start from [config.example.yaml](./config.example.yaml).
 
 ## Usage
@@ -109,15 +104,15 @@ Connector startup mode is now explicit: use `--feishu-websocket` for the real Fe
 
 ## `SOUL.md`
 
-Each bot can define persona and machine-readable metadata in `workspace/SOUL.md`.
+Each bot can define persona and machine-readable metadata in its configured `soul_path`.
+The example config keeps this at `workspace/SOUL.md`; if `soul_path` is omitted entirely, Alice defaults to `<alice_home>/run/SOUL.md`.
 
 Current frontmatter keys accepted by Alice:
 
 - `image_refs`
-- `image_generation`
 - `output_contract`
 
-The embedded example is [SOUL.md.example](./SOUL.md.example).
+The embedded example is [prompts/SOUL.md.example](./prompts/SOUL.md.example).
 
 ## Installer
 

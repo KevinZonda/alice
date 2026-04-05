@@ -409,3 +409,46 @@ func (s *senderStub) LastSendCard() string {
 	defer s.mu.Unlock()
 	return s.lastSendCard
 }
+
+// resolveScopedResourceRoot and sanitizePathToken are local copies for the
+// test stub — the real implementations live in internal/platform/feishu.
+func resolveScopedResourceRoot(base, resourceScopeKey string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	scopeType, scopeID := splitTestResourceScopeKey(resourceScopeKey)
+	return filepath.Join(base, "scopes", scopeType, scopeID)
+}
+
+func splitTestResourceScopeKey(key string) (string, string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "unknown", "unknown"
+	}
+	if i := strings.IndexByte(key, ':'); i >= 0 {
+		t, id := strings.TrimSpace(key[:i]), strings.TrimSpace(key[i+1:])
+		if t == "" {
+			t = "unknown"
+		}
+		if id == "" {
+			id = "unknown"
+		}
+		return t, id
+	}
+	return "unknown", key
+}
+
+func sanitizePathToken(raw string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return "unknown"
+	}
+	replacer := strings.NewReplacer("/", "_", "\\", "_", " ", "_", "\n", "_", "\r", "_", "\t", "_", ":", "_")
+	v = replacer.Replace(v)
+	v = strings.Trim(v, "._")
+	if v == "" {
+		return "unknown"
+	}
+	return v
+}

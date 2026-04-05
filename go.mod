@@ -23,11 +23,11 @@ require (
 	go.etcd.io/bbolt v1.4.3
 	go.yaml.in/yaml/v3 v3.0.4
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	github.com/Alice-space/agentbridge v0.1.0
 )
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
-	github.com/Alice-space/agentbridge v0.1.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect

@@ -7,7 +7,7 @@ import (
 
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func TestRuntimeAPI_MessagePermissionDenied(t *testing.T) {
@@ -21,7 +21,7 @@ func TestRuntimeAPI_MessagePermissionDenied(t *testing.T) {
 	defer httpServer.Close()
 	client := NewClient(httpServer.URL, "")
 
-	_, err := client.SendImage(t.Context(), mcpbridge.SessionContext{
+	_, err := client.SendImage(t.Context(), sessionctx.SessionContext{
 		ReceiveIDType: "chat_id",
 		ReceiveID:     "oc_chat",
 		ChatType:      "group",
@@ -42,7 +42,7 @@ func TestRuntimeAPI_AutomationPermissionDenied(t *testing.T) {
 	defer httpServer.Close()
 	client := NewClient(httpServer.URL, "")
 
-	_, err := client.CreateTask(t.Context(), mcpbridge.SessionContext{
+	_, err := client.CreateTask(t.Context(), sessionctx.SessionContext{
 		ReceiveIDType: "chat_id",
 		ReceiveID:     "oc_chat",
 		ActorUserID:   "ou_user",
