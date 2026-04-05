@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alice-space/alice/internal/automation"
 	agentbridge "github.com/Alice-space/agentbridge"
+	"github.com/Alice-space/alice/internal/automation"
 )
 
 type llmCallCountingStub struct {

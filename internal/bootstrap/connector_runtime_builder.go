@@ -10,13 +10,13 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/oklog/ulid/v2"
 
+	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
 	"github.com/Alice-space/alice/internal/runtimeapi"
-	agentbridge "github.com/Alice-space/agentbridge"
 )
 
 type connectorRuntimePaths struct {

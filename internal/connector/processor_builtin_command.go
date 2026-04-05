@@ -271,7 +271,7 @@ func formatBuiltinStatusTaskAction(action automation.Action) string {
 	if label == "" {
 		label = "unknown"
 	}
-return label
+	return label
 }
 
 func formatBuiltinStatusTime(ts time.Time) string {

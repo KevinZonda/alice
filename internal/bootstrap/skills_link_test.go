@@ -224,8 +224,6 @@ func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGen
 	}
 }
 
-
-
 func isSymlink(t *testing.T, path string) bool {
 	t.Helper()
 	info, err := os.Lstat(path)

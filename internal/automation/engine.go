@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
+	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/messaging"
 	"github.com/Alice-space/alice/internal/prompting"
-	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/go-co-op/gocron/v2"
 )
 

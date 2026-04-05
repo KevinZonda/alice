@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alice-space/alice/internal/statusview"
 	agentbridge "github.com/Alice-space/agentbridge"
+	"github.com/Alice-space/alice/internal/statusview"
 )
 
 type sessionUsageStats = statusview.UsageStats

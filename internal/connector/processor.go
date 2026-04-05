@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/prompting"
-	agentbridge "github.com/Alice-space/agentbridge"
 )
 
 type Processor struct {

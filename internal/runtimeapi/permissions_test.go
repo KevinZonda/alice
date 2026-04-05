@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Alice-space/alice/internal/automation"
-"github.com/Alice-space/alice/internal/config"
+	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/mcpbridge"
 )
 
@@ -56,4 +56,3 @@ func TestRuntimeAPI_AutomationPermissionDenied(t *testing.T) {
 		t.Fatalf("expected runtime automation forbidden error, got %v", err)
 	}
 }
-

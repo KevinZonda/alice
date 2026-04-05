@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
+	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimeapi"
-	agentbridge "github.com/Alice-space/agentbridge"
 )
 
 func defaultIfEmpty(value string, fallback string) string {

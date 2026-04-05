@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alice-space/alice/internal/logging"
 	agentbridge "github.com/Alice-space/agentbridge"
+	"github.com/Alice-space/alice/internal/logging"
 )
 
 type taskMessageSender interface {

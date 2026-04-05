@@ -33,11 +33,11 @@ func TestBuildFactoryConfig_KeepsOuterProfileNameAndInnerProviderProfile(t *test
 		LLMProvider: "codex",
 		LLMProfiles: map[string]config.LLMProfileConfig{
 			"work": {
-				Provider:     "codex",
-				Command:      "codex-work",
-				Timeout:      45 * time.Second,
-				Model:        "gpt-5.4",
-				Profile: "work-cli",
+				Provider: "codex",
+				Command:  "codex-work",
+				Timeout:  45 * time.Second,
+				Model:    "gpt-5.4",
+				Profile:  "work-cli",
 				Permissions: &config.CodexExecPolicyConfig{
 					Sandbox:        "danger-full-access",
 					AskForApproval: "never",

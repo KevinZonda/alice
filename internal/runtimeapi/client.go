@@ -89,7 +89,6 @@ func (c *Client) DeleteTask(ctx context.Context, session mcpbridge.SessionContex
 	return c.delete(ctx, session, "/api/v1/automation/tasks/"+taskID, nil)
 }
 
-
 func (c *Client) get(
 	ctx context.Context,
 	session mcpbridge.SessionContext,

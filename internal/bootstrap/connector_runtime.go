@@ -10,12 +10,12 @@ import (
 
 	"github.com/oklog/run"
 
+	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/connector"
 	"github.com/Alice-space/alice/internal/prompting"
 	"github.com/Alice-space/alice/internal/runtimeapi"
-	agentbridge "github.com/Alice-space/agentbridge"
 )
 
 type ConnectorRuntime struct {

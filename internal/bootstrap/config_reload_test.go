@@ -10,17 +10,17 @@ import (
 
 func TestDiffRestartRequiredFields(t *testing.T) {
 	current := config.Config{
-		FeishuAppID:                     "cli_a",
-		FeishuAppSecret:                 "sec_a",
-		FeishuBaseURL:                   "https://open.feishu.cn",
-		RuntimeHTTPAddr:                 "127.0.0.1:7331",
-		RuntimeHTTPToken:                "token_a",
-		WorkspaceDir:                    "/workspace/a",
-		PromptDir:                       "prompts",
-		QueueCapacity:                   256,
-		WorkerConcurrency:               1,
-		AuthStatusTimeoutSecs:           15,
-		RuntimeAPIShutdownTimeoutSecs:   5,
+		FeishuAppID:                   "cli_a",
+		FeishuAppSecret:               "sec_a",
+		FeishuBaseURL:                 "https://open.feishu.cn",
+		RuntimeHTTPAddr:               "127.0.0.1:7331",
+		RuntimeHTTPToken:              "token_a",
+		WorkspaceDir:                  "/workspace/a",
+		PromptDir:                     "prompts",
+		QueueCapacity:                 256,
+		WorkerConcurrency:             1,
+		AuthStatusTimeoutSecs:         15,
+		RuntimeAPIShutdownTimeoutSecs: 5,
 	}
 	next := current
 	next.TriggerMode = "prefix"
