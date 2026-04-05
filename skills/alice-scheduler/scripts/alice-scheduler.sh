@@ -13,8 +13,8 @@ home_bin="$alice_home/bin/alice"
 # jq is used for JSON encoding to correctly escape any special characters
 # (quotes, backslashes, newlines) that may appear in the env values.
 if [[ "${1:-}" == "current-session" ]]; then
-  session_key="${ALICE_MCP_SESSION_KEY:-}"
-  resume_thread_id="${ALICE_MCP_RESUME_THREAD_ID:-}"
+  session_key="${ALICE_SESSION_KEY:-}"
+  resume_thread_id="${ALICE_RESUME_THREAD_ID:-}"
   jq -n \
     --arg session_key "$session_key" \
     --arg resume_thread_id "$resume_thread_id" \

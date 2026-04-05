@@ -8,8 +8,8 @@ import (
 
 	agentbridge "github.com/Alice-space/agentbridge"
 	"github.com/Alice-space/alice/internal/logging"
-	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimeapi"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func defaultIfEmpty(value string, fallback string) string {
@@ -214,7 +214,7 @@ func sessionKeyForJob(job Job) string {
 func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 	scopeKey := resourceScopeKeyForJob(job)
 	sk := sessionKeyForJob(job)
-	sessionContext := mcpbridge.SessionContext{
+	sessionContext := sessionctx.SessionContext{
 		ReceiveIDType:   strings.TrimSpace(job.ReceiveIDType),
 		ReceiveID:       strings.TrimSpace(job.ReceiveID),
 		SourceMessageID: strings.TrimSpace(job.SourceMessageID),

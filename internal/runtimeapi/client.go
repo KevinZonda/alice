@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 type Client struct {
@@ -33,15 +33,15 @@ func (c *Client) IsEnabled() bool {
 	return c != nil && c.http != nil
 }
 
-func (c *Client) SendImage(ctx context.Context, session mcpbridge.SessionContext, req ImageRequest) (map[string]any, error) {
+func (c *Client) SendImage(ctx context.Context, session sessionctx.SessionContext, req ImageRequest) (map[string]any, error) {
 	return c.post(ctx, session, "/api/v1/messages/image", req)
 }
 
-func (c *Client) SendFile(ctx context.Context, session mcpbridge.SessionContext, req FileRequest) (map[string]any, error) {
+func (c *Client) SendFile(ctx context.Context, session sessionctx.SessionContext, req FileRequest) (map[string]any, error) {
 	return c.post(ctx, session, "/api/v1/messages/file", req)
 }
 
-func (c *Client) ListTasks(ctx context.Context, session mcpbridge.SessionContext, status string, limit int) (map[string]any, error) {
+func (c *Client) ListTasks(ctx context.Context, session sessionctx.SessionContext, status string, limit int) (map[string]any, error) {
 	query := map[string]string{}
 	if status = strings.TrimSpace(status); status != "" {
 		query["status"] = status
@@ -52,11 +52,11 @@ func (c *Client) ListTasks(ctx context.Context, session mcpbridge.SessionContext
 	return c.get(ctx, session, "/api/v1/automation/tasks", query)
 }
 
-func (c *Client) CreateTask(ctx context.Context, session mcpbridge.SessionContext, req CreateTaskRequest) (map[string]any, error) {
+func (c *Client) CreateTask(ctx context.Context, session sessionctx.SessionContext, req CreateTaskRequest) (map[string]any, error) {
 	return c.post(ctx, session, "/api/v1/automation/tasks", req)
 }
 
-func (c *Client) GetTask(ctx context.Context, session mcpbridge.SessionContext, taskID string) (map[string]any, error) {
+func (c *Client) GetTask(ctx context.Context, session sessionctx.SessionContext, taskID string) (map[string]any, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return nil, fmt.Errorf("task id is required")
@@ -66,7 +66,7 @@ func (c *Client) GetTask(ctx context.Context, session mcpbridge.SessionContext, 
 
 func (c *Client) PatchTask(
 	ctx context.Context,
-	session mcpbridge.SessionContext,
+	session sessionctx.SessionContext,
 	taskID string,
 	contentType string,
 	patchBody []byte,
@@ -81,7 +81,7 @@ func (c *Client) PatchTask(
 	return c.do(ctx, session, http.MethodPatch, "/api/v1/automation/tasks/"+taskID, patchBody, contentType, nil)
 }
 
-func (c *Client) DeleteTask(ctx context.Context, session mcpbridge.SessionContext, taskID string) (map[string]any, error) {
+func (c *Client) DeleteTask(ctx context.Context, session sessionctx.SessionContext, taskID string) (map[string]any, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return nil, fmt.Errorf("task id is required")
@@ -91,24 +91,24 @@ func (c *Client) DeleteTask(ctx context.Context, session mcpbridge.SessionContex
 
 func (c *Client) get(
 	ctx context.Context,
-	session mcpbridge.SessionContext,
+	session sessionctx.SessionContext,
 	path string,
 	query map[string]string,
 ) (map[string]any, error) {
 	return c.do(ctx, session, http.MethodGet, path, nil, "", query)
 }
 
-func (c *Client) post(ctx context.Context, session mcpbridge.SessionContext, path string, body any) (map[string]any, error) {
+func (c *Client) post(ctx context.Context, session sessionctx.SessionContext, path string, body any) (map[string]any, error) {
 	return c.do(ctx, session, http.MethodPost, path, body, "application/json", nil)
 }
 
-func (c *Client) put(ctx context.Context, session mcpbridge.SessionContext, path string, body any) (map[string]any, error) {
+func (c *Client) put(ctx context.Context, session sessionctx.SessionContext, path string, body any) (map[string]any, error) {
 	return c.do(ctx, session, http.MethodPut, path, body, "application/json", nil)
 }
 
 func (c *Client) delete(
 	ctx context.Context,
-	session mcpbridge.SessionContext,
+	session sessionctx.SessionContext,
 	path string,
 	query map[string]string,
 ) (map[string]any, error) {
@@ -117,7 +117,7 @@ func (c *Client) delete(
 
 func (c *Client) do(
 	ctx context.Context,
-	session mcpbridge.SessionContext,
+	session sessionctx.SessionContext,
 	method string,
 	path string,
 	body any,
@@ -159,7 +159,7 @@ func (c *Client) do(
 	return result, nil
 }
 
-func (c *Client) request(ctx context.Context, session mcpbridge.SessionContext) *resty.Request {
+func (c *Client) request(ctx context.Context, session sessionctx.SessionContext) *resty.Request {
 	req := c.http.R().SetContext(ctx)
 	headers := map[string]string{
 		HeaderReceiveIDType:   strings.TrimSpace(session.ReceiveIDType),

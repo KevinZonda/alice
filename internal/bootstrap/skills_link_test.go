@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/Alice-space/alice/internal/config"
@@ -131,96 +130,6 @@ func TestEnsureBundledSkillsLinked_RejectsConflictingClaudeSkillsDir(t *testing.
 	_, err := EnsureBundledSkillsLinked(t.TempDir())
 	if err == nil {
 		t.Fatal("expected sync to fail when ~/.claude/skills is a real directory")
-	}
-}
-
-func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplateLeavesPhaseCountToPlanner(t *testing.T) {
-	home := t.TempDir()
-	aliceHome := filepath.Join(home, ".alice")
-	t.Setenv("HOME", home)
-	t.Setenv(config.EnvAliceHome, aliceHome)
-
-	if _, err := EnsureBundledSkillsLinked(t.TempDir()); err != nil {
-		t.Fatalf("sync bundled skills failed: %v", err)
-	}
-
-	skillRoot := filepath.Join(aliceHome, "skills", "alice-code-army", "templates", "campaign-repo")
-	if _, err := os.Stat(filepath.Join(skillRoot, "phases", "P01", "phase.md")); err != nil {
-		t.Fatalf("expected P01 sample phase to exist: %v", err)
-	}
-	for _, phase := range []string{"P02", "P03", "P04", "P05", "P06", "P07"} {
-		if _, err := os.Stat(filepath.Join(skillRoot, "phases", phase)); !os.IsNotExist(err) {
-			t.Fatalf("expected sample phase %s to be absent, err=%v", phase, err)
-		}
-	}
-
-	raw, err := os.ReadFile(filepath.Join(skillRoot, "plan.md"))
-	if err != nil {
-		t.Fatalf("read plan template failed: %v", err)
-	}
-	content := string(raw)
-	if strings.Contains(content, "total_phases: 7") {
-		t.Fatalf("plan template should not pin total phases, got %q", content)
-	}
-	if !strings.Contains(content, "Phase P01") || !strings.Contains(content, "Phase P02") {
-		t.Fatalf("plan template should provide planner-owned phase skeleton, got %q", content)
-	}
-
-	readmeRaw, err := os.ReadFile(filepath.Join(skillRoot, "README.md"))
-	if err != nil {
-		t.Fatalf("read campaign repo README failed: %v", err)
-	}
-	readme := string(readmeRaw)
-	if !strings.Contains(readme, "新 Agent 先按这个顺序读") {
-		t.Fatalf("campaign repo README should guide new agents how to read the repo, got %q", readme)
-	}
-	if !strings.Contains(readme, "`campaign.md`") || !strings.Contains(readme, "`reports/live-report.md`") {
-		t.Fatalf("campaign repo README should point agents to core files first, got %q", readme)
-	}
-}
-
-func TestEnsureBundledSkillsLinked_AliceCodeArmyTemplatesUseRuntimeDispatchedGenericRoles(t *testing.T) {
-	home := t.TempDir()
-	aliceHome := filepath.Join(home, ".alice")
-	t.Setenv("HOME", home)
-	t.Setenv(config.EnvAliceHome, aliceHome)
-
-	if _, err := EnsureBundledSkillsLinked(t.TempDir()); err != nil {
-		t.Fatalf("sync bundled skills failed: %v", err)
-	}
-
-	skillRoot := filepath.Join(aliceHome, "skills", "alice-code-army", "templates", "campaign-repo")
-	for _, path := range []string{
-		filepath.Join(skillRoot, "campaign.md"),
-		filepath.Join(skillRoot, "_templates", "task.md"),
-		filepath.Join(skillRoot, "_templates", "phase.md"),
-		filepath.Join(skillRoot, "_templates", "review.md"),
-		filepath.Join(skillRoot, "_templates", "plan-review.md"),
-	} {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read template %s failed: %v", path, err)
-		}
-		content := string(raw)
-		if strings.Contains(content, "executor.codex") || strings.Contains(content, "reviewer.claude") {
-			t.Fatalf("template %s should not hardcode model-bound roles, got %q", path, content)
-		}
-		if strings.HasSuffix(path, "campaign.md") {
-			if !strings.Contains(content, "planner default: `planner`") {
-				t.Fatalf("campaign template should keep generic planner label, got %q", content)
-			}
-			continue
-		}
-		if strings.HasSuffix(path, "phase.md") {
-			continue
-		}
-		if !strings.Contains(content, "role: executor") && !strings.Contains(content, "role: reviewer") && !strings.Contains(content, "role: planner") {
-			t.Fatalf("template %s should use generic runtime-dispatched roles, got %q", path, content)
-		}
-	}
-
-	if _, err := os.Stat(filepath.Join(skillRoot, "reviews", "README.md")); !os.IsNotExist(err) {
-		t.Fatalf("top-level reviews README should be absent in repo-first task-package scaffold, err=%v", err)
 	}
 }
 

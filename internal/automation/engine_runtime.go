@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 	"github.com/Alice-space/alice/internal/sessionkey"
 )
 
@@ -92,7 +92,7 @@ func (e *Engine) nowTime() time.Time {
 
 func (e *Engine) buildTaskRunEnv(task Task) map[string]string {
 	task = NormalizeTask(task)
-	ctx := mcpbridge.SessionContext{
+	ctx := sessionctx.SessionContext{
 		ReceiveIDType: task.Route.ReceiveIDType,
 		ReceiveID:     task.Route.ReceiveID,
 		ActorUserID:   task.Creator.UserID,

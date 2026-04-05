@@ -81,8 +81,6 @@ type BotConfig struct {
 	FeishuAppID                      string                      `mapstructure:"feishu_app_id"`
 	FeishuAppSecret                  string                      `mapstructure:"feishu_app_secret"`
 	FeishuBaseURL                    string                      `mapstructure:"feishu_base_url"`
-	FeishuBotOpenID                  string                      `mapstructure:"feishu_bot_open_id"`
-	FeishuBotUserID                  string                      `mapstructure:"feishu_bot_user_id"`
 	TriggerMode                      string                      `mapstructure:"trigger_mode"`
 	TriggerPrefix                    string                      `mapstructure:"trigger_prefix"`
 	ImmediateFeedbackMode            string                      `mapstructure:"immediate_feedback_mode"`
@@ -117,8 +115,6 @@ type Config struct {
 	FeishuAppID               string `mapstructure:"feishu_app_id"`
 	FeishuAppSecret           string `mapstructure:"feishu_app_secret"`
 	FeishuBaseURL             string `mapstructure:"feishu_base_url"`
-	FeishuBotOpenID           string `mapstructure:"feishu_bot_open_id"`
-	FeishuBotUserID           string `mapstructure:"feishu_bot_user_id"`
 	TriggerMode               string `mapstructure:"trigger_mode"`
 	TriggerPrefix             string `mapstructure:"trigger_prefix"`
 	ImmediateFeedbackMode     string `mapstructure:"immediate_feedback_mode"`

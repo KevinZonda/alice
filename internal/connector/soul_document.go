@@ -7,17 +7,15 @@ import (
 )
 
 type soulDocument struct {
-	Loaded          bool
-	Body            string
-	ImageRefs       []string
-	ImageGeneration soulImageGenerationConfig
-	OutputContract  outputContract
+	Loaded         bool
+	Body           string
+	ImageRefs      []string
+	OutputContract outputContract
 }
 
 type soulFrontmatter struct {
-	ImageRefs       []string                  `yaml:"image_refs"`
-	ImageGeneration soulImageGenerationConfig `yaml:"image_generation"`
-	OutputContract  outputContract            `yaml:"output_contract"`
+	ImageRefs      []string       `yaml:"image_refs"`
+	OutputContract outputContract `yaml:"output_contract"`
 }
 
 type outputContract struct {
@@ -26,10 +24,6 @@ type outputContract struct {
 	ReplyWillField string   `yaml:"reply_will_field"`
 	MotionTag      string   `yaml:"motion_tag"`
 	SuppressToken  string   `yaml:"suppress_token"`
-}
-
-type soulImageGenerationConfig struct {
-	MinReplyWill int `yaml:"min_reply_will"`
 }
 
 func parseSoulDocument(raw string) soulDocument {
@@ -70,11 +64,10 @@ func parseSoulDocument(raw string) soulDocument {
 		}
 	}
 	return soulDocument{
-		Loaded:          true,
-		Body:            body,
-		ImageRefs:       normalizeSoulImageRefs(frontmatter.ImageRefs),
-		ImageGeneration: normalizeSoulImageGeneration(frontmatter.ImageGeneration),
-		OutputContract:  normalizeOutputContract(frontmatter.OutputContract),
+		Loaded:         true,
+		Body:           body,
+		ImageRefs:      normalizeSoulImageRefs(frontmatter.ImageRefs),
+		OutputContract: normalizeOutputContract(frontmatter.OutputContract),
 	}
 }
 
@@ -104,16 +97,6 @@ func normalizeOutputContract(in outputContract) outputContract {
 	in.MotionTag = strings.TrimSpace(in.MotionTag)
 	in.SuppressToken = strings.TrimSpace(in.SuppressToken)
 	in.HiddenTags = normalizeSoulImageRefs(in.HiddenTags)
-	return in
-}
-
-func normalizeSoulImageGeneration(in soulImageGenerationConfig) soulImageGenerationConfig {
-	if in.MinReplyWill < 0 {
-		in.MinReplyWill = 0
-	}
-	if in.MinReplyWill > 100 {
-		in.MinReplyWill = 100
-	}
 	return in
 }
 

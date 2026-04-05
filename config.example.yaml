@@ -8,7 +8,7 @@
 # - workspace:    <alice_home>/workspace
 # - prompts:      <alice_home>/prompts
 # - codex_home:   $CODEX_HOME or ~/.codex
-# - soul_path:    <workspace>/SOUL.md
+# - soul_path:    <run>/SOUL.md
 # Missing SOUL.md files are created from the embedded SOUL.md.example on startup.
 #
 # Process-level base home is controlled by:
@@ -27,9 +27,6 @@ bots:
     name: "Alice Chat"
     feishu_app_id: "cli_chat_xxxxx"
     feishu_app_secret: "chat_secret"
-    # Optional but recommended for group chats: strict bot mention filtering.
-    feishu_bot_open_id: ""
-    feishu_bot_user_id: ""
 
     # Optional runtime directories.
     # Empty values use defaults under <ALICE_HOME>/bots/chat_bot.
@@ -120,37 +117,9 @@ bots:
       HTTPS_PROXY: "http://127.0.0.1:8080"
       ALL_PROXY: "http://127.0.0.1:8080"
       OPENAI_API_KEY: ""
-      # Dedicated OpenAI image proxy envs — only affect image_generation.
-      OPENAI_HTTPS_PROXY: "http://127.0.0.1:7890"
-      OPENAI_NO_PROXY: "open.feishu.cn"
 
     failure_message: "Codex 暂时不可用，请稍后重试。"
     thinking_message: "正在思考中..."
-
-    # Optional roleplay image generation. Proxy must come from env.OPENAI_*_PROXY.
-    image_generation:
-      enabled: false
-      provider: "openai"
-      # model:
-      #   edit: gpt-image-1.5 | gpt-image-1 | gpt-image-1-mini | chatgpt-image-latest
-      #   generate: gpt-image-1.5 | gpt-image-1 | gpt-image-1-mini | dall-e-2 | dall-e-3
-      model: "gpt-image-1.5"
-      base_url: ""
-      timeout_secs: 120
-      moderation: ""
-      n: 0
-      output_compression: -1
-      response_format: ""
-      size: "1024x1536"
-      quality: "high"
-      background: "auto"
-      output_format: "png"
-      partial_images: -1
-      stream: false
-      style: ""
-      input_fidelity: "high"
-      mask_path: ""
-      use_current_attachments: true
 
     # Immediate feedback after receiving a message:
     # - reaction: add a message reaction first, then fallback to reply (default)

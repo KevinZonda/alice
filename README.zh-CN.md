@@ -22,10 +22,7 @@ Alice 是一个面向飞书的长连接连接器，用来把 Codex、Claude、Ge
 - 支持群聊里的 `chat` / `work` 两种场景路由
 - 提供 runtime HTTP API 给 skill 和自动化任务
 - 自带 skill 会释放到 `${ALICE_HOME:-~/.alice}/skills`，再链接到 `~/.agents/skills`，并通过 `~/.claude/skills` 暴露给 Claude
-- `alice-code-army` 通过 Alice runtime 按角色派发 planner / reviewer / executor 流程，模板不再把具体模型写死
-- `alice-code-army` 的 campaign repo 现在会用 `repo-lint` 校验细化后的 task package（`task.md` / `context.md` / `plan.md`），`approve-plan` 必须先过 review，review 文件也收进各自 task 文件夹
-- `alice-code-army` 现在会在每一轮 executor / reviewer 结束后强制校验 task invariant：executor 必须以合法 handoff 状态收尾（`review_pending`、`waiting_external` 或 `blocked`），reviewer 必须落下合法的 task-local review 文件
-- `alice-code-army` 的“等待人工批准”卡片现在会直接提供“批准 / 不批准”按钮，并带计划轮次过期保护；点击后会把原卡片更新成“已批准 / 已拒绝”的终态显示
+- `alice-code-army` skill 已迁移至独立仓库 https://github.com/Alice-space/codearmy
 - 二进制内嵌 prompts、skills、配置示例和 `SOUL.md` 示例
 - 提供适合 `systemd --user` 的安装脚本
 
@@ -85,8 +82,6 @@ Alice 现在使用纯多 bot 配置模型。
 - `trigger_mode`：两种 scene 都关闭时的旧触发回退
 - `workspace_dir` / `prompt_dir`：每个 bot 的运行目录
 - `codex_home`：共享 `CODEX_HOME` 的可选 bot 级覆盖，默认是 `~/.codex`
-- `image_generation`：可选的角色生图链路
-
 从 [config.example.yaml](./config.example.yaml) 开始改最稳妥。
 
 ## 使用说明
@@ -108,15 +103,15 @@ Alice 现在要求显式选择启动模式：真实飞书连接使用 `--feishu-
 
 ## `SOUL.md`
 
-每个 bot 可以在 `workspace/SOUL.md` 中定义人格和机器可读元数据。
+每个 bot 都可以在自己配置的 `soul_path` 中定义人格和机器可读元数据。
+示例配置把它放在 `workspace/SOUL.md`；如果完全省略 `soul_path`，Alice 默认会使用 `<alice_home>/run/SOUL.md`。
 
 当前 Alice 接受的 frontmatter 键：
 
 - `image_refs`
-- `image_generation`
 - `output_contract`
 
-内置示例见 [SOUL.md.example](./SOUL.md.example)。
+内置示例见 [prompts/SOUL.md.example](./prompts/SOUL.md.example)。
 
 ## 安装脚本
 

@@ -3,6 +3,7 @@ module github.com/Alice-space/alice
 go 1.25.0
 
 require (
+	github.com/Alice-space/agentbridge v0.1.1-0.20260405122123-0eba00705fc6
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -27,7 +28,6 @@ require (
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
-	github.com/Alice-space/agentbridge v0.1.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect

@@ -1,6 +1,8 @@
 # CodeArmy 使用指南
 
-本文按当前仓库里的真实实现说明 `alice-code-army` 怎么工作、哪些状态会自动推进、哪些步骤仍然需要人来拍板。
+> **注意**：`alice-code-army` skill 已迁移至独立仓库 https://github.com/Alice-space/codearmy，本文档保留供历史参考。
+
+本文按迁移前的实现说明 `alice-code-army` 怎么工作、哪些状态会自动推进、哪些步骤仍然需要人来拍板。
 
 如果只记一句话，可以先记这个：
 

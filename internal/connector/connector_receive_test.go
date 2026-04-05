@@ -35,8 +35,8 @@ func TestApp_OnMessageReceive_GroupWithoutMentionNotQueued(t *testing.T) {
 
 func TestApp_OnMessageReceive_GroupMentionQueued(t *testing.T) {
 	cfg := configForTest()
-	cfg.FeishuBotOpenID = "ou_bot"
 	app := NewApp(cfg, nil)
+	app.SetBotOpenID("ou_bot")
 
 	event := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_with_mention"}},

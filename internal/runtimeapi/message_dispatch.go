@@ -10,10 +10,10 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
-func (s *Server) dispatchText(ctx context.Context, session mcpbridge.SessionContext, text string) error {
+func (s *Server) dispatchText(ctx context.Context, session sessionctx.SessionContext, text string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
 		if !s.prefersThreadReply(session.SessionKey, session.ChatType) {
 			if replySender, ok := s.sender.(replyTextDirectSender); ok {
@@ -29,7 +29,7 @@ func (s *Server) dispatchText(ctx context.Context, session mcpbridge.SessionCont
 	return s.sender.SendText(ctx, session.ReceiveIDType, session.ReceiveID, text)
 }
 
-func (s *Server) dispatchImage(ctx context.Context, session mcpbridge.SessionContext, imageKey string) error {
+func (s *Server) dispatchImage(ctx context.Context, session sessionctx.SessionContext, imageKey string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
 		if !s.prefersThreadReply(session.SessionKey, session.ChatType) {
 			if replySender, ok := s.sender.(replyImageDirectSender); ok {
@@ -45,7 +45,7 @@ func (s *Server) dispatchImage(ctx context.Context, session mcpbridge.SessionCon
 	return s.sender.SendImage(ctx, session.ReceiveIDType, session.ReceiveID, imageKey)
 }
 
-func (s *Server) dispatchFile(ctx context.Context, session mcpbridge.SessionContext, fileKey string) error {
+func (s *Server) dispatchFile(ctx context.Context, session sessionctx.SessionContext, fileKey string) error {
 	if sourceMessageID := strings.TrimSpace(session.SourceMessageID); sourceMessageID != "" {
 		if !s.prefersThreadReply(session.SessionKey, session.ChatType) {
 			if replySender, ok := s.sender.(replyFileDirectSender); ok {

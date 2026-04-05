@@ -63,8 +63,6 @@ func TestApp_OnMessageReceive_P2PMessagesReuseChatSessionKey(t *testing.T) {
 
 func TestApp_OnMessageReceive_GroupThreadReplyToBotReplyReusesOriginalSessionKey(t *testing.T) {
 	cfg := configForTest()
-	cfg.FeishuBotOpenID = "ou_bot"
-
 	codex := &codexResumableCaptureStub{
 		respByCall:   []string{"first reply", "second reply"},
 		threadByCall: []string{"thread_1", "thread_1"},
@@ -72,6 +70,7 @@ func TestApp_OnMessageReceive_GroupThreadReplyToBotReplyReusesOriginalSessionKey
 	sender := &senderStub{}
 	processor := NewProcessor(codex, sender, "failed", "thinking")
 	app := NewApp(cfg, processor)
+	app.SetBotOpenID("ou_bot")
 
 	event1 := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_group_root"}},

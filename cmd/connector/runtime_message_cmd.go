@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
 	"github.com/Alice-space/alice/internal/runtimeapi"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func newRuntimeMessageCmd() *cobra.Command {
@@ -36,7 +36,7 @@ func newRuntimeMessageImageCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			_ []string,
 		) error {
@@ -73,7 +73,7 @@ func newRuntimeMessageFileCmd() *cobra.Command {
 		RunE: withRuntimeClient(func(
 			ctx context.Context,
 			client *runtimeapi.Client,
-			session mcpbridge.SessionContext,
+			session sessionctx.SessionContext,
 			_ *cobra.Command,
 			_ []string,
 		) error {

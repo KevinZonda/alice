@@ -147,6 +147,10 @@ func RunDirForAliceHome(aliceHome string) string {
 	return filepath.Join(ResolveAliceHomeDir(aliceHome), defaultRunDirName)
 }
 
+func SoulPathForAliceHome(aliceHome string) string {
+	return filepath.Join(RunDirForAliceHome(aliceHome), "SOUL.md")
+}
+
 func LogDirForAliceHome(aliceHome string) string {
 	return filepath.Join(ResolveAliceHomeDir(aliceHome), defaultLogDirName)
 }

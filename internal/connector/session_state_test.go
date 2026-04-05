@@ -21,6 +21,7 @@ func TestApp_OnMessageReceive_WorkSceneRestoresSeedRouteAfterRestartWithMention(
 		t.Fatalf("init session state failed: %v", err)
 	}
 	app := NewApp(cfg, processor)
+	app.SetBotOpenID("ou_bot")
 
 	start := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_seed_start"}},
@@ -73,6 +74,7 @@ func TestApp_OnMessageReceive_WorkSceneRestoresSeedRouteAfterRestartWithMention(
 		t.Fatalf("reload session state failed: %v", err)
 	}
 	appAfterRestart := NewApp(cfg, processorAfterRestart)
+	appAfterRestart.SetBotOpenID("ou_bot")
 
 	followup := &larkim.P2MessageReceiveV1{
 		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_seed_followup"}},

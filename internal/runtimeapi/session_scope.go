@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 	"github.com/Alice-space/alice/internal/sessionkey"
 )
 
@@ -19,7 +19,7 @@ type runtimeSessionContext struct {
 	isGroup       bool
 }
 
-func resolveRuntimeSessionContext(session mcpbridge.SessionContext) (runtimeSessionContext, error) {
+func resolveRuntimeSessionContext(session sessionctx.SessionContext) (runtimeSessionContext, error) {
 	if err := session.Validate(); err != nil {
 		return runtimeSessionContext{}, err
 	}
@@ -45,7 +45,7 @@ func resolveRuntimeSessionContext(session mcpbridge.SessionContext) (runtimeSess
 	}, nil
 }
 
-func scopeSessionKey(session mcpbridge.SessionContext) string {
+func scopeSessionKey(session sessionctx.SessionContext) string {
 	if sessionKey := sessionkey.WithoutMessage(session.SessionKey); sessionKey != "" {
 		return sessionKey
 	}

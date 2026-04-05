@@ -38,22 +38,6 @@ codex_idle_timeout_secs: 0
 	}
 }
 
-func TestLoadFromFile_FeishuBotIDsTrimmed(t *testing.T) {
-	_, runtime := loadSingleBotRuntime(t, `
-feishu_app_id: cli_xxx
-feishu_app_secret: sss
-feishu_bot_open_id: "  ou_bot  "
-feishu_bot_user_id: "  123456  "
-`)
-
-	if runtime.FeishuBotOpenID != "ou_bot" {
-		t.Fatalf("unexpected feishu_bot_open_id: %q", runtime.FeishuBotOpenID)
-	}
-	if runtime.FeishuBotUserID != "123456" {
-		t.Fatalf("unexpected feishu_bot_user_id: %q", runtime.FeishuBotUserID)
-	}
-}
-
 func TestLoadFromFile_TriggerModeTrimmedLowercase(t *testing.T) {
 	_, runtime := loadSingleBotRuntime(t, `
 feishu_app_id: cli_xxx

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func (s *Server) authMiddleware() gin.HandlerFunc {
@@ -90,19 +90,19 @@ func authRateKey(c *gin.Context) string {
 	return strings.TrimSpace(c.Request.RemoteAddr)
 }
 
-func sessionContextFromHeaders(c *gin.Context) (mcpbridge.SessionContext, error) {
+func sessionContextFromHeaders(c *gin.Context) (sessionctx.SessionContext, error) {
 	session := sessionContextFromHeadersNoError(c)
 	if err := session.Validate(); err != nil {
-		return mcpbridge.SessionContext{}, err
+		return sessionctx.SessionContext{}, err
 	}
 	return session, nil
 }
 
-func sessionContextFromHeadersNoError(c *gin.Context) mcpbridge.SessionContext {
+func sessionContextFromHeadersNoError(c *gin.Context) sessionctx.SessionContext {
 	if c == nil {
-		return mcpbridge.SessionContext{}
+		return sessionctx.SessionContext{}
 	}
-	return mcpbridge.SessionContext{
+	return sessionctx.SessionContext{
 		ReceiveIDType:   strings.TrimSpace(c.GetHeader(HeaderReceiveIDType)),
 		ReceiveID:       strings.TrimSpace(c.GetHeader(HeaderReceiveID)),
 		ResourceRoot:    strings.TrimSpace(c.GetHeader(HeaderResourceRoot)),
@@ -114,7 +114,7 @@ func sessionContextFromHeadersNoError(c *gin.Context) mcpbridge.SessionContext {
 	}
 }
 
-func defaultSessionKey(session mcpbridge.SessionContext) string {
+func defaultSessionKey(session sessionctx.SessionContext) string {
 	if sessionKey := strings.TrimSpace(session.SessionKey); sessionKey != "" {
 		return sessionKey
 	}

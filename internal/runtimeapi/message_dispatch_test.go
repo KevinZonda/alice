@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/Alice-space/alice/internal/config"
-	"github.com/Alice-space/alice/internal/mcpbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 type runtimeMessageSenderStub struct {
@@ -82,7 +82,7 @@ func TestDispatchImage_ChatSceneRepliesDirectly(t *testing.T) {
 		},
 	})
 
-	err := server.dispatchImage(context.Background(), mcpbridge.SessionContext{
+	err := server.dispatchImage(context.Background(), sessionctx.SessionContext{
 		ReceiveIDType:   "chat_id",
 		ReceiveID:       "oc_chat",
 		ChatType:        "group",
@@ -111,7 +111,7 @@ func TestDispatchText_ChatSceneRepliesDirectly(t *testing.T) {
 		},
 	})
 
-	err := server.dispatchText(context.Background(), mcpbridge.SessionContext{
+	err := server.dispatchText(context.Background(), sessionctx.SessionContext{
 		ReceiveIDType:   "chat_id",
 		ReceiveID:       "oc_chat",
 		ChatType:        "group",
@@ -137,7 +137,7 @@ func TestDispatchFile_ChatSceneRepliesDirectly(t *testing.T) {
 		},
 	})
 
-	err := server.dispatchFile(context.Background(), mcpbridge.SessionContext{
+	err := server.dispatchFile(context.Background(), sessionctx.SessionContext{
 		ReceiveIDType:   "chat_id",
 		ReceiveID:       "oc_chat",
 		ChatType:        "group",
@@ -164,7 +164,7 @@ func TestDispatchImage_WorkSceneKeepsThreadReply(t *testing.T) {
 		},
 	})
 
-	err := server.dispatchImage(context.Background(), mcpbridge.SessionContext{
+	err := server.dispatchImage(context.Background(), sessionctx.SessionContext{
 		ReceiveIDType:   "chat_id",
 		ReceiveID:       "oc_chat",
 		ChatType:        "group",

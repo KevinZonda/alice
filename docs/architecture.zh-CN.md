@@ -84,7 +84,7 @@ ${ALICE_HOME}/bots/<bot_id>/
 - `prompts/`
 - `skills/`
 - `config.example.yaml`
-- `SOUL.md.example`
+- `prompts/SOUL.md.example`
 
 prompt 的优先级是磁盘优先、内嵌兜底。
 
@@ -99,7 +99,7 @@ prompt 的优先级是磁盘优先、内嵌兜底。
 - `internal/config`
   配置结构、校验、默认值、路径推导、多 bot 展开
 - `internal/connector`
-  飞书接入、消息归一化、scene 路由、排队、按 session 串行、抢占中断、prompt 组装、回复派发、附件下载、session 落盘、内建命令、可选图片生成
+  飞书接入、消息归一化、scene 路由、排队、按 session 串行、抢占中断、prompt 组装、回复派发、附件下载、session 落盘、内建命令
 - `lib/llm-cli-bridge`（独立 Go 模块）
   CLI 调用翻译层，封装 codex/claude/gemini/kimi 的 CLI 调用方式和输出解析；独立模块，可作为库被外部项目引用。
 - `internal/prompting`
@@ -108,13 +108,15 @@ prompt 的优先级是磁盘优先、内嵌兜底。
   本地鉴权 HTTP server/client，供 bundled skills 和 runtime 脚本复用
 - `internal/automation`
   task 模型、持久化、claim、执行、system task 调度、workflow dispatch
+- `internal/platform/feishu`
+  飞书 sender 实现、附件收发、bot 自身身份查询、消息查找、用户名解析
 - `internal/statusview`
   为 `/status` 等卡片聚合 usage、automation 视图
 
 支撑包：
 
-- `internal/mcpbridge`
-  会话上下文环境变量桥；虽然业务能力不再走 MCP，但 `ALICE_MCP_*` 命名仍然保留以兼容已有 skill
+- `internal/sessionctx`
+  会话上下文环境变量桥
 - `internal/runtimecfg`
   scene 到 profile 的解析，以及 thread reply 偏好判断
 - `internal/sessionkey`
@@ -221,7 +223,7 @@ LLM 选择链路：
 - `gemini`
 - `kimi`
 
-## 8. 回复派发与可选图片生成
+## 8. 回复派发
 
 Alice 现在明确区分：
 
@@ -274,21 +276,19 @@ runtime 脚本入口：
 
 - `skills/alice-message`
 - `skills/alice-scheduler`
-- `skills/alice-code-army`
-- `skills/file-printing`
 
 运行时上下文通过这些变量注入：
 
 - `ALICE_RUNTIME_API_BASE_URL`
 - `ALICE_RUNTIME_API_TOKEN`
 - `ALICE_RUNTIME_BIN`
-- `ALICE_MCP_RECEIVE_ID_TYPE`
-- `ALICE_MCP_RECEIVE_ID`
-- `ALICE_MCP_SOURCE_MESSAGE_ID`
-- `ALICE_MCP_ACTOR_USER_ID`
-- `ALICE_MCP_ACTOR_OPEN_ID`
-- `ALICE_MCP_CHAT_TYPE`
-- `ALICE_MCP_SESSION_KEY`
+- `ALICE_RECEIVE_ID_TYPE`
+- `ALICE_RECEIVE_ID`
+- `ALICE_SOURCE_MESSAGE_ID`
+- `ALICE_ACTOR_USER_ID`
+- `ALICE_ACTOR_OPEN_ID`
+- `ALICE_CHAT_TYPE`
+- `ALICE_SESSION_KEY`
 
 ## 10. Automation 子系统
 

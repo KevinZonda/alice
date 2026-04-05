@@ -142,7 +142,7 @@ feishu_app_secret: sss
 	if runtime.CodexHome != filepath.Join(base, ".codex") {
 		t.Fatalf("unexpected codex_home: %s", runtime.CodexHome)
 	}
-	if runtime.SoulPath != filepath.Join(runtime.WorkspaceDir, "SOUL.md") {
+	if runtime.SoulPath != SoulPathForAliceHome(runtime.AliceHome) {
 		t.Fatalf("unexpected soul_path: %s", runtime.SoulPath)
 	}
 	if got, want := filepath.Dir(cfg.LogFile), LogDirForAliceHome(cfg.AliceHome); got != want {
