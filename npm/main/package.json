@@ -1,0 +1,28 @@
+{
+  "name": "@alice_space/alice",
+  "version": "0.0.0",
+  "description": "Alice - Feishu LLM agent connector runtime",
+  "keywords": ["alice", "feishu", "lark", "llm", "agent"],
+  "homepage": "https://github.com/Alice-space/alice",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alice-space/alice.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "alice": "./alice.js"
+  },
+  "files": [
+    "alice.js"
+  ],
+  "optionalDependencies": {
+    "@alice_space/alice-linux-x64": "0.0.0",
+    "@alice_space/alice-linux-arm64": "0.0.0",
+    "@alice_space/alice-darwin-x64": "0.0.0",
+    "@alice_space/alice-darwin-arm64": "0.0.0",
+    "@alice_space/alice-win32-x64": "0.0.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

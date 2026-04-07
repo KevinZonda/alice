@@ -195,3 +195,92 @@ jobs:
           tag_name: ${{ needs.verify-and-tag.outputs.release_tag }}
           generate_release_notes: true
           files: release-assets/*
+
+  npm-publish:
+    name: Publish to npm
+    needs: [verify-and-tag, build, release]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for npm OIDC Trusted Publishing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: alice-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish Platform Packages
+        env:
+          RELEASE_TAG: ${{ needs.verify-and-tag.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+
+          declare -A PLATFORM_ARTIFACTS=(
+            [linux-x64]="alice_${RELEASE_TAG}_linux_amd64.tar.gz"
+            [linux-arm64]="alice_${RELEASE_TAG}_linux_arm64.tar.gz"
+            [darwin-x64]="alice_${RELEASE_TAG}_darwin_amd64.tar.gz"
+            [darwin-arm64]="alice_${RELEASE_TAG}_darwin_arm64.tar.gz"
+            [win32-x64]="alice_${RELEASE_TAG}_windows_amd64.zip"
+          )
+
+          declare -A PLATFORM_GONAMES=(
+            [linux-x64]="linux_amd64"
+            [linux-arm64]="linux_arm64"
+            [darwin-x64]="darwin_amd64"
+            [darwin-arm64]="darwin_arm64"
+            [win32-x64]="windows_amd64"
+          )
+
+          for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            artifact="${PLATFORM_ARTIFACTS[$platform]}"
+            goname="${PLATFORM_GONAMES[$platform]}"
+            pkg_dir="npm/platforms/${platform}"
+            bin_dir="${pkg_dir}/bin"
+            mkdir -p "$bin_dir"
+
+            if [[ "$platform" == "win32-x64" ]]; then
+              unzip -o "release-assets/${artifact}" -d "$bin_dir/"
+              mv "${bin_dir}/alice_${RELEASE_TAG}_${goname}.exe" "${bin_dir}/alice.exe"
+            else
+              tar -xzf "release-assets/${artifact}" -C "$bin_dir/"
+              mv "${bin_dir}/alice_${RELEASE_TAG}_${goname}" "${bin_dir}/alice"
+              chmod +x "${bin_dir}/alice"
+            fi
+
+            # Set version and publish
+            jq --arg v "$VERSION" '.version = $v' "${pkg_dir}/package.json" > /tmp/pkg.json
+            mv /tmp/pkg.json "${pkg_dir}/package.json"
+            cd "$pkg_dir" && npm publish --provenance --access public && cd -
+            echo "Published @alice_space/alice-${platform}@${VERSION}"
+          done
+
+      - name: Publish Main Package
+        env:
+          RELEASE_TAG: ${{ needs.verify-and-tag.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+
+          # Sync version and optionalDependencies to the same version
+          jq --arg v "$VERSION" '
+            .version = $v |
+            .optionalDependencies = (
+              .optionalDependencies | to_entries | map(.value = $v) | from_entries
+            )
+          ' npm/main/package.json > /tmp/pkg.json
+          mv /tmp/pkg.json npm/main/package.json
+
+          chmod +x npm/main/alice.js
+          cd npm/main && npm publish --provenance --access public
+          echo "Published @alice_space/alice@${VERSION}"
