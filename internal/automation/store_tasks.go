@@ -183,6 +183,7 @@ func (s *Store) PatchTask(taskID string, mutate func(task *Task) error) (Task, e
 		if err != nil {
 			return err
 		}
+		oldSchedule := NormalizeTask(task).Schedule
 		if err := mutate(&task); err != nil {
 			return err
 		}
@@ -190,7 +191,8 @@ func (s *Store) PatchTask(taskID string, mutate func(task *Task) error) (Task, e
 		task.UpdatedAt = s.nowLocal()
 		task.Revision++
 		task = applyDeletedTaskState(task, task.UpdatedAt)
-		if task.NextRunAt.IsZero() && task.Status == TaskStatusActive {
+		scheduleChanged := task.Schedule != oldSchedule
+		if (task.NextRunAt.IsZero() || scheduleChanged) && task.Status == TaskStatusActive {
 			task.NextRunAt = NextRunAt(task.UpdatedAt, task.Schedule)
 		}
 		if err := ValidateTask(task); err != nil {

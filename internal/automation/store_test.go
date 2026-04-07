@@ -549,3 +549,77 @@ func TestStore_DeletedTaskRetention(t *testing.T) {
 		t.Fatal("expected preserved deleted task to keep deleted_at")
 	}
 }
+
+func TestStore_PatchTask_ScheduleChange_RecalculatesNextRunAt(t *testing.T) {
+	base := time.Date(2026, 4, 7, 14, 37, 0, 0, time.Local)
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	store.now = func() time.Time { return base }
+
+	// Create task with 30-minute interval.
+	created, err := store.CreateTask(Task{
+		Title:    "pMF监控",
+		Scope:    Scope{Kind: ScopeKindChat, ID: "oc_chat"},
+		Route:    Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:  Actor{UserID: "ou_actor"},
+		Schedule: Schedule{Type: ScheduleTypeInterval, EverySeconds: 1800},
+		Action:   Action{Type: ActionTypeRunLLM, Prompt: "check status"},
+	})
+	if err != nil {
+		t.Fatalf("create task failed: %v", err)
+	}
+	wantFirstNext := base.Add(1800 * time.Second)
+	if !created.NextRunAt.Equal(wantFirstNext) {
+		t.Fatalf("unexpected initial next_run_at: got=%s want=%s", created.NextRunAt, wantFirstNext)
+	}
+
+	// Simulate: task runs once (next_run_at advances to base+3600s on the old 30min schedule).
+	claimAt := base.Add(1800 * time.Second)
+	store.now = func() time.Time { return claimAt }
+	claimed, err := store.ClaimDueTasks(claimAt, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim failed: err=%v claimed=%+v", err, claimed)
+	}
+	if err := store.RecordTaskResult(created.ID, claimAt.Add(10*time.Second), nil); err != nil {
+		t.Fatalf("record result failed: %v", err)
+	}
+	// next_run_at is now claimAt + 1800s = base + 3600s
+	afterRun, _ := store.GetTask(created.ID)
+	wantAfterRun := claimAt.Add(1800 * time.Second)
+	if !afterRun.NextRunAt.Equal(wantAfterRun) {
+		t.Fatalf("unexpected next_run_at after run: got=%s want=%s", afterRun.NextRunAt, wantAfterRun)
+	}
+
+	// Patch: change interval from 1800s to 3600s.
+	patchAt := base.Add(1800*time.Second + 47*time.Minute) // ~47 min after creation
+	store.now = func() time.Time { return patchAt }
+	patched, err := store.PatchTask(created.ID, func(task *Task) error {
+		task.Schedule.EverySeconds = 3600
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("patch task failed: %v", err)
+	}
+	// After schedule change, next_run_at must be recalculated from patchAt, not kept at old value.
+	wantPatchedNext := patchAt.Add(3600 * time.Second)
+	if !patched.NextRunAt.Equal(wantPatchedNext) {
+		t.Fatalf("schedule change did not recalculate next_run_at: got=%s want=%s", patched.NextRunAt, wantPatchedNext)
+	}
+	// Must NOT fire at the old next_run_at (base+3600s, which is before patchAt+3600s).
+	oldNext := base.Add(3600 * time.Second)
+	tooEarly, err := store.ClaimDueTasks(oldNext, 10)
+	if err != nil {
+		t.Fatalf("claim at old next failed: %v", err)
+	}
+	if len(tooEarly) != 0 {
+		t.Fatalf("task must not fire at old next_run_at after schedule change, got %+v", tooEarly)
+	}
+	// Must fire at the new next_run_at (patchAt+3600s).
+	store.now = func() time.Time { return wantPatchedNext }
+	onTime, err := store.ClaimDueTasks(wantPatchedNext, 10)
+	if err != nil {
+		t.Fatalf("claim at new next failed: %v", err)
+	}
+	if len(onTime) != 1 || onTime[0].ID != created.ID {
+		t.Fatalf("task did not fire at new next_run_at: got %+v", onTime)
+	}
+}
