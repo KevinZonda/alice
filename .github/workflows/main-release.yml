@@ -176,6 +176,9 @@ jobs:
     needs: [verify-and-tag, build]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Download Build Artifacts
         uses: actions/download-artifact@v8
         with:
