@@ -210,8 +210,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # No registry-url: setup-node would inject NODE_AUTH_TOKEN=$GITHUB_TOKEN
-          # which overrides npm OIDC Trusted Publishing. npm defaults to registry.npmjs.org.
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v8
