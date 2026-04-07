@@ -1,0 +1,15 @@
+{
+  "name": "@alice_space/alice-linux-arm64",
+  "version": "0.0.0",
+  "description": "Alice runtime binary for linux arm64",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alice-space/alice.git"
+  },
+  "license": "MIT",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": [
+    "bin/"
+  ]
+}
