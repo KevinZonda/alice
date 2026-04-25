@@ -56,7 +56,7 @@ func NewServer(
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
-	engine.SetTrustedProxies(nil)
+	_ = engine.SetTrustedProxies(nil)
 	engine.Use(gin.Recovery())
 
 	srv := &Server{

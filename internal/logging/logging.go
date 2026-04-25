@@ -68,6 +68,7 @@ func Configure(opts Options) error {
 		}
 		// Pre-create log file with restrictive permissions. Debug logs may
 		// contain sensitive LLM input/output; 0o600 limits access to the owner.
+		// #nosec G304 -- filePath comes from validated configuration, not raw user input
 		if f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
 			_ = f.Close()
 		}
