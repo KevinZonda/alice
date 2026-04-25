@@ -226,6 +226,7 @@ func (p *Processor) appendBotSoul(userText string, job Job) string {
 	}
 	soulDoc := job.SoulDoc
 	if !soulDoc.Loaded {
+		// #nosec G304 -- soulPath comes from validated configuration, not raw user input
 		raw, err := os.ReadFile(soulPath)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -383,6 +384,7 @@ func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
 	if !job.SoulDoc.Loaded {
 		soulPath := strings.TrimSpace(job.SoulPath)
 		if soulPath != "" {
+			// #nosec G304 -- soulPath comes from validated configuration, not raw user input
 			raw, err := os.ReadFile(soulPath)
 			if err != nil {
 				if !os.IsNotExist(err) {

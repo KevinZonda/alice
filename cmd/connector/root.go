@@ -618,6 +618,7 @@ func atomicWritePIDFile(absPath string, pid int) error {
 }
 
 func readPIDFile(path string) (int, error) {
+	// #nosec G304 -- path is provided by CLI flags/internal management, not raw user input
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err

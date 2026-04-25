@@ -26,6 +26,7 @@ func (p *Processor) LoadSessionState(path string) error {
 		return nil
 	}
 
+	// #nosec G304 -- path is derived from internal session state management, not raw user input
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

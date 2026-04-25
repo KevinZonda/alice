@@ -144,6 +144,7 @@ func (s *FeishuSender) UploadImage(ctx context.Context, localPath string) (strin
 		return "", fmt.Errorf("image file exceeds 10MB limit: %s", resolvedPath)
 	}
 
+	// #nosec G304 -- resolvedPath is validated by validateUploadPath() using securejoin.SecureJoin
 	file, err := os.Open(resolvedPath)
 	if err != nil {
 		return "", err
@@ -194,6 +195,7 @@ func (s *FeishuSender) UploadFile(ctx context.Context, localPath, fileName strin
 		return "", fmt.Errorf("file exceeds 10MB limit: %s", resolvedPath)
 	}
 
+	// #nosec G304 -- resolvedPath is validated by validateUploadPath() using securejoin.SecureJoin
 	file, err := os.Open(resolvedPath)
 	if err != nil {
 		return "", err
