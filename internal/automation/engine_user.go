@@ -31,7 +31,19 @@ func (e *Engine) runUserTasks(ctx context.Context, now time.Time) {
 	}
 	for _, task := range claimed {
 		task := task
-		go e.runUserTask(ctx, task)
+		select {
+		case e.taskSem <- struct{}{}:
+		default:
+			logging.Warnf("automation task deferred (max concurrency reached) id=%s", task.ID)
+			if err := e.store.UnclaimTask(task.ID); err != nil {
+				logging.Errorf("unclaim deferred task failed id=%s: %v", task.ID, err)
+			}
+			continue
+		}
+		go func() {
+			defer func() { <-e.taskSem }()
+			e.runUserTask(ctx, task)
+		}()
 	}
 }
 
@@ -240,6 +252,7 @@ func (e *Engine) sendTextDispatch(ctx context.Context, receiveIDType, receiveID,
 	if err := e.sender.SendText(ctx, receiveIDType, receiveID, text); err != nil {
 		return "", err
 	}
+	logging.WarnOnce("automation sender does not return message_id; thread reply bootstrapping unavailable")
 	return "", nil
 }
 
@@ -250,6 +263,7 @@ func (e *Engine) sendCardDispatch(ctx context.Context, receiveIDType, receiveID,
 	if err := e.sender.SendCard(ctx, receiveIDType, receiveID, cardContent); err != nil {
 		return "", err
 	}
+	logging.WarnOnce("automation sender does not return message_id; thread reply bootstrapping unavailable")
 	return "", nil
 }
 

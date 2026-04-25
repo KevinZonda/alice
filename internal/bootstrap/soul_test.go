@@ -33,10 +33,10 @@ func TestEnsureBotSoulFile_CreatesEmbeddedTemplate(t *testing.T) {
 
 func TestEnsureBotSoulFile_PreservesExistingFile(t *testing.T) {
 	soulPath := filepath.Join(t.TempDir(), "workspace", "SOUL.md")
-	if err := os.MkdirAll(filepath.Dir(soulPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(soulPath), 0o750); err != nil {
 		t.Fatalf("create workspace dir failed: %v", err)
 	}
-	if err := os.WriteFile(soulPath, []byte("custom soul"), 0o644); err != nil {
+	if err := os.WriteFile(soulPath, []byte("custom soul"), 0o600); err != nil {
 		t.Fatalf("write custom soul failed: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestEnsureBotSoulFile_PreservesExistingFile(t *testing.T) {
 
 func TestEnsureBotSoulFile_RejectsDirectoryPath(t *testing.T) {
 	soulPath := filepath.Join(t.TempDir(), "workspace")
-	if err := os.MkdirAll(soulPath, 0o755); err != nil {
+	if err := os.MkdirAll(soulPath, 0o750); err != nil {
 		t.Fatalf("create directory failed: %v", err)
 	}
 

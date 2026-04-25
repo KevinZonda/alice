@@ -63,8 +63,14 @@ func Configure(opts Options) error {
 
 	filePath := strings.TrimSpace(opts.FilePath)
 	if filePath != "" {
-		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o750); err != nil {
 			return fmt.Errorf("create log dir failed: %w", err)
+		}
+		// Pre-create log file with restrictive permissions. Debug logs may
+		// contain sensitive LLM input/output; 0o600 limits access to the owner.
+		// #nosec G304 -- filePath comes from validated configuration, not raw user input
+		if f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_ = f.Close()
 		}
 		rotator := &lumberjack.Logger{
 			Filename:   filePath,
@@ -116,6 +122,16 @@ func Fatalf(format string, args ...any) {
 	current.Fatal().Msgf(format, args...)
 }
 
+var warnOnceMessages sync.Map
+
+func WarnOnce(format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+	if _, loaded := warnOnceMessages.LoadOrStore(message, struct{}{}); loaded {
+		return
+	}
+	Warnf("%s", message)
+}
+
 type AgentTrace struct {
 	Provider  string
 	Agent     string
@@ -133,45 +149,22 @@ func DebugAgentTrace(trace AgentTrace) {
 		return
 	}
 
-	sections := []string{
-		"# Agent Trace",
-		"",
-		"- provider: `" + defaultString(trace.Provider, "unknown") + "`",
-		"- agent: `" + defaultString(trace.Agent, "assistant") + "`",
-		"- thread_id: `" + defaultString(trace.ThreadID, "-") + "`",
-		"- model: `" + defaultString(trace.Model, "-") + "`",
-		"- profile: `" + defaultString(trace.Profile, "-") + "`",
-	}
-	if strings.TrimSpace(trace.Error) != "" {
-		sections = append(sections,
-			"- error: `"+strings.TrimSpace(trace.Error)+"`",
-		)
-	}
-	sections = append(sections,
-		"",
-		"## Input",
-		codeBlock(trace.Input),
-		"",
-		"## Tool Calls",
-	)
-	if len(trace.ToolCalls) == 0 {
-		sections = append(sections, "- none")
-	} else {
-		for _, item := range trace.ToolCalls {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
-			sections = append(sections, "- "+item)
-		}
-	}
-	sections = append(sections,
-		"",
-		"## Output",
-		codeBlock(trace.Output),
-	)
 	current := getLogger()
-	current.Debug().Str("kind", "agent-trace").Msg(strings.Join(sections, "\n"))
+	evt := current.Debug().
+		Str("kind", "agent-trace").
+		Str("provider", defaultString(trace.Provider, "unknown")).
+		Str("agent", defaultString(trace.Agent, "assistant")).
+		Str("thread_id", defaultString(trace.ThreadID, "-")).
+		Str("model", defaultString(trace.Model, "-")).
+		Str("profile", defaultString(trace.Profile, "-"))
+	if errStr := strings.TrimSpace(trace.Error); errStr != "" {
+		evt = evt.Str("error", errStr)
+	}
+	evt = evt.Str("input", trace.Input)
+	if len(trace.ToolCalls) > 0 {
+		evt = evt.Strs("tool_calls", trace.ToolCalls)
+	}
+	evt.Str("output", trace.Output).Msg("agent trace")
 }
 
 func logf(level zerolog.Level, format string, args ...any) {

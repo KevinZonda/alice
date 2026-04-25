@@ -56,6 +56,7 @@ func NewServer(
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
+	_ = engine.SetTrustedProxies(nil)
 	engine.Use(gin.Recovery())
 
 	srv := &Server{
@@ -89,9 +90,13 @@ func (s *Server) Run(ctx context.Context) error {
 	if s == nil {
 		return errors.New("runtime api server is nil")
 	}
+	go s.authLimiter.RunCleanup(ctx, time.Minute)
+
 	s.httpSrv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.engine,
+		Addr:              s.addr,
+		Handler:           s.engine,
+		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 	errCh := make(chan error, 1)
 	go func() {

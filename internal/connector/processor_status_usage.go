@@ -156,6 +156,7 @@ func loadUsageFromSessionState(path, scopeKey string) (statusview.UsageStats, er
 		return statusview.UsageStats{}, os.ErrInvalid
 	}
 
+	// #nosec G304 -- path is derived from internal state storage, not raw user input
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -226,6 +226,7 @@ func (p *Processor) appendBotSoul(userText string, job Job) string {
 	}
 	soulDoc := job.SoulDoc
 	if !soulDoc.Loaded {
+		// #nosec G304 -- soulPath comes from validated configuration, not raw user input
 		raw, err := os.ReadFile(soulPath)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -353,7 +354,7 @@ func (p *Processor) buildLLMRunEnv(job Job) map[string]string {
 	if provider, ok := p.sender.(resourceRootProvider); ok {
 		sessionContext.ResourceRoot = strings.TrimSpace(provider.ResourceRootForScope(scopeKey))
 		if sessionContext.ResourceRoot != "" {
-			if err := os.MkdirAll(sessionContext.ResourceRoot, 0o755); err != nil {
+			if err := os.MkdirAll(sessionContext.ResourceRoot, 0o750); err != nil {
 				logging.Warnf("prepare scoped resource root failed event_id=%s scope=%s err=%v", job.EventID, scopeKey, err)
 			}
 		}
@@ -383,6 +384,7 @@ func (p *Processor) prepareJobForLLM(ctx context.Context, job *Job) {
 	if !job.SoulDoc.Loaded {
 		soulPath := strings.TrimSpace(job.SoulPath)
 		if soulPath != "" {
+			// #nosec G304 -- soulPath comes from validated configuration, not raw user input
 			raw, err := os.ReadFile(soulPath)
 			if err != nil {
 				if !os.IsNotExist(err) {

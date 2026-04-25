@@ -3,8 +3,6 @@ package runtimeapi
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +23,7 @@ func (s *Server) dispatchText(ctx context.Context, session sessionctx.SessionCon
 			_, err := replySender.ReplyText(ctx, sourceMessageID, text)
 			return err
 		}
+		return errors.New("sender does not support text replying; cannot dispatch runtime text message as reply")
 	}
 	return s.sender.SendText(ctx, session.ReceiveIDType, session.ReceiveID, text)
 }
@@ -41,6 +40,7 @@ func (s *Server) dispatchImage(ctx context.Context, session sessionctx.SessionCo
 			_, err := replySender.ReplyImage(ctx, sourceMessageID, imageKey)
 			return err
 		}
+		return errors.New("sender does not support image replying; cannot dispatch runtime image message as reply")
 	}
 	return s.sender.SendImage(ctx, session.ReceiveIDType, session.ReceiveID, imageKey)
 }
@@ -57,6 +57,7 @@ func (s *Server) dispatchFile(ctx context.Context, session sessionctx.SessionCon
 			_, err := replySender.ReplyFile(ctx, sourceMessageID, fileKey)
 			return err
 		}
+		return errors.New("sender does not support file replying; cannot dispatch runtime file message as reply")
 	}
 	return s.sender.SendFile(ctx, session.ReceiveIDType, session.ReceiveID, fileKey)
 }
@@ -79,16 +80,6 @@ func validatePathUnderRoot(path string, root string) error {
 		return err
 	}
 	rootAbs = filepath.Clean(rootAbs)
-	rootInfo, err := os.Stat(rootAbs)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("resource root does not exist: %s", rootAbs)
-		}
-		return err
-	}
-	if !rootInfo.IsDir() {
-		return fmt.Errorf("resource root is not a directory: %s", rootAbs)
-	}
 	rel, err := filepath.Rel(rootAbs, pathAbs)
 	if err != nil {
 		return err
@@ -98,10 +89,10 @@ func validatePathUnderRoot(path string, root string) error {
 	}
 	resolvedPath, err := securejoin.SecureJoin(rootAbs, rel)
 	if err != nil {
-		return fmt.Errorf("path out of allowed root: %s", rootAbs)
+		return errors.New("path out of allowed root")
 	}
 	if filepath.Clean(resolvedPath) != pathAbs {
-		return fmt.Errorf("path out of allowed root: %s", rootAbs)
+		return errors.New("path out of allowed root")
 	}
 	return nil
 }

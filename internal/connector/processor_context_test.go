@@ -15,7 +15,7 @@ import (
 func TestProcessorBuildPrompt_AppendsBotSoulForNewThread(t *testing.T) {
 	soulPath := filepath.Join(t.TempDir(), "SOUL.md")
 	soulText := "---\noutput_contract:\n  hidden_tags:\n    - reply_will\n    - motion\n  reply_will_tag: reply_will\n  reply_will_field: reply_will\n  motion_tag: motion\n  suppress_token: \"[[NO_REPLY]]\"\n---\n# Alice Chat\n- 回答前先澄清目标\n"
-	if err := os.WriteFile(soulPath, []byte(soulText), 0o644); err != nil {
+	if err := os.WriteFile(soulPath, []byte(soulText), 0o600); err != nil {
 		t.Fatalf("write SOUL.md failed: %v", err)
 	}
 
@@ -43,7 +43,7 @@ func TestProcessorBuildPrompt_AppendsBotSoulForNewThread(t *testing.T) {
 
 func TestProcessorBuildPrompt_SkipsBotSoulForWorkScene(t *testing.T) {
 	soulPath := filepath.Join(t.TempDir(), "SOUL.md")
-	if err := os.WriteFile(soulPath, []byte("这段设定不应该出现在 work prompt"), 0o644); err != nil {
+	if err := os.WriteFile(soulPath, []byte("这段设定不应该出现在 work prompt"), 0o600); err != nil {
 		t.Fatalf("write SOUL.md failed: %v", err)
 	}
 
@@ -130,7 +130,7 @@ func TestProcessorRunLLM_LogsBackendProgress(t *testing.T) {
 		"codex agent_message event_id=evt_1 thread_id=thread_1",
 		"codex file_change event_id=evt_1 thread_id=thread_1",
 		"codex run completed event_id=evt_1",
-		"# Agent Trace",
+		"agent trace",
 	} {
 		if !strings.Contains(logs, want) {
 			t.Fatalf("expected logs to contain %q, got %q", want, logs)

@@ -34,10 +34,10 @@ func EnsureBotSoulFile(soulPath string) (SoulTemplateReport, error) {
 		return report, fmt.Errorf("stat soul path failed: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(soulPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(soulPath), 0o750); err != nil {
 		return report, fmt.Errorf("create soul parent directory failed: %w", err)
 	}
-	if err := os.WriteFile(soulPath, aliceassets.SoulExampleMarkdown, 0o644); err != nil {
+	if err := os.WriteFile(soulPath, aliceassets.SoulExampleMarkdown, 0o600); err != nil {
 		return report, fmt.Errorf("write soul template failed: %w", err)
 	}
 	report.Created = true

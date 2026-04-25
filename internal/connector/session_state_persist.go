@@ -26,6 +26,7 @@ func (p *Processor) LoadSessionState(path string) error {
 		return nil
 	}
 
+	// #nosec G304 -- path is derived from internal session state management, not raw user input
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -60,6 +61,7 @@ func (p *Processor) LoadSessionState(path string) error {
 
 	p.mu.Lock()
 	p.sessions = loaded
+	p.rebuildSessionAliasIndexLocked()
 	p.stateVersion = 0
 	p.flushedVersion = 0
 	p.mu.Unlock()
@@ -101,7 +103,7 @@ func (p *Processor) flushSessionState(force bool) error {
 	}
 	p.mu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create session state dir failed: %w", err)
 	}
 

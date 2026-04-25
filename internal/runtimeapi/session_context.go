@@ -1,19 +1,23 @@
 package runtimeapi
 
 import (
+	"context"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 func (s *Server) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if strings.TrimSpace(s.token) == "" {
-			c.Next()
+			logging.Warnf("runtime api request rejected: token is not configured")
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "runtime api token is not configured"})
 			return
 		}
 		if s.authLimiter != nil && !s.authLimiter.Allow(authRateKey(c), time.Now()) {
@@ -75,6 +79,36 @@ func (l *authRateLimiter) Allow(key string, now time.Time) bool {
 	item.count++
 	l.items[key] = item
 	return item.count <= l.limit
+}
+
+func (l *authRateLimiter) RunCleanup(ctx context.Context, interval time.Duration) {
+	if l == nil || interval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.cleanExpired(time.Now())
+		}
+	}
+}
+
+func (l *authRateLimiter) cleanExpired(now time.Time) {
+	if l == nil {
+		return
+	}
+	now = now.Local()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for key, item := range l.items {
+		if now.Sub(item.start) >= l.window {
+			delete(l.items, key)
+		}
+	}
 }
 
 func authRateKey(c *gin.Context) string {

@@ -14,6 +14,11 @@ func (p *Processor) resolveCanonicalSessionKeyLocked(sessionKey string) string {
 	if _, ok := p.sessions[sessionKey]; ok {
 		return sessionKey
 	}
+	if canonicalKey, ok := p.sessionAliases[sessionKey]; ok && canonicalKey != "" {
+		if _, exists := p.sessions[canonicalKey]; exists {
+			return canonicalKey
+		}
+	}
 	for canonicalKey, state := range p.sessions {
 		if stateMatchesSessionKey(canonicalKey, state, sessionKey) {
 			return canonicalKey
@@ -148,6 +153,33 @@ func extractThreadIDFromAlias(alias string) string {
 		return ""
 	}
 	return strings.TrimSpace(alias[idx+len(threadAliasToken):])
+}
+
+func (p *Processor) removeSessionAliasesFromIndexLocked(canonicalKey string) {
+	if p == nil {
+		return
+	}
+	for alias, target := range p.sessionAliases {
+		if target == canonicalKey {
+			delete(p.sessionAliases, alias)
+		}
+	}
+}
+
+func (p *Processor) rebuildSessionAliasIndexLocked() {
+	if p == nil {
+		return
+	}
+	p.sessionAliases = make(map[string]string, len(p.sessions))
+	for canonicalKey, state := range p.sessions {
+		for _, alias := range state.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias == "" || alias == canonicalKey {
+				continue
+			}
+			p.sessionAliases[alias] = canonicalKey
+		}
+	}
 }
 
 func scopeKeyFromSessionKey(sessionKey string) string {

@@ -20,6 +20,7 @@ import (
 
 	agentbridgeclaude "github.com/Alice-space/agentbridge/claude"
 	agentbridgecodex "github.com/Alice-space/agentbridge/codex"
+	agentbridgeopencode "github.com/Alice-space/agentbridge/opencode"
 	aliceassets "github.com/Alice-space/alice"
 	"github.com/Alice-space/alice/internal/bootstrap"
 	"github.com/Alice-space/alice/internal/buildinfo"
@@ -230,6 +231,7 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool, runtimeO
 	}
 	codexAuthChecks := map[string]*codexLoginCheck{}
 	claudeAuthChecks := map[string]*claudeLoginCheck{}
+	opencodeAuthChecks := map[string]*opencodeLoginCheck{}
 	skillPlan := &bundledSkillSyncPlan{
 		AliceHome: cfg.AliceHome,
 		allowed:   map[string]struct{}{},
@@ -271,6 +273,21 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool, runtimeO
 					Timeout: runtimeCfg.AuthStatusTimeout,
 				}
 				claudeAuthChecks[claudeCmd] = check
+			}
+			if runtimeCfg.AuthStatusTimeout > check.Timeout {
+				check.Timeout = runtimeCfg.AuthStatusTimeout
+			}
+			check.Bots = append(check.Bots, runtimeCfg.BotID)
+		}
+		if runtimeUsesOpenCode(runtimeCfg) {
+			ocCmd := resolveOpencodeCommand(runtimeCfg)
+			check, ok := opencodeAuthChecks[ocCmd]
+			if !ok {
+				check = &opencodeLoginCheck{
+					Command: ocCmd,
+					Timeout: runtimeCfg.AuthStatusTimeout,
+				}
+				opencodeAuthChecks[ocCmd] = check
 			}
 			if runtimeCfg.AuthStatusTimeout > check.Timeout {
 				check.Timeout = runtimeCfg.AuthStatusTimeout
@@ -336,6 +353,27 @@ func runConnector(configPath, pidFilePath string, pidFileExplicit bool, runtimeO
 			report.AuthMethod,
 			report.APIProvider,
 		)
+	}
+	ocKeys := make([]string, 0, len(opencodeAuthChecks))
+	for key := range opencodeAuthChecks {
+		ocKeys = append(ocKeys, key)
+	}
+	sort.Strings(ocKeys)
+	for _, key := range ocKeys {
+		check := opencodeAuthChecks[key]
+		report, authErr := agentbridgeopencode.CheckLogin(check.Command, check.Timeout)
+		if authErr != nil {
+			return fmt.Errorf("check opencode failed for bots %s: %w", check.botList(), authErr)
+		}
+		if !report.Ready {
+			return fmt.Errorf(
+				"opencode not found for bots %s (command=%q): %s — install opencode via https://opencode.ai/install",
+				check.botList(),
+				report.Command,
+				report.Error,
+			)
+		}
+		logging.Infof("opencode verified bots=%s command=%s version=%s", check.botList(), report.Command, report.Version)
 	}
 
 	skillReport, skillErr := bootstrap.EnsureBundledSkillsLinkedForAliceHome(skillPlan.AliceHome, skillPlan.allowedSkills())
@@ -413,7 +451,7 @@ func ensureConfigFileExists(configPath string) (bool, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return false, fmt.Errorf("check config path failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return false, fmt.Errorf("create config directory failed: %w", err)
 	}
 	if err := os.WriteFile(configPath, aliceassets.ConfigExampleYAML, 0o600); err != nil {
@@ -533,7 +571,7 @@ func preparePIDFile(path string) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve pid file path failed: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 		return nil, fmt.Errorf("create pid file directory failed: %w", err)
 	}
 
@@ -543,8 +581,8 @@ func preparePIDFile(path string) (func(), error) {
 	}
 
 	selfPID := os.Getpid()
-	if err := os.WriteFile(absPath, []byte(strconv.Itoa(selfPID)+"\n"), 0o644); err != nil {
-		return nil, fmt.Errorf("write pid file failed: %w", err)
+	if err := atomicWritePIDFile(absPath, selfPID); err != nil {
+		return nil, err
 	}
 	return func() {
 		currentPID, err := readPIDFile(absPath)
@@ -557,7 +595,30 @@ func preparePIDFile(path string) (func(), error) {
 	}, nil
 }
 
+func atomicWritePIDFile(absPath string, pid int) error {
+	tmpFile, err := os.CreateTemp(filepath.Dir(absPath), ".pid.*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp pid file failed: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write([]byte(strconv.Itoa(pid) + "\n")); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write temp pid file failed: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp pid file failed: %w", err)
+	}
+	if err := os.Rename(tmpPath, absPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace pid file failed: %w", err)
+	}
+	return nil
+}
+
 func readPIDFile(path string) (int, error) {
+	// #nosec G304 -- path is provided by CLI flags/internal management, not raw user input
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
@@ -600,7 +661,7 @@ func ensureWorkspaceDir(path string) error {
 	if !os.IsNotExist(err) {
 		return fmt.Errorf("check workspace_dir failed: %w", err)
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("create workspace_dir failed: %w", err)
 	}
 	return nil
@@ -637,6 +698,18 @@ type claudeLoginCheck struct {
 	Bots    []string
 }
 
+type opencodeLoginCheck struct {
+	Command string
+	Timeout time.Duration
+	Bots    []string
+}
+
+func (c *opencodeLoginCheck) botList() string {
+	bots := append([]string(nil), c.Bots...)
+	sort.Strings(bots)
+	return strings.Join(bots, ",")
+}
+
 func (p *bundledSkillSyncPlan) allowedSkills() []string {
 	skills := make([]string, 0, len(p.allowed))
 	for skill := range p.allowed {
@@ -664,6 +737,15 @@ func runtimeUsesCodex(cfg config.Config) bool {
 func runtimeUsesClaude(cfg config.Config) bool {
 	for _, provider := range cfg.ResolvedLLMProviders() {
 		if provider == config.LLMProviderClaude {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeUsesOpenCode(cfg config.Config) bool {
+	for _, provider := range cfg.ResolvedLLMProviders() {
+		if provider == config.LLMProviderOpenCode {
 			return true
 		}
 	}
@@ -703,6 +785,24 @@ func resolveClaudeCommand(cfg config.Config) string {
 		}
 	}
 	return "claude"
+}
+
+// resolveOpencodeCommand returns the opencode command from the first opencode
+// profile (alphabetically), falling back to "opencode".
+func resolveOpencodeCommand(cfg config.Config) string {
+	names := make([]string, 0, len(cfg.LLMProfiles))
+	for name, profile := range cfg.LLMProfiles {
+		if strings.ToLower(strings.TrimSpace(profile.Provider)) == config.LLMProviderOpenCode {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if cmd := strings.TrimSpace(cfg.LLMProfiles[name].Command); cmd != "" {
+			return cmd
+		}
+	}
+	return "opencode"
 }
 
 func formatCodexLoginOutput(command, output string) string {

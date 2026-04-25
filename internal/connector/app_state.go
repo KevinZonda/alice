@@ -27,6 +27,7 @@ func (a *App) LoadRuntimeState(path string) error {
 		return nil
 	}
 
+	// #nosec G304 -- path is derived from internal runtime state management, not raw user input
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -138,7 +139,7 @@ func (a *App) flushRuntimeStateFile(force bool) error {
 
 	sortPendingJobs(snapshot.Pending)
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create runtime state dir failed: %w", err)
 	}
 
