@@ -1,6 +1,7 @@
 package runtimeapi
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,36 @@ func (l *authRateLimiter) Allow(key string, now time.Time) bool {
 	item.count++
 	l.items[key] = item
 	return item.count <= l.limit
+}
+
+func (l *authRateLimiter) RunCleanup(ctx context.Context, interval time.Duration) {
+	if l == nil || interval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.cleanExpired(time.Now())
+		}
+	}
+}
+
+func (l *authRateLimiter) cleanExpired(now time.Time) {
+	if l == nil {
+		return
+	}
+	now = now.Local()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for key, item := range l.items {
+		if now.Sub(item.start) >= l.window {
+			delete(l.items, key)
+		}
+	}
 }
 
 func authRateKey(c *gin.Context) string {

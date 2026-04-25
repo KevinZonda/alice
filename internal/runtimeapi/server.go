@@ -89,6 +89,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if s == nil {
 		return errors.New("runtime api server is nil")
 	}
+	go s.authLimiter.RunCleanup(ctx, time.Minute)
+
 	s.httpSrv = &http.Server{
 		Addr:    s.addr,
 		Handler: s.engine,
