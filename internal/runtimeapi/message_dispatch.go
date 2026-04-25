@@ -25,6 +25,7 @@ func (s *Server) dispatchText(ctx context.Context, session sessionctx.SessionCon
 			_, err := replySender.ReplyText(ctx, sourceMessageID, text)
 			return err
 		}
+		return errors.New("sender does not support text replying; cannot dispatch runtime text message as reply")
 	}
 	return s.sender.SendText(ctx, session.ReceiveIDType, session.ReceiveID, text)
 }
@@ -41,6 +42,7 @@ func (s *Server) dispatchImage(ctx context.Context, session sessionctx.SessionCo
 			_, err := replySender.ReplyImage(ctx, sourceMessageID, imageKey)
 			return err
 		}
+		return errors.New("sender does not support image replying; cannot dispatch runtime image message as reply")
 	}
 	return s.sender.SendImage(ctx, session.ReceiveIDType, session.ReceiveID, imageKey)
 }
@@ -57,6 +59,7 @@ func (s *Server) dispatchFile(ctx context.Context, session sessionctx.SessionCon
 			_, err := replySender.ReplyFile(ctx, sourceMessageID, fileKey)
 			return err
 		}
+		return errors.New("sender does not support file replying; cannot dispatch runtime file message as reply")
 	}
 	return s.sender.SendFile(ctx, session.ReceiveIDType, session.ReceiveID, fileKey)
 }
