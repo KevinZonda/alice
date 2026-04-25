@@ -29,24 +29,27 @@ type SystemTaskFunc func(ctx context.Context)
 type UserTaskCompletionHook func(task Task, err error)
 
 const defaultUserTaskTimeout = 10 * time.Minute
+const defaultMaxConcurrentTasks = 4
 
 type Engine struct {
-	store           *Store
-	sender          Sender
-	runtimeMu       sync.RWMutex
-	llmRunner       LLMRunner
-	userTaskHook    UserTaskCompletionHook
-	sessionChecker  SessionActivityChecker
-	runEnv          map[string]string
-	userTaskTimeout time.Duration
-	tick            time.Duration
-	maxClaim        int
-	now             func() time.Time
-	systemsMu       sync.Mutex
-	systemTasks     map[string]*systemTaskRuntime
-	schedulerMu     sync.Mutex
-	scheduler       gocron.Scheduler
-	lastSkipLog     sync.Map // task.ID -> time.Time; used to rate-limit "session busy" log
+	store              *Store
+	sender             Sender
+	runtimeMu          sync.RWMutex
+	llmRunner          LLMRunner
+	userTaskHook       UserTaskCompletionHook
+	sessionChecker     SessionActivityChecker
+	runEnv             map[string]string
+	userTaskTimeout    time.Duration
+	tick               time.Duration
+	maxClaim           int
+	now                func() time.Time
+	systemsMu          sync.Mutex
+	systemTasks        map[string]*systemTaskRuntime
+	schedulerMu        sync.Mutex
+	scheduler          gocron.Scheduler
+	lastSkipLog        sync.Map // task.ID -> time.Time; used to rate-limit "session busy" log
+	taskSem            chan struct{}
+	maxConcurrentTasks int
 }
 
 type taskSignal struct {
@@ -75,13 +78,15 @@ var actionTemplateRenderer = prompting.NewLoader(".")
 
 func NewEngine(store *Store, sender Sender) *Engine {
 	return &Engine{
-		store:           store,
-		sender:          sender,
-		userTaskTimeout: defaultUserTaskTimeout,
-		tick:            time.Second,
-		maxClaim:        32,
-		now:             time.Now,
-		systemTasks:     make(map[string]*systemTaskRuntime),
+		store:              store,
+		sender:             sender,
+		userTaskTimeout:    defaultUserTaskTimeout,
+		tick:               time.Second,
+		maxClaim:           32,
+		now:                time.Now,
+		systemTasks:        make(map[string]*systemTaskRuntime),
+		maxConcurrentTasks: defaultMaxConcurrentTasks,
+		taskSem:            make(chan struct{}, defaultMaxConcurrentTasks),
 	}
 }
 
