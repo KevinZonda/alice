@@ -24,6 +24,7 @@ type Processor struct {
 	runtimeMu       sync.RWMutex
 	mu              sync.Mutex
 	sessions        map[string]sessionState
+	sessionAliases  map[string]string
 	stateFilePath   string
 	stateVersion    uint64
 	flushedVersion  uint64
@@ -72,6 +73,7 @@ func NewProcessor(
 		feedbackMode:    immediateFeedbackModeReply,
 		feedbackEmoji:   defaultImmediateFeedbackEmoji,
 		sessions:        make(map[string]sessionState),
+		sessionAliases:  make(map[string]string),
 		now:             time.Now,
 		helpConfig:      defaultBuiltinHelpConfig(),
 		prompts:         prompting.DefaultLoader(),

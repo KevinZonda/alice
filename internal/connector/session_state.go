@@ -105,6 +105,7 @@ func (p *Processor) rememberSessionAliases(sessionKey string, aliases ...string)
 			continue
 		}
 		state.Aliases = appendSessionAliasWithLimit(state.Aliases, alias, maxSessionAliases)
+		p.sessionAliases[alias] = canonicalKey
 		changed = true
 	}
 	if !changed && ok {
@@ -234,10 +235,12 @@ func (p *Processor) resetChatSceneSession(receiveIDType, receiveID string) (stri
 
 	switch {
 	case currentKey == baseKey:
+		p.removeSessionAliasesFromIndexLocked(currentKey)
 		delete(p.sessions, currentKey)
 	default:
 		state, ok := p.sessions[currentKey]
 		if ok {
+			delete(p.sessionAliases, baseKey)
 			state.Aliases = removeSessionAlias(state.Aliases, baseKey)
 			p.sessions[currentKey] = state
 		}
@@ -251,6 +254,7 @@ func (p *Processor) resetChatSceneSession(receiveIDType, receiveID string) (stri
 		Aliases:  []string{baseKey},
 		ScopeKey: scopeKeyFromSessionKey(newKey),
 	}
+	p.sessionAliases[baseKey] = newKey
 	p.markStateChangedLocked()
 	return currentKey, newKey
 }

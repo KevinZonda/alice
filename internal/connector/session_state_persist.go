@@ -60,6 +60,7 @@ func (p *Processor) LoadSessionState(path string) error {
 
 	p.mu.Lock()
 	p.sessions = loaded
+	p.rebuildSessionAliasIndexLocked()
 	p.stateVersion = 0
 	p.flushedVersion = 0
 	p.mu.Unlock()
