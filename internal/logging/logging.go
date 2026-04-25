@@ -66,6 +66,11 @@ func Configure(opts Options) error {
 		if err := os.MkdirAll(filepath.Dir(filePath), 0o750); err != nil {
 			return fmt.Errorf("create log dir failed: %w", err)
 		}
+		// Pre-create log file with restrictive permissions. Debug logs may
+		// contain sensitive LLM input/output; 0o600 limits access to the owner.
+		if f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_ = f.Close()
+		}
 		rotator := &lumberjack.Logger{
 			Filename:   filePath,
 			MaxSize:    positiveOrDefault(opts.MaxSizeMB, defaultLogMaxSizeMB),
