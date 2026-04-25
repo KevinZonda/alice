@@ -36,7 +36,7 @@ func TestEnsureBotSoulFile_PreservesExistingFile(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(soulPath), 0o750); err != nil {
 		t.Fatalf("create workspace dir failed: %v", err)
 	}
-	if err := os.WriteFile(soulPath, []byte("custom soul"), 0o644); err != nil {
+	if err := os.WriteFile(soulPath, []byte("custom soul"), 0o600); err != nil {
 		t.Fatalf("write custom soul failed: %v", err)
 	}
 

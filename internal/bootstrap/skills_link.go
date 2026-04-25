@@ -186,7 +186,7 @@ func materializeEmbeddedSkill(skillName, dst string) error {
 	}
 
 	markerPath := filepath.Join(dst, embeddedSkillMarkerFile)
-	return os.WriteFile(markerPath, []byte("alice-embedded-skill\n"), 0o644)
+	return os.WriteFile(markerPath, []byte("alice-embedded-skill\n"), 0o600)
 }
 
 func filePerm(entry fs.DirEntry) os.FileMode {

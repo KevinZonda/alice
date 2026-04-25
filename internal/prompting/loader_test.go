@@ -30,7 +30,7 @@ func TestLoaderRenderFilePrefersFilesystemOverride(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(templatePath), 0o750); err != nil {
 		t.Fatalf("create prompt dir failed: %v", err)
 	}
-	if err := os.WriteFile(templatePath, []byte("override: {{ .UserText }}"), 0o644); err != nil {
+	if err := os.WriteFile(templatePath, []byte("override: {{ .UserText }}"), 0o600); err != nil {
 		t.Fatalf("write prompt template failed: %v", err)
 	}
 

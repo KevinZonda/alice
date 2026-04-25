@@ -85,7 +85,7 @@ func TestEnsureBundledSkillsLinked_KeepCustomSourceDirectory(t *testing.T) {
 		t.Fatalf("create custom skill dir failed: %v", err)
 	}
 	custom := []byte("custom-skill\n")
-	if err := os.WriteFile(filepath.Join(sourceSkillDir, "SKILL.md"), custom, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceSkillDir, "SKILL.md"), custom, 0o600); err != nil {
 		t.Fatalf("write custom skill file failed: %v", err)
 	}
 
