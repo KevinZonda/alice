@@ -26,6 +26,23 @@ func shouldProcessIncomingMessage(
 	if isBuiltinCommandEvent(event) {
 		return true
 	}
+	return isGroupMessageTriggered(event, triggerMode, triggerPrefix, botOpenID, botUserID)
+}
+
+func isGroupMessageTriggered(
+	event *larkim.P2MessageReceiveV1,
+	triggerMode string,
+	triggerPrefix string,
+	botOpenID string,
+	botUserID string,
+) bool {
+	if event == nil || event.Event == nil || event.Event.Message == nil {
+		return false
+	}
+	message := event.Event.Message
+	if !isGroupChatType(deref(message.ChatType)) {
+		return true
+	}
 	mentionAccepted := isGroupMentionAccepted(message, botOpenID, botUserID)
 
 	switch normalizedTriggerMode(triggerMode) {

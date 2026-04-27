@@ -24,6 +24,9 @@ func (a *App) routeIncomingJob(job *Job, event *larkim.P2MessageReceiveV1) bool 
 		return true
 	}
 	if isBuiltinCommandText(job.Text) {
+		if !isGroupMessageTriggered(event, cfg.triggerMode, cfg.triggerPrefix, a.getBotOpenID(), "") {
+			return false
+		}
 		if cfg.groupScenes.Work.Enabled {
 			if sessionKey := a.resolveExistingWorkSession(job, event, message); sessionKey != "" {
 				applyWorkSceneToJob(job, cfg, sessionKey)
@@ -196,6 +199,7 @@ func applyLLMProfileToJob(job *Job, defaultProvider, profileName string, profile
 	job.LLMModel = strings.TrimSpace(profile.Model)
 	job.LLMProfile = strings.TrimSpace(profileName)
 	job.LLMReasoningEffort = strings.TrimSpace(profile.ReasoningEffort)
+	job.LLMVariant = strings.TrimSpace(profile.Variant)
 	job.LLMPersonality = strings.TrimSpace(profile.Personality)
 	job.LLMPromptPrefix = strings.TrimSpace(profile.PromptPrefix)
 }
