@@ -28,7 +28,7 @@ bots:
   my_bot:
     name: "Alice"
     feishu_app_id: "cli_xxxxxxxx"
-    feishu_app_secret: "your_app_secret"
+    feishu_app_secret: "your_sec"
 
     # Optional runtime directories.
     # Empty values use defaults under <ALICE_HOME>/bots/my_bot.
