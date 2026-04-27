@@ -24,6 +24,9 @@ func (a *App) routeIncomingJob(job *Job, event *larkim.P2MessageReceiveV1) bool 
 		return true
 	}
 	if isBuiltinCommandText(job.Text) {
+		if !isGroupMessageTriggered(event, cfg.triggerMode, cfg.triggerPrefix, a.getBotOpenID(), "") {
+			return false
+		}
 		if cfg.groupScenes.Work.Enabled {
 			if sessionKey := a.resolveExistingWorkSession(job, event, message); sessionKey != "" {
 				applyWorkSceneToJob(job, cfg, sessionKey)

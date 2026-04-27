@@ -159,6 +159,11 @@ func TestApp_RouteBuiltinStopToExistingWorkSession(t *testing.T) {
 				Content:     strPtr(`{"text":"/stop"}`),
 				ChatId:      strPtr("oc_chat"),
 				ChatType:    strPtr("group"),
+				Mentions: []*larkim.MentionEvent{
+					{
+						Id: &larkim.UserId{OpenId: strPtr("ou_bot")},
+					},
+				},
 			},
 		},
 	}
