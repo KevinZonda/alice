@@ -26,56 +26,112 @@ bots:
   # deep engineering work (deepseek-v4-pro).
   # ──────────────────────────────────────────────────────────────────────────
   my_bot:
+    # Bot display name used in prompts and status cards.
     name: "Alice"
+    # Feishu app credentials from the Feishu Open Platform.
     feishu_app_id: "cli_xxxxxxxx"
     feishu_app_secret: "your_sec"
+    # Feishu API base URL. Defaults to https://open.feishu.cn.
+    # Use https://open.larksuite.com for Lark (international).
+    feishu_base_url: ""
 
-    # Optional runtime directories.
-    # Empty values use defaults under <ALICE_HOME>/bots/my_bot.
-    # Empty codex_home inherits shared CODEX_HOME or ~/.codex.
+    # ── Runtime directories ───────────────────────────────────────────────
+    # Bot-specific alice home. Empty means <ALICE_HOME>/bots/<bot_id>.
     alice_home: ""
+    # Agent workspace directory. Empty means <alice_home>/workspace.
     workspace_dir: ""
+    # Prompt template overrides directory. Empty means <alice_home>/prompts.
     prompt_dir: ""
+    # Codex config / auth home directory. Empty inherits $CODEX_HOME or ~/.codex.
     codex_home: ""
-    # SOUL.md is stored in <alice_home>/SOUL.md by default (not workspace).
-    # If the file does not exist, Alice writes the embedded template on startup.
+    # SOUL.md path. Default: <alice_home>/SOUL.md. Relative paths are resolved
+    # against alice_home. If the file does not exist, Alice writes the embedded
+    # template on startup.
     #
     # 读取时机：
-    #   chat 场景 — SOUL.md 正文注入到 prompt，YAML frontmatter 由 Alice 解析（不发给模型）
-    #               suppressed_token 控制静默行为，hidden_tags 控制回复后处理
+    #   chat 场景 — SOUL.md 正文注入到 prompt，YAML frontmatter 由 Alice 解析
     #   work 场景 — 跳过 SOUL.md 注入（work 场景不需要人格伪装）
     soul_path: "SOUL.md"
 
-    # Trigger mode for group chats:
-    # - at: only @bot messages can enter / continue a session (default)
+    # ── Message trigger ────────────────────────────────────────────────────
+    # How group messages enter a session:
+    # - at:     only @bot messages (default)
     # - prefix: only messages starting with trigger_prefix
     trigger_mode: "at"
     trigger_prefix: ""
 
     # ── LLM Profiles ──────────────────────────────────────────────────────
+    # Each profile is a complete LLM backend configuration, referenced by
+    # name from group_scenes.<scene>.llm_profile.
+    #
     # Supported providers: opencode | codex | claude | gemini | kimi
     #
     # Profile fields:
-    #   provider:          LLM backend (required)
-    #   command:           CLI binary name (default: provider name)
-    #   timeout_secs:      per-run timeout in seconds (default: 172800 = 48h)
-    #   model:             model name passed to the CLI
-    #   permissions:       sandbox + approval policy for this profile
-    #     sandbox:         read-only | workspace-write | danger-full-access
-    #     ask_for_approval: untrusted | on-request | never
     #
-    # OpenCode model strings (passed as --model to opencode CLI):
-    #   deepseek/deepseek-v4-pro      — DeepSeek V4 Pro (best for engineering work)
-    #   deepseek/deepseek-v4-flash    — DeepSeek V4 Flash (fast, cost-efficient)
-    #   deepseek/deepseek-r1          — DeepSeek R1 reasoning model
-    #   anthropic/claude-sonnet-4-6   — Claude Sonnet 4 via opencode
-    #   openai/gpt-5.2                — GPT-5.2 via opencode
-    #   note: authenticate each provider via `opencode auth login`
+    #   provider:
+    #     LLM backend name. Required.
+    #     Values: opencode | codex | claude | gemini | kimi
+    #
+    #   command:
+    #     Path or name of the CLI binary for this provider.
+    #     Default: same as provider name (e.g. "opencode" → `opencode`).
+    #     Use an absolute path if the binary is outside $PATH, e.g.:
+    #       command: "/usr/local/bin/opencode"
+    #     This field is the canonical way to specify a custom binary location.
+    #     env.PATH can also be used to extend the search path globally.
+    #
+    #   timeout_secs:
+    #     Per-run timeout in seconds. Default: 172800 (48 hours).
+    #
+    #   model:
+    #     Model identifier passed to the CLI. Required.
+    #     OpenCode examples: deepseek/deepseek-v4-pro, deepseek/deepseek-v4-flash
+    #     Codex examples:    gpt-5.4-mini, o3, o4-mini
+    #     Claude examples:   claude-sonnet-4-6, claude-haiku-4-5-20251001
+    #
+    #   profile:
+    #     Sub-profile name for the provider CLI (provider-specific).
+    #     Codex: selects a named profile from codex CLI config (e.g. "friendly").
+    #     Other providers: typically unused.
+    #
+    #   reasoning_effort:
+    #     Thinking intensity. Codex-only; ignored by other providers.
+    #     Values: low | medium | high | xhigh
+    #
+    #   personality:
+    #     Personality preset for the agent (provider-specific).
+    #     Codex: preset name from codex CLI config.
+    #     Other providers: unused, prefer prompt_prefix instead.
+    #
+    #   prompt_prefix:
+    #     Text prepended to every prompt before sending to the model.
+    #     Useful for injecting system-level instructions or constraints.
+    #
+    #   permissions:
+    #     Sandbox and approval settings for this profile.
+    #
+    #     sandbox:
+    #       Filesystem access level.
+    #       - read-only:          can read workspace but not write
+    #       - workspace-write:    can read/write inside workspace (default)
+    #       - danger-full-access: full filesystem access
+    #
+    #     ask_for_approval:
+    #       When the agent should ask before executing tool calls.
+    #       - untrusted:  ask for every tool use
+    #       - on-request: ask when the tool requests approval
+    #       - never:      never ask (default)
+    #
+    #     add_dirs:
+    #       Extra directories accessible to the agent beyond the workspace.
+    #       Example: add_dirs: ["/data/corpus", "/home/user/projects"]
+    #
     llm_profiles:
       # Lightweight profile for casual group chat.
       chat:
         provider: "opencode"
         model: "deepseek/deepseek-v4-flash"
+        # command: "/usr/local/bin/opencode"  # optional: specify binary path
 
       # Capable profile for deep engineering work.
       work:
@@ -88,9 +144,12 @@ bots:
       # Example: Codex profile (uncomment to use Codex instead).
       # chat_codex:
       #   provider: "codex"
+      #   command: "codex"
       #   model: "gpt-5.4-mini"
-      #   reasoning_effort: "low"
-      #   personality: "friendly"
+      #   reasoning_effort: "low"      # low | medium | high | xhigh
+      #   personality: "friendly"      # preset name from codex CLI config
+      #   profile: ""                  # optional: codex CLI sub-profile name
+      #   prompt_prefix: ""            # optional: text prepended to every prompt
       #   permissions:
       #     sandbox: "workspace-write"
       #     ask_for_approval: "never"
@@ -98,69 +157,122 @@ bots:
       # Example: Claude profile.
       # work_claude:
       #   provider: "claude"
+      #   command: "claude"
       #   model: "claude-sonnet-4-6"
+      #   prompt_prefix: "You are a senior software engineer. Be concise."
       #   permissions:
       #     sandbox: "danger-full-access"
       #     ask_for_approval: "never"
 
-    # Optional: environment variables passed to all LLM subprocesses.
+    # ── Environment variables ──────────────────────────────────────────────
+    # Passed to every LLM subprocess. Useful for:
+    # - PATH: ensure CLI binaries are discoverable
+    # - *_PROXY: proxy settings for API calls
+    # - *_API_KEY: auth keys for provider APIs (only if not set elsewhere)
     env:
-      # If Alice needs to find the opencode CLI, ensure PATH is set.
       PATH: "/home/you/.nvm/versions/node/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin"
       HTTPS_PROXY: "http://127.0.0.1:8080"
       ALL_PROXY: "http://127.0.0.1:8080"
 
+    # ── Reply messages ─────────────────────────────────────────────────────
+    # Shown when the LLM backend fails.
     failure_message: "暂时不可用，请稍后重试。"
+    # Shown while the LLM is thinking (progress card).
     thinking_message: "正在思考中..."
 
-    # Immediate feedback after receiving a message:
-    # - reaction: add a message reaction first, then fallback to reply (default)
-    # - reply: send an explicit `收到！` reply
+    # ── Immediate feedback ─────────────────────────────────────────────────
+    # After receiving a user message, Alice can send immediate feedback:
+    # - reaction: add a message reaction first, fallback to reply (default)
+    # - reply:    send an explicit `收到！` reply
+    # Reaction emoji type sent to the source message (Feishu emoji name).
     immediate_feedback_mode: "reaction"
     immediate_feedback_reaction: "OK"
 
-    # Scene router for group/topic-group chats.
-    # Both chat and work modes are enabled on the same bot.
+    # ── Scene router ───────────────────────────────────────────────────────
+    # Controls how group/topic-group messages are routed to chat or work mode.
     group_scenes:
-      # Default chat mode: every group message enters chat scene.
+      # Default chat mode: every group message enters this scene.
       chat:
+        # Whether this scene is active.
         enabled: true
+        # Session scope:
+        # - per_chat:   the whole group shares one session (default for chat)
+        # - per_thread: each Feishu thread gets its own session
         session_scope: "per_chat"
+        # Which llm_profiles entry to use.
         llm_profile: "chat"
+        # Token that, if returned verbatim by the model, suppresses the reply.
         no_reply_token: "[[NO_REPLY]]"
+        # Whether to create a Feishu thread for the reply.
         create_feishu_thread: false
-      # Work mode: triggered by @bot + #work tag.
+      # Work mode: triggered by @bot + #work tag (customizable below).
       # Messages in the same thread continue in work context.
       work:
         enabled: true
+        # Trigger tag required in the message (after the @bot trigger).
+        # Example: "@Alice #work fix the login bug" → enters work mode.
         trigger_tag: "#work"
+        # Session scope: typically per_thread so each work task is isolated.
         session_scope: "per_thread"
         llm_profile: "work"
+        # Whether to create a Feishu thread for the first reply.
         create_feishu_thread: true
+        no_reply_token: ""
 
-    # Runtime permissions.
+    # ── Runtime HTTP API ───────────────────────────────────────────────────
+    # Alice exposes a local HTTP API for bundled skills and automation tasks.
+    # Listen address for the runtime HTTP API.
+    # Default: 127.0.0.1:7331. Multi-bot auto-increments the port (7332, 7333, ...).
+    runtime_http_addr: ""
+    # Bearer token for API authentication. Auto-generated if empty.
+    # Set explicitly for cross-process calls or manual debugging.
+    # Example: runtime_http_token: "my-static-token"
+    runtime_http_token: ""
+
+    # ── Runtime permissions ────────────────────────────────────────────────
     permissions:
+      # Allow sending messages via the runtime API.
       runtime_message: true
+      # Allow managing automation tasks via the runtime API.
       runtime_automation: true
+      # Bundled skills available to this bot.
+      # Built-in skills: alice-message, alice-scheduler
       allowed_skills: ["alice-message", "alice-scheduler"]
 
+    # ── Worker pool ────────────────────────────────────────────────────────
+    # Max queued jobs. Beyond this, new messages are dropped.
     queue_capacity: 256
+    # Number of concurrent workers processing jobs.
     worker_concurrency: 3
-    # Outer automation/task wrapper timeout for scheduled automation.
+
+    # ── Timeouts (seconds) ─────────────────────────────────────────────────
+    # Outer timeout for scheduled automation and workflow runs.
     automation_task_timeout_secs: 6000
-    # Hidden runtime deadlines are also configurable.
+    # Timeout for provider auth status checks on startup.
     auth_status_timeout_secs: 15
+    # Grace period when shutting down the runtime HTTP API server.
     runtime_api_shutdown_timeout_secs: 5
+    # Timeout for opening the local BoltDB runtime store on startup.
     local_runtime_store_open_timeout_secs: 10
+    # Codex idle timeout per reasoning-effort tier.
+    # Applies to long-running codex sessions with no user activity.
+    # codex_idle_timeout_secs:         default/medium reasoning (default: 900)
+    # codex_high_idle_timeout_secs:    high reasoning (default: 1800)
+    # codex_xhigh_idle_timeout_secs:   xhigh reasoning (default: 3600)
     codex_idle_timeout_secs: 900
     codex_high_idle_timeout_secs: 1800
     codex_xhigh_idle_timeout_secs: 3600
 
-# debug | info | warn | error
+# ── Logging ────────────────────────────────────────────────────────────────
+# Log level: debug | info | warn | error
 log_level: "info"
-# Optional rotating log file. Empty means auto default: <ALICE_HOME>/log/YYYY-MM-DD.log
+# Log file path. Empty means <ALICE_HOME>/log/YYYY-MM-DD.log with daily rotation.
 log_file: ""
+# Max size per log file before rotation (megabytes).
 log_max_size_mb: 20
+# Max number of rotated log files to keep.
 log_max_backups: 5
+# Max days to keep rotated log files.
 log_max_age_days: 7
+# Whether to gzip rotated log files.
 log_compress: false
