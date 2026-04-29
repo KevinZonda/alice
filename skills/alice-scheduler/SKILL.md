@@ -35,10 +35,8 @@ description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化
 - `schedule.cron_expr`：`cron` 必填
 - `action.type`：固定为 `run_llm`
 - `action.prompt`：必填；本次定时运行要执行的提示词、目标或操作说明
-- `action.model`：可选；指定模型名
-- `action.provider`：可选；指定 provider 名
-- `action.state_key`：可选；给 Codex/Kimi 这类 provider 提供稳定 thread-ID 槽位，让同一类任务持续落在同一会话状态上
-- `action.resume_thread_id`：可选；sticky thread ID。若已知上一次运行对应的 provider thread/session，可在这里显式续接；每次成功执行后系统会自动更新为最新 thread/session ID
+- `action.state_key`：可选；给支持稳定状态槽位的后端提供 thread-ID 槽位，让同一类任务持续落在同一会话状态上
+- `action.resume_thread_id`：可选；sticky thread ID。若已知上一次运行对应的后端 thread/session，可在这里显式续接；每次成功执行后系统会自动更新为最新 thread/session ID
 - `action.source_message_id`：可选；Feishu message ID（`om_xxx`）。设置后，每次发送改走 Reply API + `reply_in_thread=true`，结果落在同一 thread。首次留空时，系统会在第一次成功发送后自动写回该字段，后续运行自动 in-thread 回复
 - `resume_session_key`：可选顶层字段；把结果路由到指定 Feishu 渠道或 work thread，而不是默认当前会话。适合把定时任务固定回复到某个群、P2P 会话或现有 thread
 - `manage_mode`：`creator_only` 或 `scope_all`（`scope_all` 仅群聊有意义）
@@ -47,7 +45,7 @@ description: 通过 Alice 本地 runtime HTTP API 管理当前会话的自动化
 
 ### 基础字段
 
-最小可用任务只需要 `action.type: run_llm` 和 `action.prompt`。若需要固定模型栈，可以同时指定 `action.model` 与 `action.provider`。
+最小可用任务只需要 `action.type: run_llm` 和 `action.prompt`。不要主动填写模型选择字段；Alice 会按当前 session/thread 所属 scene 继承运行时配置里的模型档位。
 
 ```yaml
 title: daily-sync
@@ -56,18 +54,36 @@ schedule:
   cron_expr: "0 9 * * *"
 action:
   type: run_llm
-  provider: openai
-  model: gpt-5.4
   prompt: |
     总结昨天进展，列出今天优先级最高的三件事。
 ```
+
+### 模型选择
+
+默认不要选择模型。普通定时任务应继承当前会话的模型设置：当前 session/thread → scene → `group_scenes.<scene>.llm_profile` → `llm_profiles`。
+
+只有用户明确要求切换模型档位时，才使用高级模型选择字段。优先使用 `action.profile` 指向 Alice 配置中的 `llm_profiles` 名字；不要自行编造 provider 或 model 名。
+
+```yaml
+title: deep-review
+schedule:
+  type: interval
+  every_seconds: 3600
+action:
+  type: run_llm
+  profile: work
+  prompt: |
+    对当前任务做深入复盘，只汇报新的风险和下一步。
+```
+
+`action.provider` 和 `action.model` 是更底层的高级字段，只有用户明确给出完整 backend/model 组合时才使用；不要为了“更精确”而主动填写。
 
 ### 持续续接同一线程
 
 `action.state_key`、`action.resume_thread_id`、`action.source_message_id` 解决的是不同层面的“续接”：
 
-- `action.state_key`：给 Codex/Kimi provider 一个稳定状态槽位。适合同一类定时任务长期复用同一 provider 侧线程标识
-- `action.resume_thread_id`：显式保存并续接某个 provider thread/session。系统每次成功运行后都会自动刷新它，适合 sticky thread
+- `action.state_key`：给支持稳定状态槽位的后端一个稳定状态槽位。适合同一类定时任务长期复用同一后端线程标识
+- `action.resume_thread_id`：显式保存并续接某个后端 thread/session。系统每次成功运行后都会自动刷新它，适合 sticky thread
 - `action.source_message_id`：控制 Feishu 投递 thread。第一次成功发送后可自动 bootstrap，后续始终 reply 到同一条消息线程
 
 如果你想让任务既续接 LLM 会话，又持续回复到同一个 Feishu thread，可以三者一起使用：
@@ -80,8 +96,6 @@ schedule:
   every_seconds: 1800
 action:
   type: run_llm
-  provider: codex
-  model: gpt-5.4
   state_key: camp_active
   resume_thread_id: uuid-xxx
   source_message_id: om_seed_xxx
@@ -109,8 +123,6 @@ schedule:
   cron_expr: "0 9 * * *"
 action:
   type: run_llm
-  provider: codex
-  model: gpt-5.4
   resume_thread_id: uuid-xxx
   prompt: |
     继续昨天的线程上下文，汇总最新进展并指出仍未解决的问题。
@@ -134,8 +146,6 @@ schedule:
   cron_expr: "0 18 * * 5"
 action:
   type: run_llm
-  provider: kimi
-  model: kimi-latest
   state_key: weekly_report
   prompt: |
     生成本周总结，突出已完成事项、风险和下周计划。
