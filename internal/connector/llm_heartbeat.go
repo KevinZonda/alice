@@ -352,7 +352,7 @@ func parseLLMHeartbeatFileChanges(message string, seenAt time.Time) []llmHeartbe
 }
 
 func parseLLMHeartbeatFileChangeLine(line string, seenAt time.Time) llmHeartbeatFileChange {
-	line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
+	line = trimLLMHeartbeatMarkdownListPrefix(line)
 	if line == "" {
 		return llmHeartbeatFileChange{}
 	}
@@ -400,6 +400,20 @@ func parseLLMHeartbeatFileChangeTail(tail string) (string, int, int, bool) {
 		}
 	}
 	return status, 0, 0, false
+}
+
+func trimLLMHeartbeatMarkdownListPrefix(line string) string {
+	line = strings.TrimSpace(line)
+	for {
+		switch {
+		case strings.HasPrefix(line, "- "):
+			line = strings.TrimSpace(strings.TrimPrefix(line, "- "))
+		case strings.HasPrefix(line, "* "):
+			line = strings.TrimSpace(strings.TrimPrefix(line, "* "))
+		default:
+			return line
+		}
+	}
 }
 
 func formatLLMHeartbeatFileChange(change llmHeartbeatFileChange) string {

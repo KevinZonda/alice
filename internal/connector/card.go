@@ -110,7 +110,7 @@ func buildLLMHeartbeatCardContent(state llmHeartbeatCardState) string {
 		}
 		lines = append(lines, fmt.Sprintf("**最近代码编辑**：%d 项", total))
 		for _, raw := range state.FileChanges {
-			line := strings.TrimSpace(raw)
+			line := trimLLMHeartbeatMarkdownListPrefix(raw)
 			if line == "" {
 				continue
 			}
