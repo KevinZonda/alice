@@ -234,7 +234,7 @@ bots:
         # Session scope for DM chat:
         # - per_user: all DM messages from the same user share one session
         session_scope: "per_user"
-        llm_profile: ""
+        llm_profile: "chat"
         no_reply_token: "[[NO_REPLY]]"
         create_feishu_thread: false
       work:
@@ -243,9 +243,9 @@ bots:
         # Session scope for DM work:
         # - per_message: each message with #work creates its own session
         session_scope: "per_message"
-        llm_profile: ""
+        llm_profile: "work"
         no_reply_token: ""
-        create_feishu_thread: false
+        create_feishu_thread: true
 
     # ── Runtime HTTP API ───────────────────────────────────────────────────
     # Alice exposes a local HTTP API for bundled skills and automation tasks.
