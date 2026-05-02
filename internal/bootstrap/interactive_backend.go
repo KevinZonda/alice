@@ -163,6 +163,7 @@ func (b *interactiveProviderBackend) runInteractive(ctx context.Context, session
 	}
 
 	reply := ""
+	assistantText := ""
 	nextThreadID := strings.TrimSpace(submitted.ThreadID)
 	var usage agentbridge.Usage
 	for {
@@ -186,10 +187,11 @@ func (b *interactiveProviderBackend) runInteractive(ctx context.Context, session
 			}
 			switch event.Kind {
 			case agentbridge.TurnEventAssistantText:
-				text := strings.TrimSpace(event.Text)
+				assistantText = updateAssistantText(assistantText, event)
+				text := strings.TrimSpace(assistantText)
 				if text != "" {
 					reply = text
-					if req.OnProgress != nil {
+					if req.OnProgress != nil && !isAssistantTextDeltaEvent(event) {
 						req.OnProgress(text)
 					}
 				}
@@ -225,6 +227,20 @@ func (b *interactiveProviderBackend) sessionRunMutex(sessionKey string) *sync.Mu
 	mu := &sync.Mutex{}
 	b.runMu[sessionKey] = mu
 	return mu
+}
+
+func updateAssistantText(current string, event agentbridge.TurnEvent) string {
+	if event.Text == "" {
+		return current
+	}
+	if isAssistantTextDeltaEvent(event) {
+		return current + event.Text
+	}
+	return event.Text
+}
+
+func isAssistantTextDeltaEvent(event agentbridge.TurnEvent) bool {
+	return strings.Contains(event.Raw, `"item/agentMessage/delta"`)
 }
 
 func (b *interactiveProviderBackend) session(sessionKey string) *agentbridge.InteractiveSession {
