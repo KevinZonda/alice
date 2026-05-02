@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -45,6 +46,66 @@ type llmRunOptions struct {
 	NoReplyToken    string
 	PromptPrefix    string
 	WorkDir         string
+}
+
+type llmSteerBackend interface {
+	Steer(ctx context.Context, req agentbridge.RunRequest) error
+}
+
+func (p *Processor) TrySteerJob(ctx context.Context, job Job) (bool, error) {
+	if p == nil || isBuiltinCommandText(job.Text) {
+		return false, nil
+	}
+	snapshot := p.runtimeSnapshot()
+	if snapshot.llm == nil {
+		return false, nil
+	}
+	steer, ok := snapshot.llm.(llmSteerBackend)
+	if !ok {
+		return false, nil
+	}
+
+	sessionKey := sessionKeyForJob(job)
+	if strings.TrimSpace(sessionKey) == "" {
+		return false, nil
+	}
+
+	p.enrichJobUserNames(ctx, &job)
+	p.touchSessionMessage(sessionKey, p.now())
+	p.prepareJobForLLM(ctx, &job)
+
+	currentThreadID := p.getThreadID(sessionKey)
+	promptText := p.buildUserTextWithReplyContext(ctx, job, currentThreadID)
+	options := p.jobLLMRunOptions(job)
+	env := p.buildLLMRunEnv(job)
+	err := steer.Steer(ctx, agentbridge.RunRequest{
+		ThreadID:        strings.TrimSpace(currentThreadID),
+		AgentName:       "assistant",
+		UserText:        promptText,
+		Scene:           strings.TrimSpace(options.Scene),
+		Provider:        strings.TrimSpace(options.Provider),
+		Model:           strings.TrimSpace(options.Model),
+		Profile:         strings.TrimSpace(options.Profile),
+		ReasoningEffort: strings.TrimSpace(options.ReasoningEffort),
+		Variant:         strings.TrimSpace(options.Variant),
+		Personality:     strings.TrimSpace(options.Personality),
+		WorkspaceDir:    strings.TrimSpace(options.WorkDir),
+		Env:             env,
+	})
+	if errors.Is(err, agentbridge.ErrNoActiveTurn) ||
+		errors.Is(err, agentbridge.ErrInteractiveClosed) ||
+		errors.Is(err, agentbridge.ErrSteerUnsupported) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if effectiveJobResponseMode(job) == jobResponseModeReply &&
+		strings.TrimSpace(job.SourceMessageID) != "" &&
+		!job.DisableAck {
+		p.sendImmediateFeedback(ctx, job)
+	}
+	return true, nil
 }
 
 func (p *Processor) runLLM(
