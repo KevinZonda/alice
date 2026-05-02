@@ -236,9 +236,16 @@ func (a *App) removeOlderPendingJobsLocked(sessionKey string, keepVersion uint64
 	if sessionKey == "" || keepVersion == 0 {
 		return
 	}
+	activeVersion := uint64(0)
+	if active, ok := a.state.active[sessionKey]; ok && active.cancel != nil {
+		activeVersion = active.version
+	}
 	changed := false
 	for key, job := range a.state.pending {
 		if strings.TrimSpace(job.SessionKey) != sessionKey {
+			continue
+		}
+		if activeVersion != 0 && job.SessionVersion == activeVersion {
 			continue
 		}
 		if job.SessionVersion >= keepVersion {

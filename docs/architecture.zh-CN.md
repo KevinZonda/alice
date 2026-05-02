@@ -99,9 +99,9 @@ prompt 的优先级是磁盘优先、内嵌兜底。
 - `internal/config`
   配置结构、校验、默认值、路径推导、多 bot 展开
 - `internal/connector`
-  飞书接入、消息归一化、scene 路由、排队、按 session 串行、抢占中断、prompt 组装、回复派发、附件下载、session 落盘、内建命令
-- `lib/llm-cli-bridge`（独立 Go 模块）
-  CLI 调用翻译层，封装 codex/claude/gemini/kimi 的 CLI 调用方式和输出解析；独立模块，可作为库被外部项目引用。
+  飞书接入、消息归一化、scene 路由、排队、按 session 串行、原生 steer 兜底、`/stop` 中断、prompt 组装、回复派发、附件下载、session 落盘、内建命令
+- `github.com/Alice-space/agentbridge`
+  provider 无关的 backend contract，以及 codex/claude/gemini/kimi/opencode 的 provider adapter
 - `internal/prompting`
   模板加载器，支持磁盘优先 / 内嵌兜底、`sprig` helper、编译缓存
 - `internal/runtimeapi`
@@ -139,9 +139,10 @@ prompt 的优先级是磁盘优先、内嵌兜底。
 1. 飞书通过 WebSocket 推送 `im.message.receive_v1`
 2. `App` 把事件归一化成 `Job`
 3. `routeIncomingJob` 决定这条消息是忽略、内建命令、`chat` 还是 `work`
-4. job 入队
-5. 同一个 session 上如果来了更新的 job，旧 job 会被打断
-6. 被接受的 job 交给 `Processor` 执行
+4. 如果同一个 session 存在 provider 原生交互式 active run，Alice 会先尝试把新输入 steer 到当前 run
+5. 如果不支持原生 steer，job 入队并按 session 串行执行；更新的 queued job 会替换更旧的 queued job，但不会打断正在跑的 LLM run
+6. `/stop` 仍然会中断 active run；用户消息也仍然可以中断已经占用 session gate 的 automation task
+7. 被接受的 job 交给 `Processor` 执行
 
 scene 路由规则：
 

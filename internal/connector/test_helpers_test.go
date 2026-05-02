@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentbridge "github.com/Alice-space/agentbridge"
+	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
 type codexStub struct {
@@ -57,6 +58,44 @@ func (c *codexCaptureStub) Run(_ context.Context, req agentbridge.RunRequest) (a
 		}
 	}
 	return agentbridge.RunResult{Reply: c.resp}, c.err
+}
+
+type steerCaptureStub struct {
+	mu sync.Mutex
+
+	runResp string
+	runErr  error
+
+	steerErr       error
+	steerCalls     int
+	lastSessionKey string
+	lastThreadID   string
+	lastInput      string
+}
+
+func (c *steerCaptureStub) Run(_ context.Context, req agentbridge.RunRequest) (agentbridge.RunResult, error) {
+	return agentbridge.RunResult{
+		Reply:        c.runResp,
+		NextThreadID: strings.TrimSpace(req.ThreadID),
+	}, c.runErr
+}
+
+func (c *steerCaptureStub) Steer(_ context.Context, req agentbridge.RunRequest) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.steerCalls++
+	if req.Env != nil {
+		c.lastSessionKey = strings.TrimSpace(req.Env[sessionctx.EnvSessionKey])
+	}
+	c.lastThreadID = strings.TrimSpace(req.ThreadID)
+	c.lastInput = req.UserText
+	return c.steerErr
+}
+
+func (c *steerCaptureStub) SteerCalls() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.steerCalls
 }
 
 type codexResumableCaptureStub struct {

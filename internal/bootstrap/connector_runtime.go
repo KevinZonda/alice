@@ -171,9 +171,9 @@ func buildLLMBackend(cfg config.Config) (agentbridge.Backend, error) {
 		if err != nil {
 			return nil, err
 		}
-		backends[provider] = backend
+		backends[provider] = newInteractiveProviderBackend(provider, providerCfg, backend)
 	}
-	return agentbridge.NewMultiBackend(cfg.LLMProvider, backends)
+	return newInteractiveMultiBackend(cfg.LLMProvider, backends)
 }
 
 func buildCodexExecPolicy(policy config.CodexExecPolicyConfig) agentbridge.ExecPolicyConfig {

@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -63,6 +64,75 @@ func TestApp_OnMessageReceive_GroupMentionQueued(t *testing.T) {
 	}
 	if got := len(app.queue); got != 1 {
 		t.Fatalf("expected queue len 1, got %d", got)
+	}
+}
+
+func TestApp_OnMessageReceive_ActiveSessionSteersInsteadOfQueue(t *testing.T) {
+	cfg := configForTest()
+	backend := &steerCaptureStub{}
+	sender := &senderStub{}
+	processor := NewProcessor(
+		backend,
+		sender,
+		"Codex 暂时不可用，请稍后重试。",
+		"正在思考中...",
+	)
+	app := NewApp(cfg, processor)
+
+	sessionKey := "chat_id:oc_chat"
+	processor.setThreadID(sessionKey, "thread_active")
+	app.state.latest[sessionKey] = 1
+	app.state.pending[pendingJobKey(Job{
+		SessionKey:     sessionKey,
+		SessionVersion: 1,
+		EventID:        "evt_active",
+	})] = Job{
+		ReceiveID:      "oc_chat",
+		ReceiveIDType:  "chat_id",
+		SessionKey:     sessionKey,
+		SessionVersion: 1,
+		EventID:        "evt_active",
+		Text:           "first",
+	}
+	app.state.active[sessionKey] = activeSessionRun{
+		eventID: "evt_active",
+		version: 1,
+		cancel:  func(error) {},
+	}
+
+	event := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_steer"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_steer"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"please enqueue this"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event); err != nil {
+		t.Fatalf("unexpected event error: %v", err)
+	}
+	if got := len(app.queue); got != 0 {
+		t.Fatalf("expected steered message not to be queued, got queue len %d", got)
+	}
+	if got := backend.SteerCalls(); got != 1 {
+		t.Fatalf("expected one steer call, got %d", got)
+	}
+	if backend.lastSessionKey != sessionKey {
+		t.Fatalf("unexpected steer session key: %q", backend.lastSessionKey)
+	}
+	if backend.lastThreadID != "thread_active" {
+		t.Fatalf("unexpected steer thread id: %q", backend.lastThreadID)
+	}
+	if !strings.Contains(backend.lastInput, "please enqueue this") {
+		t.Fatalf("expected steer input to contain message text, got %q", backend.lastInput)
+	}
+	if sender.replyCardCalls != 1 || !strings.Contains(sender.replyCards[0], "收到！") {
+		t.Fatalf("expected steer ack card, got cards=%#v", sender.replyCards)
 	}
 }
 

@@ -18,9 +18,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	agentbridgeclaude "github.com/Alice-space/agentbridge/claude"
-	agentbridgecodex "github.com/Alice-space/agentbridge/codex"
-	agentbridgeopencode "github.com/Alice-space/agentbridge/opencode"
+	agentbridgeclaude "github.com/Alice-space/agentbridge/providers/claude"
+	agentbridgecodex "github.com/Alice-space/agentbridge/providers/codex"
+	agentbridgeopencode "github.com/Alice-space/agentbridge/providers/opencode"
 	aliceassets "github.com/Alice-space/alice"
 	"github.com/Alice-space/alice/internal/bootstrap"
 	"github.com/Alice-space/alice/internal/buildinfo"

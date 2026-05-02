@@ -354,6 +354,39 @@ func (a *App) onMessageReceive(ctx context.Context, event *larkim.P2MessageRecei
 	job.BotName = strings.TrimSpace(runtimeCfg.botName)
 	job.SoulPath = strings.TrimSpace(runtimeCfg.soulPath)
 
+	sessionKey := normalizeJobSessionKey(*job)
+	if strings.TrimSpace(job.SessionKey) == "" {
+		job.SessionKey = sessionKey
+	}
+	if sessionKey != "" && a.hasActiveRun(sessionKey) && a.processor != nil {
+		steered, steerErr := a.processor.TrySteerJob(ctx, *job)
+		if steerErr != nil {
+			logging.Warnf(
+				"steer active job failed, fallback to queue event_id=%s session=%s err=%v",
+				job.EventID,
+				sessionKey,
+				steerErr,
+			)
+		} else if steered {
+			logging.Infof(
+				"job steered event_id=%s receive_id_type=%s session=%s",
+				job.EventID,
+				job.ReceiveIDType,
+				sessionKey,
+			)
+			logging.Debugf(
+				"job accepted event_id=%s channel=%s receive_id_type=%s receive_id=%s source_message_id=%s normalized_text=%q mode=steer",
+				job.EventID,
+				"feishu_im",
+				job.ReceiveIDType,
+				job.ReceiveID,
+				job.SourceMessageID,
+				job.Text,
+			)
+			return nil
+		}
+	}
+
 	queued, cancelActive, canceledEventID := a.enqueueJob(job)
 	if !queued {
 		logging.Warnf("queue full, drop event_id=%s", job.EventID)

@@ -118,14 +118,21 @@ func (a *App) enqueueJob(job *Job) (queued bool, cancelActive context.CancelFunc
 
 	nextVersion := a.state.latest[job.SessionKey] + 1
 	job.SessionVersion = nextVersion
-	active, interruptActive := a.state.active[job.SessionKey]
-	interruptActive = interruptActive && active.cancel != nil && active.version < nextVersion
-	if interruptActive && isBuiltinCommandText(job.Text) && !isStopCommand(job.Text) {
-		interruptActive = false
+	active, hasActive := a.state.active[job.SessionKey]
+	activeVersion := uint64(0)
+	if hasActive && active.cancel != nil && active.version != 0 {
+		activeVersion = active.version
 	}
+	interruptActive := hasActive &&
+		active.cancel != nil &&
+		active.version < nextVersion &&
+		(active.version == 0 || isStopCommand(job.Text))
 	supersedeQueued := false
 	for _, pendingJob := range a.state.pending {
 		if strings.TrimSpace(pendingJob.SessionKey) != job.SessionKey {
+			continue
+		}
+		if activeVersion != 0 && pendingJob.SessionVersion == activeVersion {
 			continue
 		}
 		if pendingJob.SessionVersion < nextVersion {
@@ -181,6 +188,18 @@ func (a *App) setActiveRun(sessionKey string, version uint64, eventID string, ca
 		version: version,
 		cancel:  cancel,
 	}
+}
+
+func (a *App) hasActiveRun(sessionKey string) bool {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return false
+	}
+
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	active, ok := a.state.active[sessionKey]
+	return ok && active.cancel != nil && active.version != 0
 }
 
 func (a *App) clearActiveRun(sessionKey string, version uint64) {

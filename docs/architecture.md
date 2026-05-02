@@ -102,9 +102,9 @@ Core packages:
 - `internal/config`
   Config schema, validation, defaults, path derivation, and multi-bot expansion.
 - `internal/connector`
-  Feishu ingress, message normalization, scene routing, queueing, session serialization, interruption, prompt assembly, reply dispatch, attachment download, session persistence, and built-in commands.
-- `internal/llm`
-  Provider-agnostic backend contract plus provider adapters for `codex`, `claude`, `gemini`, and `kimi`.
+  Feishu ingress, message normalization, scene routing, queueing, session serialization, native steer fallback, `/stop` interruption, prompt assembly, reply dispatch, attachment download, session persistence, and built-in commands.
+- `github.com/Alice-space/agentbridge`
+  Provider-agnostic backend contract plus provider adapters for `codex`, `claude`, `gemini`, `kimi`, and `opencode`.
 - `internal/prompting`
   Template loader with disk-first / embedded-fallback behavior, `sprig` helpers, and compiled-template caching.
 - `internal/runtimeapi`
@@ -142,9 +142,10 @@ High-level flow:
 1. Feishu delivers `im.message.receive_v1` over WebSocket.
 2. `App` normalizes the event into a `Job`.
 3. `routeIncomingJob` decides whether the message should be ignored, treated as a built-in command, handled as `chat`, or handled as `work`.
-4. The job is queued and serialized by session.
-5. If a newer job supersedes the current one for the same session, the in-flight run is interrupted.
-6. `Processor` executes the accepted job.
+4. If the same session has an active provider-native interactive run, Alice first tries to steer the new input into that run.
+5. If native steer is unavailable, the job is queued and serialized by session; newer queued jobs supersede older queued jobs without interrupting the active LLM run.
+6. `/stop` still interrupts the active run, and user messages can still interrupt automation tasks that acquired the session gate.
+7. `Processor` executes the accepted job.
 
 Scene routing rules:
 
