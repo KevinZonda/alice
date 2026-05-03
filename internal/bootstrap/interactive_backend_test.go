@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	agentbridge "github.com/Alice-space/agentbridge"
 )
@@ -64,9 +65,42 @@ func TestInteractiveProviderBackendForwardsAssistantTextAndDropsToolUse(t *testi
 	}
 }
 
+func TestInteractiveProviderBackendClosesIdleSession(t *testing.T) {
+	sessionKey := "session-opencode"
+	driver := &interactiveBackendTestDriver{
+		provider: agentbridge.ProviderOpenCode,
+		events:   make(chan agentbridge.TurnEvent, 8),
+	}
+	session := agentbridge.NewInteractiveSession(driver)
+
+	backend := &interactiveProviderBackend{
+		provider: agentbridge.ProviderOpenCode,
+		idleTTL:  10 * time.Millisecond,
+		sessions: map[string]*agentbridge.InteractiveSession{
+			sessionKey: session,
+		},
+		runMu: map[string]*sync.Mutex{},
+	}
+
+	result, err := backend.runInteractive(context.Background(), sessionKey, agentbridge.RunRequest{UserText: "hello"})
+	if err != nil {
+		t.Fatalf("runInteractive returned error: %v", err)
+	}
+	if result.Reply != agentbridge.ProviderOpenCode+" middle" {
+		t.Fatalf("reply = %q", result.Reply)
+	}
+
+	waitForBootstrap(t, time.Second, func() bool {
+		return backend.session(sessionKey) == nil && driver.closeCount() == 1
+	}, "idle interactive session should be closed")
+}
+
 type interactiveBackendTestDriver struct {
-	provider string
-	events   chan agentbridge.TurnEvent
+	provider  string
+	events    chan agentbridge.TurnEvent
+	closeOnce sync.Once
+	closeMu   sync.Mutex
+	closes    int
 }
 
 func (d *interactiveBackendTestDriver) SteerMode() agentbridge.SteerMode {
@@ -121,6 +155,29 @@ func (d *interactiveBackendTestDriver) Events() <-chan agentbridge.TurnEvent {
 }
 
 func (d *interactiveBackendTestDriver) Close() error {
-	close(d.events)
+	d.closeOnce.Do(func() {
+		d.closeMu.Lock()
+		d.closes++
+		d.closeMu.Unlock()
+		close(d.events)
+	})
 	return nil
+}
+
+func (d *interactiveBackendTestDriver) closeCount() int {
+	d.closeMu.Lock()
+	defer d.closeMu.Unlock()
+	return d.closes
+}
+
+func waitForBootstrap(t *testing.T, timeout time.Duration, ok func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal(message)
 }

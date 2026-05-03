@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentbridge "github.com/Alice-space/agentbridge"
+	"github.com/Alice-space/alice/internal/logging"
 	"github.com/Alice-space/alice/internal/sessionctx"
 )
 
@@ -100,20 +101,30 @@ type interactiveProviderBackend struct {
 	cfg      agentbridge.FactoryConfig
 	fallback agentbridge.Backend
 	timeout  time.Duration
+	idleTTL  time.Duration
 
-	mu       sync.Mutex
-	sessions map[string]*agentbridge.InteractiveSession
-	runMu    map[string]*sync.Mutex
+	mu             sync.Mutex
+	sessions       map[string]*agentbridge.InteractiveSession
+	runMu          map[string]*sync.Mutex
+	idleTimers     map[string]*time.Timer
+	idleGeneration map[string]uint64
 }
+
+// Keep a short grace window for immediate follow-up turns while preventing one
+// long-lived provider process per Feishu session from accumulating indefinitely.
+const defaultInteractiveSessionIdleTTL = 30 * time.Second
 
 func newInteractiveProviderBackend(provider string, cfg agentbridge.FactoryConfig, fallback agentbridge.Backend) *interactiveProviderBackend {
 	return &interactiveProviderBackend{
-		provider: normalizeBackendProvider(provider),
-		cfg:      cfg,
-		fallback: fallback,
-		timeout:  providerTimeout(cfg),
-		sessions: make(map[string]*agentbridge.InteractiveSession),
-		runMu:    make(map[string]*sync.Mutex),
+		provider:       normalizeBackendProvider(provider),
+		cfg:            cfg,
+		fallback:       fallback,
+		timeout:        providerTimeout(cfg),
+		idleTTL:        defaultInteractiveSessionIdleTTL,
+		sessions:       make(map[string]*agentbridge.InteractiveSession),
+		runMu:          make(map[string]*sync.Mutex),
+		idleTimers:     make(map[string]*time.Timer),
+		idleGeneration: make(map[string]uint64),
 	}
 }
 
@@ -203,12 +214,15 @@ func (b *interactiveProviderBackend) runInteractive(ctx context.Context, session
 				emitInteractiveRawEvent(req.OnRawEvent, event)
 			case agentbridge.TurnEventCompleted:
 				emitInteractiveRawEvent(req.OnRawEvent, event)
+				b.scheduleSessionIdleClose(sessionKey, session)
 				return agentbridge.RunResult{Reply: reply, NextThreadID: nextThreadID, Usage: usage}, nil
 			case agentbridge.TurnEventInterrupted:
 				emitInteractiveRawEvent(req.OnRawEvent, event)
+				b.dropSession(sessionKey, session)
 				return agentbridge.RunResult{Reply: reply, NextThreadID: nextThreadID, Usage: usage}, context.Canceled
 			case agentbridge.TurnEventError:
 				emitInteractiveRawEvent(req.OnRawEvent, event)
+				b.dropSession(sessionKey, session)
 				if event.Err != nil {
 					return agentbridge.RunResult{Reply: reply, NextThreadID: nextThreadID, Usage: usage}, event.Err
 				}
@@ -256,6 +270,9 @@ func (b *interactiveProviderBackend) sessionRunMutex(sessionKey string) *sync.Mu
 	sessionKey = strings.TrimSpace(sessionKey)
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.runMu == nil {
+		b.runMu = make(map[string]*sync.Mutex)
+	}
 	if mu := b.runMu[sessionKey]; mu != nil {
 		return mu
 	}
@@ -277,7 +294,11 @@ func (b *interactiveProviderBackend) ensureSession(sessionKey string) (*agentbri
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.sessions == nil {
+		b.sessions = make(map[string]*agentbridge.InteractiveSession)
+	}
 	if session := b.sessions[sessionKey]; session != nil {
+		b.cancelSessionIdleCloseLocked(sessionKey)
 		return session, nil
 	}
 	session, err := agentbridge.NewInteractiveProviderSession(b.cfg)
@@ -286,6 +307,53 @@ func (b *interactiveProviderBackend) ensureSession(sessionKey string) (*agentbri
 	}
 	b.sessions[sessionKey] = session
 	return session, nil
+}
+
+func (b *interactiveProviderBackend) scheduleSessionIdleClose(sessionKey string, session *agentbridge.InteractiveSession) {
+	if b == nil || session == nil {
+		return
+	}
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" || b.idleTTL <= 0 {
+		return
+	}
+	b.mu.Lock()
+	if b.sessions[sessionKey] != session {
+		b.mu.Unlock()
+		return
+	}
+	b.ensureIdleMapsLocked()
+	if timer := b.idleTimers[sessionKey]; timer != nil {
+		timer.Stop()
+	}
+	b.idleGeneration[sessionKey]++
+	generation := b.idleGeneration[sessionKey]
+	b.idleTimers[sessionKey] = time.AfterFunc(b.idleTTL, func() {
+		b.closeIdleSession(sessionKey, session, generation)
+	})
+	b.mu.Unlock()
+}
+
+func (b *interactiveProviderBackend) closeIdleSession(sessionKey string, session *agentbridge.InteractiveSession, generation uint64) {
+	runMu := b.sessionRunMutex(sessionKey)
+	runMu.Lock()
+	defer runMu.Unlock()
+
+	b.mu.Lock()
+	if b.sessions[sessionKey] != session || b.idleGeneration[sessionKey] != generation {
+		b.mu.Unlock()
+		return
+	}
+	delete(b.sessions, sessionKey)
+	delete(b.idleTimers, sessionKey)
+	delete(b.idleGeneration, sessionKey)
+	if b.runMu[sessionKey] == runMu {
+		delete(b.runMu, sessionKey)
+	}
+	b.mu.Unlock()
+
+	logging.Infof("interactive backend idle session closed provider=%s session=%s", b.provider, sessionKey)
+	_ = session.Close()
 }
 
 func (b *interactiveProviderBackend) interruptAndDropSession(sessionKey string, session *agentbridge.InteractiveSession) {
@@ -306,8 +374,32 @@ func (b *interactiveProviderBackend) dropSession(sessionKey string, session *age
 	if b.sessions[sessionKey] == session {
 		delete(b.sessions, sessionKey)
 	}
+	if timer := b.idleTimers[sessionKey]; timer != nil {
+		timer.Stop()
+	}
+	delete(b.idleTimers, sessionKey)
+	delete(b.idleGeneration, sessionKey)
+	delete(b.runMu, sessionKey)
 	b.mu.Unlock()
 	_ = session.Close()
+}
+
+func (b *interactiveProviderBackend) ensureIdleMapsLocked() {
+	if b.idleTimers == nil {
+		b.idleTimers = make(map[string]*time.Timer)
+	}
+	if b.idleGeneration == nil {
+		b.idleGeneration = make(map[string]uint64)
+	}
+}
+
+func (b *interactiveProviderBackend) cancelSessionIdleCloseLocked(sessionKey string) {
+	b.ensureIdleMapsLocked()
+	if timer := b.idleTimers[sessionKey]; timer != nil {
+		timer.Stop()
+		delete(b.idleTimers, sessionKey)
+	}
+	b.idleGeneration[sessionKey]++
 }
 
 func runRequestSessionKey(req agentbridge.RunRequest) string {
