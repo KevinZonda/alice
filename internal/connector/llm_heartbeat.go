@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -166,7 +167,7 @@ func (h *llmHeartbeat) RecordBackendEvent(event agentbridge.RawEvent) {
 	if h.cfg.ShowShellCommands && (kind == "tool_use" || kind == "tool_call") {
 		detail := strings.TrimSpace(event.Detail)
 		if detail != "" {
-			h.lastShellCommand = detail
+			h.lastShellCommand = cleanToolUseDetail(detail)
 			h.lastShellCommandKind = kind
 		}
 	}
@@ -177,9 +178,14 @@ func (h *llmHeartbeat) RecordShellCommand(kind, detail string) {
 	if h == nil || !h.cfg.ShowShellCommands {
 		return
 	}
+	kind = strings.TrimSpace(kind)
+	detail = strings.TrimSpace(detail)
+	if kind == "tool_use" || kind == "tool_call" {
+		detail = cleanToolUseDetail(detail)
+	}
 	h.mu.Lock()
-	h.lastShellCommand = strings.TrimSpace(detail)
-	h.lastShellCommandKind = strings.TrimSpace(kind)
+	h.lastShellCommand = detail
+	h.lastShellCommandKind = kind
 	h.mu.Unlock()
 }
 
@@ -467,4 +473,56 @@ func moveStringToEnd(values []string, value string) []string {
 		next = append(next, item)
 	}
 	return append(next, value)
+}
+
+var reBacktickKV = regexp.MustCompile(`(\w+)=\x60([^\x60]*)\x60`)
+
+func cleanToolUseDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if !strings.HasPrefix(detail, "tool_use ") && !strings.HasPrefix(detail, "tool_call ") {
+		return detail
+	}
+
+	rest := strings.TrimSpace(detail[strings.Index(detail, " "):])
+
+	kv := make(map[string]string)
+	matches := reBacktickKV.FindAllStringSubmatch(rest, -1)
+	for _, m := range matches {
+		if len(m) == 3 {
+			kv[m[1]] = strings.TrimSpace(m[2])
+		}
+	}
+
+	tool := firstNonEmpty(kv["tool"], kv["name"])
+	status := kv["status"]
+	command := kv["command"]
+
+	if tool == "" && command == "" {
+		return detail
+	}
+
+	var parts []string
+	if status != "" {
+		parts = append(parts, "["+status+"]")
+	}
+	if tool != "" {
+		parts = append(parts, tool)
+	}
+	if command != "" {
+		parts = append(parts, command)
+	}
+
+	if len(parts) == 0 {
+		return detail
+	}
+	return strings.Join(parts, " ")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
