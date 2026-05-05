@@ -4,6 +4,7 @@
 
 > **Goal mode + DeepSeek's low cost** = fire off dozens of coding tasks in parallel for pennies.
 > **Feishu on your phone** = start tasks from anywhere, get notified when done. You don't need to be at your desk.
+> **Native CLI, not cloud API** = start a task in your terminal, continue from Feishu on your phone. One `/session resume` and your context is there — no lock-in, no cloud dependency.
 
 [![Dev CI](https://github.com/Alice-space/alice/actions/workflows/ci.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/ci.yml)
 [![Main Release](https://github.com/Alice-space/alice/actions/workflows/main-release.yml/badge.svg)](https://github.com/Alice-space/alice/actions/workflows/main-release.yml)
