@@ -73,6 +73,8 @@ type Engine struct {
 	maxConcurrentTasks int
 	watchdogMu         sync.Mutex
 	watchdogLastAlert  map[string]time.Time
+	fastRunMu          sync.Mutex
+	consecutiveFastRuns map[string]int
 }
 
 type taskDispatch struct {
@@ -100,6 +102,7 @@ func NewEngine(store *Store, sender Sender) *Engine {
 		systemTasks:        make(map[string]*systemTaskRuntime),
 		maxConcurrentTasks: defaultMaxConcurrentTasks,
 		taskSem:            make(chan struct{}, defaultMaxConcurrentTasks),
+		consecutiveFastRuns: make(map[string]int),
 	}
 }
 

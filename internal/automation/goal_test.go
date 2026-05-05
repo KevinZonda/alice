@@ -1197,3 +1197,56 @@ type runLLMPanicStub struct{}
 func (s *runLLMPanicStub) Run(_ context.Context, _ llm.RunRequest) (llm.RunResult, error) {
 	panic("LLM should not be called for completed goals")
 }
+
+func TestEngine_ExecuteGoal_PausesOnFastLoop(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	sender := &senderStub{}
+	engine := NewEngine(store, sender)
+	runner := &fastLoopRunnerStub{runCount: 0}
+	engine.SetLLMRunner(runner)
+	engine.now = func() time.Time {
+		return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	}
+
+	scope := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed"}
+	if _, err := store.ReplaceGoal(GoalTask{
+		ID:         "goal_fast",
+		Objective:  "loop test",
+		Status:     GoalStatusActive,
+		DeadlineAt: time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC),
+		ThreadID:   "thread_fast",
+		Scope:      scope,
+		Route:      Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:    Actor{UserID: "ou_user"},
+		CreatedAt:  time.Date(2026, 5, 5, 9, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("create goal failed: %v", err)
+	}
+
+	if err := engine.ExecuteGoal(context.Background(), scope); err != nil {
+		t.Fatalf("ExecuteGoal failed: %v", err)
+	}
+	if runner.runCount != 5 {
+		t.Fatalf("expected 5 fast runs before pause, got %d", runner.runCount)
+	}
+
+	goal, err := store.GetGoal(scope)
+	if err != nil {
+		t.Fatalf("get goal failed: %v", err)
+	}
+	if goal.Status != GoalStatusPaused {
+		t.Fatalf("expected status paused, got %q", goal.Status)
+	}
+	if sender.lastText == "" || !strings.Contains(sender.lastText, "快速循环") {
+		t.Fatalf("expected fast loop notification, got %q", sender.lastText)
+	}
+}
+
+type fastLoopRunnerStub struct {
+	runCount int
+}
+
+func (s *fastLoopRunnerStub) Run(_ context.Context, _ llm.RunRequest) (llm.RunResult, error) {
+	s.runCount++
+	return llm.RunResult{GoalDone: false}, nil
+}
