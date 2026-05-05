@@ -19,7 +19,6 @@ func (e *Engine) runGoals(ctx context.Context) {
 	if e.store == nil {
 		return
 	}
-	// List both active and waiting-for-session goals.
 	allGoals, err := e.store.ListGoals("")
 	if err != nil {
 		logging.Warnf("goal tick list failed: %v", err)
@@ -27,6 +26,9 @@ func (e *Engine) runGoals(ctx context.Context) {
 	}
 	for _, goal := range allGoals {
 		if goal.Running {
+			continue
+		}
+		if goal.Status.IsTerminal() {
 			continue
 		}
 		switch goal.Status {
@@ -202,6 +204,7 @@ func (e *Engine) markGoalComplete(goal GoalTask) {
 		logging.Errorf("goal mark complete failed scope=%s:%s err=%v", goal.Scope.Kind, goal.Scope.ID, err)
 		return
 	}
+	e.setGoalRunning(goal.Scope, false)
 	logging.Infof("goal completed scope=%s:%s", goal.Scope.Kind, goal.Scope.ID)
 	elapsed := e.nowTime().Sub(goal.CreatedAt)
 	msg := "✅ 目标已完成\n   耗时: " + formatDurationHMS(elapsed)

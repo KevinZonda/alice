@@ -1156,3 +1156,44 @@ func TestRichTextCardContent_WrapsMarkdownInCardJSON(t *testing.T) {
 		t.Fatalf("expected markdown content, got %q", c)
 	}
 }
+
+func TestEngine_runGoals_SkipsCompletedGoals(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+	sender := &senderStub{}
+	engine := NewEngine(store, sender)
+	engine.SetLLMRunner(&runLLMPanicStub{})
+	engine.SetUserTaskTimeout(time.Second)
+
+	scope := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed"}
+	if _, err := store.ReplaceGoal(GoalTask{
+		ID:         "goal_completed",
+		Objective:  "already done",
+		Status:     GoalStatusComplete,
+		DeadlineAt: time.Now().Add(time.Hour),
+		ThreadID:   "thread_abc",
+		Scope:      scope,
+		Route:      Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:    Actor{UserID: "ou_user"},
+		CreatedAt:  time.Now(),
+	}); err != nil {
+		t.Fatalf("create completed goal failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	engine.runGoals(ctx)
+	cancel()
+
+	goal, err := store.GetGoal(scope)
+	if err != nil {
+		t.Fatalf("get goal failed: %v", err)
+	}
+	if goal.Status != GoalStatusComplete {
+		t.Fatalf("expected completed goal to remain complete, got %q", goal.Status)
+	}
+}
+
+type runLLMPanicStub struct{}
+
+func (s *runLLMPanicStub) Run(_ context.Context, _ llm.RunRequest) (llm.RunResult, error) {
+	panic("LLM should not be called for completed goals")
+}
