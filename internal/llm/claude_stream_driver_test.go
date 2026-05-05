@@ -13,8 +13,11 @@ import (
 func TestClaudeStreamDriverNativeEnqueue(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "stdin.jsonl")
+	readyFile := filepath.Join(dir, "ready")
 	command := writeClaudeFake(t, dir, `#!/bin/sh
 echo '{"type":"system","subtype":"init","session_id":"claude-session"}'
+# Signal to the test that stdin read loop is ready.
+touch "$CLAUDE_READY_FILE"
 i=0
 while IFS= read -r line; do
   i=$((i + 1))
@@ -30,7 +33,10 @@ done
 
 	driver := newClaudeStreamDriver(ClaudeConfig{
 		Command: command,
-		Env:     map[string]string{"CLAUDE_STDIN_LOG": logPath},
+		Env: map[string]string{
+			"CLAUDE_STDIN_LOG":  logPath,
+			"CLAUDE_READY_FILE": readyFile,
+		},
 	})
 	session := NewInteractiveSession(driver)
 	defer session.Close()
@@ -42,6 +48,7 @@ done
 	if first.Mode != SubmitStarted {
 		t.Fatalf("first mode = %q, want %q", first.Mode, SubmitStarted)
 	}
+	waitForFile(t, readyFile)
 	waitForJSONLines(t, logPath, 1)
 
 	second, err := session.Submit(context.Background(), RunRequest{UserText: "second"})
@@ -64,8 +71,11 @@ done
 func TestClaudeStreamDriverInterruptWritesControlRequest(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "stdin.jsonl")
+	readyFile := filepath.Join(dir, "ready")
 	command := writeClaudeFake(t, dir, `#!/bin/sh
 echo '{"type":"system","subtype":"init","session_id":"claude-session"}'
+# Signal to the test that stdin read loop is ready.
+touch "$CLAUDE_READY_FILE"
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$CLAUDE_STDIN_LOG"
 done
@@ -73,7 +83,10 @@ done
 
 	driver := newClaudeStreamDriver(ClaudeConfig{
 		Command: command,
-		Env:     map[string]string{"CLAUDE_STDIN_LOG": logPath},
+		Env: map[string]string{
+			"CLAUDE_STDIN_LOG":  logPath,
+			"CLAUDE_READY_FILE": readyFile,
+		},
 	})
 	session := NewInteractiveSession(driver)
 	defer session.Close()
@@ -81,6 +94,7 @@ done
 	if _, err := session.Submit(context.Background(), RunRequest{UserText: "first"}); err != nil {
 		t.Fatalf("submit failed: %v", err)
 	}
+	waitForFile(t, readyFile)
 	waitForJSONLines(t, logPath, 1)
 	if err := session.Interrupt(context.Background()); err != nil {
 		t.Fatalf("interrupt failed: %v", err)
@@ -104,6 +118,18 @@ func writeClaudeFake(t *testing.T, dir string, script string) string {
 		t.Fatalf("write fake claude command: %v", err)
 	}
 	return path
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for file %s", path)
 }
 
 func waitForJSONLines(t *testing.T, path string, want int) []string {

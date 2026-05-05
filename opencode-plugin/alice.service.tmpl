@@ -1,0 +1,16 @@
+[Unit]
+Description=Alice Connector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=ALICE_HOME={{.AliceHome}}
+WorkingDirectory={{.AliceHome}}
+ExecStart={{.BinPath}} --feishu-websocket
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
