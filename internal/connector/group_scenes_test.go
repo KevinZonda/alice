@@ -1102,3 +1102,69 @@ func TestApp_OnMessageReceive_SlashCommandInMainChatRoutedForAll(t *testing.T) {
 		t.Fatal("expected bot2 to route /help in main chat")
 	}
 }
+
+func TestApp_OnMessageReceive_SlashCommandsWorkInWorkOnlyMainChat(t *testing.T) {
+	cfg := configForWorkOnlyGroupScenesTest()
+	app := newGroupScenesApp(cfg, nil)
+	app.SetBotOpenID("ou_bot")
+
+	commands := []string{"/help", "/status", "/goal", "/cd"}
+	for _, cmd := range commands {
+		event := &larkim.P2MessageReceiveV1{
+			EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_" + cmd[1:]}},
+			Event: &larkim.P2MessageReceiveV1Data{
+				Message: &larkim.EventMessage{
+					MessageId:   strPtr("om_" + cmd[1:]),
+					MessageType: strPtr("text"),
+					Content:     strPtr(`{"text":"` + cmd + `"}`),
+					ChatId:      strPtr("oc_chat"),
+					ChatType:    strPtr("group"),
+				},
+			},
+		}
+		job, err := BuildJob(event)
+		if err != nil {
+			t.Fatalf("build job for %s failed: %v", cmd, err)
+		}
+		if !app.routeIncomingJob(job, event) {
+			t.Fatalf("expected %s to be routed in work-only main chat", cmd)
+		}
+	}
+}
+
+func TestApp_OnMessageReceive_SlashCommandInWorkSession(t *testing.T) {
+	cfg := configForGroupScenesTest()
+	processor := NewProcessor(codexStub{resp: "ok"}, &senderStub{}, "", "")
+	app := newGroupScenesApp(cfg, processor)
+	app.SetBotOpenID("ou_bot")
+
+	sessionKey := buildWorkSessionKey("chat_id", "oc_chat", "om_work_seed")
+	processor.setThreadID(sessionKey, "thread_backend")
+	processor.setWorkThreadID(sessionKey, "omt_work_feishu")
+
+	slashEvent := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_work_slash"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_work_slash"),
+				ThreadId:    strPtr("omt_work_feishu"),
+				RootId:      strPtr("om_work_seed"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"/goal"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("group"),
+			},
+		},
+	}
+
+	job, err := BuildJob(slashEvent)
+	if err != nil {
+		t.Fatalf("build job failed: %v", err)
+	}
+	if !app.routeIncomingJob(job, slashEvent) {
+		t.Fatal("expected /goal in work session to be routed")
+	}
+	if job.Scene != jobSceneWork {
+		t.Fatalf("expected work scene, got %q", job.Scene)
+	}
+}
