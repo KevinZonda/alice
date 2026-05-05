@@ -699,3 +699,16 @@ func TestProcessGoalCommand_RejectsNonWorkScene(t *testing.T) {
 		t.Fatalf("expected work-only rejection message, got %q", sender.replyMarkdownTexts[0])
 	}
 }
+
+func TestBuildGoalScopeFromJob_StripsMessageSuffix(t *testing.T) {
+	job := Job{
+		ChatType:      "group",
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		SessionKey:    "chat_id:oc_chat|work:om_seed|message:om_reply",
+	}
+	scope := buildGoalScopeFromJob(job)
+	if scope.ID != "chat_id:oc_chat|work:om_seed" {
+		t.Fatalf("expected scope ID without message suffix, got %q", scope.ID)
+	}
+}

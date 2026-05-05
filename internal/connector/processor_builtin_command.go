@@ -12,6 +12,7 @@ import (
 	"github.com/Alice-space/alice/internal/automation"
 	"github.com/Alice-space/alice/internal/config"
 	"github.com/Alice-space/alice/internal/logging"
+	"github.com/Alice-space/alice/internal/sessionkey"
 	"github.com/Alice-space/alice/internal/statusview"
 )
 
@@ -213,7 +214,11 @@ func (p *Processor) buildGoalStatusMarkdown(job Job) string {
 func buildGoalScopeFromJob(job Job) automation.Scope {
 	chatType := strings.ToLower(strings.TrimSpace(job.ChatType))
 	if chatType == "group" || chatType == "topic_group" {
-		return automation.Scope{Kind: automation.ScopeKindChat, ID: sessionKeyForJob(job)}
+		sk := sessionkey.WithoutMessage(sessionKeyForJob(job))
+		if sk == "" {
+			sk = strings.TrimSpace(job.ReceiveID)
+		}
+		return automation.Scope{Kind: automation.ScopeKindChat, ID: sk}
 	}
 	actorID := strings.TrimSpace(job.SenderUserID)
 	if actorID == "" {
