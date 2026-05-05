@@ -1,6 +1,8 @@
 package runtimeapi
 
 import (
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -345,6 +347,104 @@ func TestApplyTaskPatch_CanChangeStatus(t *testing.T) {
 		t.Fatalf("apply task patch failed: %v", err)
 	}
 	if next.Status != automation.TaskStatusPaused {
-		t.Fatalf("expected paused status, got %q", next.Status)
+		t.Fatalf("expected paused status for disabled task, got %q", next.Status)
+	}
+}
+
+func TestAutomationTaskGet_EnforcesScopeIsolation(t *testing.T) {
+	store := automation.NewStore(t.TempDir() + "/automation.db")
+	server := NewServer("", "test-token", nil, store, config.Config{})
+	httpServer := httptest.NewServer(server.engine)
+	defer httpServer.Close()
+	client := NewClient(httpServer.URL, "test-token")
+
+	session1 := sessionctx.SessionContext{
+		ReceiveIDType: "chat_id",
+		ReceiveID:     "oc_chat",
+		ActorOpenID:   "ou_actor",
+		ChatType:      "group",
+		SessionKey:    "chat_id:oc_chat|work:om_seed_1",
+	}
+	session2 := sessionctx.SessionContext{
+		ReceiveIDType: "chat_id",
+		ReceiveID:     "oc_chat",
+		ActorOpenID:   "ou_actor",
+		ChatType:      "group",
+		SessionKey:    "chat_id:oc_chat|work:om_seed_2",
+	}
+
+	result1, err := client.CreateTask(t.Context(), session1, CreateTaskRequest{
+		Prompt:       "task one",
+		EverySeconds: 60,
+	})
+	if err != nil {
+		t.Fatalf("create task1 failed: %v", err)
+	}
+	task1, ok := result1["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected task1 response: %#v", result1)
+	}
+	task1ID, _ := task1["id"].(string)
+	if task1ID == "" {
+		t.Fatalf("task1 missing id: %#v", task1)
+	}
+
+	result2, err := client.CreateTask(t.Context(), session2, CreateTaskRequest{
+		Prompt:       "task two",
+		EverySeconds: 60,
+	})
+	if err != nil {
+		t.Fatalf("create task2 failed: %v", err)
+	}
+	task2, ok := result2["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected task2 response: %#v", result2)
+	}
+	task2ID, _ := task2["id"].(string)
+	if task2ID == "" {
+		t.Fatalf("task2 missing id: %#v", task2)
+	}
+
+	gotResult1, err := client.GetTask(t.Context(), session1, task1ID)
+	if err != nil {
+		t.Fatalf("get task1 in own scope failed: %v", err)
+	}
+	gotTask1, _ := gotResult1["task"].(map[string]any)
+	gotID1, _ := gotTask1["id"].(string)
+	if gotID1 != task1ID {
+		t.Fatalf("expected task1 id %q, got %q", task1ID, gotID1)
+	}
+
+	_, err = client.GetTask(t.Context(), session1, task2ID)
+	if err == nil {
+		t.Fatalf("expected error when getting task2 from session1 scope, got nil")
+	}
+	if !strings.Contains(err.Error(), "task not found in current scope") {
+		t.Fatalf("expected scope isolation error, got: %v", err)
+	}
+}
+
+func TestGoalCreate_RejectsNonWorkSession(t *testing.T) {
+	store := automation.NewStore(t.TempDir() + "/automation.db")
+	server := NewServer("", "test-token", nil, store, config.Config{})
+	httpServer := httptest.NewServer(server.engine)
+	defer httpServer.Close()
+	client := NewClient(httpServer.URL, "test-token")
+
+	_, err := client.CreateGoal(t.Context(), sessionctx.SessionContext{
+		ReceiveIDType: "chat_id",
+		ReceiveID:     "oc_chat",
+		ActorOpenID:   "ou_actor",
+		ChatType:      "group",
+		SessionKey:    "chat_id:oc_chat",
+	}, CreateGoalRequest{
+		Objective:  "test goal without work session",
+		DeadlineIn: "24h",
+	})
+	if err == nil {
+		t.Fatalf("expected error for non-work session goal creation, got nil")
+	}
+	if !strings.Contains(err.Error(), "work sessions") {
+		t.Fatalf("expected 'work sessions' in error message, got: %v", err)
 	}
 }

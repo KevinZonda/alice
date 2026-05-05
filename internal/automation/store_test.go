@@ -588,3 +588,72 @@ func TestStore_RecordTaskSourceMessageID(t *testing.T) {
 		t.Fatalf("source_message_id should not be overwritten, got %q", task.SourceMessageID)
 	}
 }
+
+func TestStoreTask_ScopeIsolationBetweenSessions(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+
+	scope1 := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed_1"}
+	scope2 := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed_2"}
+
+	task1, err := store.CreateTask(Task{
+		Title:    "session one task",
+		Scope:    scope1,
+		Route:    Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:  Actor{UserID: "u1"},
+		Schedule: Schedule{EverySeconds: 60},
+		Prompt:   "task one prompt",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask scope1: %v", err)
+	}
+
+	task2, err := store.CreateTask(Task{
+		Title:    "session two task",
+		Scope:    scope2,
+		Route:    Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:  Actor{UserID: "u1"},
+		Schedule: Schedule{EverySeconds: 60},
+		Prompt:   "task two prompt",
+	})
+	if err != nil {
+		t.Fatalf("CreateTask scope2: %v", err)
+	}
+
+	retrieved1, err := store.GetTask(task1.ID)
+	if err != nil {
+		t.Fatalf("GetTask scope1: %v", err)
+	}
+	if retrieved1.ID != task1.ID {
+		t.Fatalf("expected task1 ID %s, got %s", task1.ID, retrieved1.ID)
+	}
+	if retrieved1.Title != "session one task" {
+		t.Fatalf("expected 'session one task', got %q", retrieved1.Title)
+	}
+
+	retrieved2, err := store.GetTask(task2.ID)
+	if err != nil {
+		t.Fatalf("GetTask scope2: %v", err)
+	}
+	if retrieved2.ID != task2.ID {
+		t.Fatalf("expected task2 ID %s, got %s", task2.ID, retrieved2.ID)
+	}
+	if retrieved2.Title != "session two task" {
+		t.Fatalf("expected 'session two task', got %q", retrieved2.Title)
+	}
+
+	list1, err := store.ListTasks(scope1, "", 20)
+	if err != nil {
+		t.Fatalf("ListTasks scope1: %v", err)
+	}
+	if len(list1) != 1 || list1[0].ID != task1.ID {
+		t.Fatalf("expected 1 task for scope1, got %d tasks", len(list1))
+	}
+
+	list2, err := store.ListTasks(scope2, "", 20)
+	if err != nil {
+		t.Fatalf("ListTasks scope2: %v", err)
+	}
+	if len(list2) != 1 || list2[0].ID != task2.ID {
+		t.Fatalf("expected 1 task for scope2, got %d tasks", len(list2))
+	}
+}
