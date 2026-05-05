@@ -1073,6 +1073,63 @@ func TestStore_ResetRunningGoals(t *testing.T) {
 	}
 }
 
+func TestStoreGoal_ScopeIsolationBetweenWorkSessions(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "automation.db"))
+
+	scope1 := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed_1"}
+	scope2 := Scope{Kind: ScopeKindChat, ID: "chat_id:oc_chat|work:om_seed_2"}
+
+	goal1, err := store.ReplaceGoal(GoalTask{
+		ID:        "goal_scope_1",
+		Objective: "first session goal",
+		Status:    GoalStatusActive,
+		Scope:     scope1,
+		Route:     Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:   Actor{UserID: "u1"},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceGoal scope1: %v", err)
+	}
+
+	goal2, err := store.ReplaceGoal(GoalTask{
+		ID:        "goal_scope_2",
+		Objective: "second session goal",
+		Status:    GoalStatusActive,
+		Scope:     scope2,
+		Route:     Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
+		Creator:   Actor{UserID: "u1"},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceGoal scope2: %v", err)
+	}
+
+	if goal1.ID == goal2.ID {
+		t.Fatalf("expected different goal IDs, got %q and %q", goal1.ID, goal2.ID)
+	}
+
+	retrieved1, err := store.GetGoal(scope1)
+	if err != nil {
+		t.Fatalf("GetGoal scope1: %v", err)
+	}
+	if retrieved1.ID != goal1.ID {
+		t.Fatalf("expected goal1 (%s) for scope1, got %s", goal1.ID, retrieved1.ID)
+	}
+	if retrieved1.Objective != "first session goal" {
+		t.Fatalf("expected 'first session goal', got %q", retrieved1.Objective)
+	}
+
+	retrieved2, err := store.GetGoal(scope2)
+	if err != nil {
+		t.Fatalf("GetGoal scope2: %v", err)
+	}
+	if retrieved2.ID != goal2.ID {
+		t.Fatalf("expected goal2 (%s) for scope2, got %s", goal2.ID, retrieved2.ID)
+	}
+	if retrieved2.Objective != "second session goal" {
+		t.Fatalf("expected 'second session goal', got %q", retrieved2.Objective)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
 }

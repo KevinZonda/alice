@@ -226,3 +226,65 @@ func TestProcessor_LoadSessionState_PreservesUsageStats(t *testing.T) {
 		t.Fatalf("unexpected turns after reload: %d", state.Usage.Turns)
 	}
 }
+
+func TestProcessor_LoadSessionState_RebuildsThreadBindings(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "session_state.json")
+
+	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+	if err := processor.LoadSessionState(statePath); err != nil {
+		t.Fatalf("init session state failed: %v", err)
+	}
+
+	sessionKey := buildWorkSessionKey("chat_id", "oc_chat", "om_seed")
+	if sessionKey == "" {
+		t.Fatal("expected non-empty work session key")
+	}
+	if !isWorkSessionKey(sessionKey) {
+		t.Fatalf("expected work session key, got %q", sessionKey)
+	}
+
+	processor.setWorkThreadID(sessionKey, "omt_work_1")
+	processor.bindReplyMessage(sessionKey, "om_reply_0")
+
+	if err := processor.FlushSessionState(); err != nil {
+		t.Fatalf("flush session state failed: %v", err)
+	}
+
+	processorAfterRestart := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+	if err := processorAfterRestart.LoadSessionState(statePath); err != nil {
+		t.Fatalf("reload session state failed: %v", err)
+	}
+
+	threadLookupKey := "chat_id:oc_chat|thread:omt_work_1"
+	if resolved := processorAfterRestart.resolveSessionLookup(threadLookupKey); resolved != sessionKey {
+		t.Fatalf("thread binding should resolve after restart, got %q want %q", resolved, sessionKey)
+	}
+
+	messageLookupKey := "chat_id:oc_chat|message:om_reply_0"
+	if resolved := processorAfterRestart.resolveSessionLookup(messageLookupKey); resolved != sessionKey {
+		t.Fatalf("message binding should resolve after restart, got %q want %q", resolved, sessionKey)
+	}
+}
+
+func TestProcessor_ResetChatSceneSession_ClearsThreadIDWithoutKeyRotation(t *testing.T) {
+	processor := NewProcessor(codexStub{resp: "ok"}, nil, "", "")
+
+	chatKey := restoreChatSceneKey("chat_id", "oc_chat")
+	processor.setThreadID(chatKey, "thread_old")
+
+	if got := processor.getThreadID(chatKey); got != "thread_old" {
+		t.Fatalf("expected thread id 'thread_old', got %q", got)
+	}
+
+	oldKey, currentKey := processor.resetChatSceneSession("chat_id", "oc_chat")
+	if oldKey == "" || currentKey == "" {
+		t.Fatalf("expected non-empty keys, got old=%q current=%q", oldKey, currentKey)
+	}
+	if oldKey != currentKey {
+		t.Fatalf("expected old and current key to be the same (no key rotation), got old=%q current=%q", oldKey, currentKey)
+	}
+
+	if got := processor.getThreadID(chatKey); got != "" {
+		t.Fatalf("expected thread id to be cleared after reset, got %q", got)
+	}
+}

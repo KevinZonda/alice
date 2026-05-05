@@ -429,6 +429,63 @@ func TestApp_OnMessageReceive_ExistingThreadSessionPreferredWhenRootAppears(t *t
 	}
 }
 
+func TestApp_OnMessageReceive_BuiltinCommandNotSteeredInActiveSession(t *testing.T) {
+	cfg := configForTest()
+	backend := &steerCaptureStub{}
+	sender := &senderStub{}
+	processor := NewProcessor(
+		backend,
+		sender,
+		"暂时不可用，请稍后重试。",
+		"正在思考中...",
+	)
+	app := NewApp(cfg, processor)
+
+	sessionKey := "chat_id:oc_chat"
+	processor.setThreadID(sessionKey, "thread_active")
+	app.state.latest[sessionKey] = 1
+	app.state.pending[pendingJobKey(Job{
+		SessionKey:     sessionKey,
+		SessionVersion: 1,
+		EventID:        "evt_active",
+	})] = Job{
+		ReceiveID:      "oc_chat",
+		ReceiveIDType:  "chat_id",
+		SessionKey:     sessionKey,
+		SessionVersion: 1,
+		EventID:        "evt_active",
+		Text:           "first",
+	}
+	app.state.active[sessionKey] = activeSessionRun{
+		eventID: "evt_active",
+		version: 1,
+		cancel:  func(error) {},
+	}
+
+	event := &larkim.P2MessageReceiveV1{
+		EventV2Base: &larkevent.EventV2Base{Header: &larkevent.EventHeader{EventID: "evt_builtin"}},
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_builtin"),
+				MessageType: strPtr("text"),
+				Content:     strPtr(`{"text":"/goal"}`),
+				ChatId:      strPtr("oc_chat"),
+				ChatType:    strPtr("p2p"),
+			},
+		},
+	}
+
+	if err := app.onMessageReceive(context.Background(), event); err != nil {
+		t.Fatalf("unexpected event error: %v", err)
+	}
+	if got := len(app.queue); got != 1 {
+		t.Fatalf("expected builtin command to be queued, got queue len %d", got)
+	}
+	if got := backend.SteerCalls(); got != 0 {
+		t.Fatalf("expected no steer calls for builtin command, got %d", got)
+	}
+}
+
 func TestApp_OnMessageReceive_P2PThreadReplyUsesChatSessionKey(t *testing.T) {
 	cfg := configForTest()
 	app := NewApp(cfg, nil)

@@ -176,6 +176,10 @@ func (b *sessionKeyBuilder) resolveScene() (sessionKey string, scene string) {
 		key := restoreChatSceneKey(b.job.ReceiveIDType, b.job.ReceiveID)
 		return key, jobSceneChat
 	}
+	if isBuiltinCommandText(b.job.Text) {
+		key := restoreChatSceneKey(b.job.ReceiveIDType, b.job.ReceiveID)
+		return key, jobSceneChat
+	}
 	return "", ""
 }
 
