@@ -220,8 +220,21 @@ func TestSetupSystemdUnitOnLinux(t *testing.T) {
 	}
 
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	configHome := filepath.Join(tmp, ".config")
 	aliceHome := filepath.Join(tmp, ".alice")
+
+	// Set XDG_CONFIG_HOME to control where systemd unit goes.
+	// We cannot rely on t.Setenv("HOME", ...) alone on some environments
+	// where the Go runtime may cache UserHomeDir before the test runs.
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Cleanup(func() {
+		if oldXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	})
 
 	cmd := newSetupCmd()
 	cmd.SetArgs([]string{"--alice-home", aliceHome})
@@ -229,7 +242,7 @@ func TestSetupSystemdUnitOnLinux(t *testing.T) {
 		t.Fatalf("setup failed: %v", err)
 	}
 
-	servicePath := filepath.Join(tmp, ".config", "systemd", "user", "alice.service")
+	servicePath := filepath.Join(configHome, "systemd", "user", "alice.service")
 	raw, err := os.ReadFile(servicePath)
 	if err != nil {
 		t.Fatalf("systemd unit should exist at %s: %v", servicePath, err)
@@ -294,8 +307,20 @@ func TestSetupSkillsSync(t *testing.T) {
 	}
 
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	configHome := filepath.Join(tmp, ".config")
 	aliceHome := filepath.Join(tmp, ".alice")
+
+	// Set XDG_CONFIG_HOME so the systemd unit (Linux) and OpenCode plugin
+	// are written inside tmp rather than the real HOME.
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Cleanup(func() {
+		if oldXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	})
 
 	cmd := newSetupCmd()
 	cmd.SetArgs([]string{"--alice-home", aliceHome})
