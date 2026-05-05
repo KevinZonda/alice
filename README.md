@@ -10,10 +10,14 @@
 
 [中文](./README.zh-CN.md)
 
-- **Access your agent from anywhere.** Terminal at your desk. Feishu on your phone. Same session, same context — just `/session resume`.
-- **Pick your AI.** OpenCode / DeepSeek V4, Codex, Claude, Gemini, Kimi. Mix and match per scene.
-- **Zero cloud dependency.** The agent CLI runs on your machine. No API keys, no vendor lock-in.
-- **Goal mode × DeepSeek** = fire off dozens of tasks for pennies. Get notified on your phone when done.
+- **Access your agent from anywhere.**
+  Terminal at your desk. Feishu on your phone. Same session, same context — just `/session resume`.
+- **Pick your AI.**
+  OpenCode / DeepSeek V4, Codex, Claude, Gemini, Kimi. Mix and match per scene.
+- **Zero cloud dependency.**
+  The agent CLI runs on your machine. No API keys, no vendor lock-in.
+- **Goal mode × DeepSeek = low cost.**
+  Fire off dozens of tasks for pennies. Get notified on your phone when done.
 
 A Feishu long-connection connector for CLI-based LLM agents — OpenCode (DeepSeek V4), Codex, Claude, Gemini, Kimi.
 

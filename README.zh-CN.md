@@ -9,10 +9,14 @@
 
 [English](./README.md)
 
-- **随时随地访问你的 agent。** 电脑前用终端，路上用飞书。同一个会话、同一份上下文 — 一条 `/session resume` 就切过去。
-- **任选 AI。** OpenCode / DeepSeek V4、Codex、Claude、Gemini、Kimi。不同场景可以混用。
-- **零云依赖。** agent CLI 跑在你的机器上。不需要 API Key，没有厂商锁定。
-- **Goal 模式 × DeepSeek 低价** = 几毛钱并行跑几十个任务，手机上收通知。
+- **随时随地访问你的 agent。**
+  电脑前用终端，路上用飞书。同一个会话、同一份上下文 — 一条 `/session resume` 就切过去。
+- **任选 AI。**
+  OpenCode / DeepSeek V4、Codex、Claude、Gemini、Kimi。不同场景可以混用。
+- **零云依赖。**
+  agent CLI 跑在你的机器上。不需要 API Key，没有厂商锁定。
+- **Goal 模式 × DeepSeek = 低价。**
+  几毛钱并行跑几十个任务，手机上收通知。
 
 面向飞书的长连接连接器，把 CLI 型 LLM agent — OpenCode (DeepSeek V4)、Codex、Claude、Gemini、Kimi 接入飞书聊天。
 
