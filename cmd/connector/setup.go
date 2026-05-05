@@ -1,60 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 
 	"github.com/spf13/cobra"
 
+	aliceassets "github.com/Alice-space/alice"
 	"github.com/Alice-space/alice/internal/bootstrap"
 	"github.com/Alice-space/alice/internal/config"
 )
-
-const opencodePluginJS = `export const AliceDelegate = async ({ $, directory }) => ({
-  tool: {
-    codex: {
-      description:
-        "Delegate a task to OpenAI Codex CLI agent. " +
-        "Use for code editing, sandbox execution, or repository-wide changes.",
-      args: {
-        prompt: { type: "string", description: "Task for Codex" },
-        model: { type: "string", description: "Model override (e.g. gpt-5.1)" },
-		workspaceDir: { type: "string", description: "Working directory override" },
-      },
-      async execute(args) {
-        const cmd = ["alice", "delegate", "--provider", "codex"]
-        if (args.workspaceDir) cmd.push("--workspace-dir", args.workspaceDir)
-        else cmd.push("--workspace-dir", directory)
-        if (args.model) cmd.push("--model", args.model)
-        cmd.push("--prompt", args.prompt)
-        return await $` + "`${cmd}`" + `.text()
-      },
-    },
-    claude: {
-      description:
-        "Delegate a task to Anthropic Claude CLI agent. " +
-        "Use for analysis, review, explanation, documentation, or debugging.",
-      args: {
-        prompt: { type: "string", description: "Task for Claude" },
-        model: { type: "string", description: "Model override (e.g. claude-sonnet-4-20250514)" },
-		workspaceDir: { type: "string", description: "Working directory override" },
-      },
-      async execute(args) {
-        const cmd = ["alice", "delegate", "--provider", "claude"]
-        if (args.workspaceDir) cmd.push("--workspace-dir", args.workspaceDir)
-        else cmd.push("--workspace-dir", directory)
-        if (args.model) cmd.push("--model", args.model)
-        cmd.push("--prompt", args.prompt)
-        return await $` + "`${cmd}`" + `.text()
-      },
-    },
-  },
-})
-`
 
 func newSetupCmd() *cobra.Command {
 	aliceHome := ""
@@ -80,7 +41,6 @@ After setup:
 			_ = os.Setenv(config.EnvAliceHome, aliceHome)
 
 			configPath := config.ConfigPathForAliceHome(aliceHome)
-			skillsSourceDir := filepath.Join(aliceHome, "skills")
 
 			newline := func() { fmt.Fprintln(cmd.OutOrStdout()) }
 			info := func(format string, args ...any) {
@@ -121,7 +81,6 @@ After setup:
 				info("skills synced: source=%s linked=%d unchanged=%d",
 					skillReport.SourceRoot, skillReport.Linked, skillReport.Unchanged)
 			}
-			_ = skillsSourceDir
 
 			// 4. Write systemd user unit (Linux only)
 			if runtime.GOOS == "linux" {
@@ -134,25 +93,13 @@ After setup:
 				if err := os.MkdirAll(serviceDir, 0o750); err != nil {
 					return fmt.Errorf("create systemd dir: %w", err)
 				}
+
 				binPath, _ := os.Executable()
-				unit := fmt.Sprintf(`[Unit]
-Description=Alice Connector
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-Environment=ALICE_HOME=%s
-WorkingDirectory=%s
-ExecStart=%s --feishu-websocket
-Restart=on-failure
-RestartSec=3
-NoNewPrivileges=yes
-
-[Install]
-WantedBy=default.target
-`, aliceHome, aliceHome, binPath)
-				if err := os.WriteFile(serviceFile, []byte(unit), 0o644); err != nil {
+				unit, err := renderSystemdUnit(aliceHome, binPath)
+				if err != nil {
+					return fmt.Errorf("render systemd unit: %w", err)
+				}
+				if err := os.WriteFile(serviceFile, unit, 0o644); err != nil {
 					return fmt.Errorf("write systemd unit: %w", err)
 				}
 				info("wrote systemd unit: %s", serviceFile)
@@ -178,7 +125,7 @@ WantedBy=default.target
 				info("plugin dir create failed: %v", err)
 			} else {
 				pluginPath := filepath.Join(pluginDir, "alice-delegate.js")
-				if err := os.WriteFile(pluginPath, []byte(opencodePluginJS), 0o644); err != nil {
+				if err := os.WriteFile(pluginPath, aliceassets.OpenCodePluginJS, 0o644); err != nil {
 					info("plugin write failed: %v", err)
 				} else {
 					info("wrote OpenCode plugin: %s", pluginPath)
@@ -204,4 +151,20 @@ WantedBy=default.target
 	cmd.Flags().StringVar(&aliceHome, "alice-home", "", "ALICE_HOME directory (default: ~/.alice)")
 	cmd.Flags().StringVar(&serviceName, "service", "alice.service", "systemd service name")
 	return cmd
+}
+
+func renderSystemdUnit(aliceHome, binPath string) ([]byte, error) {
+	tmpl, err := template.New("alice.service").Parse(string(aliceassets.SystemdUnitTmpl))
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, map[string]string{
+		"AliceHome": aliceHome,
+		"BinPath":   binPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

@@ -58,22 +58,27 @@ If task involves isolated debugging or temporary rerun runtimes:
 
 ## 4. Mandatory Validation Gates
 
-All required checks must pass before commit:
+Every commit MUST pass `make check` before being made:
 
 ```bash
-gofmt -w <changed-files>
-go test ./...
-go vet ./...
-go test -race ./internal/connector
+make check
 ```
 
-Run full race tests for cross-cutting or concurrency-related changes:
+`make check` runs the following gates in order:
+1. `secret-check` — scans for secrets/credentials in staged files
+2. `script-check` — validates shell scripts with `bash -n`
+3. `fmt-check` — verifies `gofmt -l` returns nothing on all `.go` files
+4. `vet` — runs `go vet ./...`
+5. `test` — runs `go test ./...`
+6. `race` — runs `go test -race ./internal/connector`
+
+For cross-cutting or concurrency-related changes, also run full race tests:
 
 ```bash
 go test -race ./...
 ```
 
-No commit if any required check fails.
+**Do not commit until `make check` passes with zero failures.** If a pre-existing flaky test fails, fix or isolate it before proceeding.
 
 ## 5. Docs and Config Consistency
 
