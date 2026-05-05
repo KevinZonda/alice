@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	agentbridge "github.com/Alice-space/alice/internal/llm"
+	llm "github.com/Alice-space/alice/internal/llm"
 )
 
 func TestNewProvider_DefaultsToCodex(t *testing.T) {
-	provider, err := agentbridge.NewProvider(agentbridge.FactoryConfig{
-		Codex: agentbridge.CodexConfig{Command: "codex", Timeout: 30 * time.Second},
+	provider, err := llm.NewProvider(llm.FactoryConfig{
+		Codex: llm.CodexConfig{Command: "codex", Timeout: 30 * time.Second},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -21,9 +21,9 @@ func TestNewProvider_DefaultsToCodex(t *testing.T) {
 }
 
 func TestNewProvider_Claude(t *testing.T) {
-	provider, err := agentbridge.NewProvider(agentbridge.FactoryConfig{
-		Provider: agentbridge.ProviderClaude,
-		Claude:   agentbridge.ClaudeConfig{Command: "claude", Timeout: 30 * time.Second},
+	provider, err := llm.NewProvider(llm.FactoryConfig{
+		Provider: llm.ProviderClaude,
+		Claude:   llm.ClaudeConfig{Command: "claude", Timeout: 30 * time.Second},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -34,9 +34,9 @@ func TestNewProvider_Claude(t *testing.T) {
 }
 
 func TestNewProvider_Gemini(t *testing.T) {
-	provider, err := agentbridge.NewProvider(agentbridge.FactoryConfig{
-		Provider: agentbridge.ProviderGemini,
-		Gemini:   agentbridge.GeminiConfig{Command: "gemini", Timeout: 30 * time.Second},
+	provider, err := llm.NewProvider(llm.FactoryConfig{
+		Provider: llm.ProviderGemini,
+		Gemini:   llm.GeminiConfig{Command: "gemini", Timeout: 30 * time.Second},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -47,9 +47,9 @@ func TestNewProvider_Gemini(t *testing.T) {
 }
 
 func TestNewProvider_Kimi(t *testing.T) {
-	provider, err := agentbridge.NewProvider(agentbridge.FactoryConfig{
-		Provider: agentbridge.ProviderKimi,
-		Kimi:     agentbridge.KimiConfig{Command: "kimi", Timeout: 30 * time.Second},
+	provider, err := llm.NewProvider(llm.FactoryConfig{
+		Provider: llm.ProviderKimi,
+		Kimi:     llm.KimiConfig{Command: "kimi", Timeout: 30 * time.Second},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -60,7 +60,7 @@ func TestNewProvider_Kimi(t *testing.T) {
 }
 
 func TestNewProvider_RejectsUnknownProvider(t *testing.T) {
-	_, err := agentbridge.NewProvider(agentbridge.FactoryConfig{Provider: "unknown"})
+	_, err := llm.NewProvider(llm.FactoryConfig{Provider: "unknown"})
 	if err == nil {
 		t.Fatal("expected error for unknown provider")
 	}
@@ -70,8 +70,8 @@ func TestNewProvider_RejectsUnknownProvider(t *testing.T) {
 }
 
 func TestNewBackend_DefaultsToCodex(t *testing.T) {
-	backend, err := agentbridge.NewBackend(agentbridge.FactoryConfig{
-		Codex: agentbridge.CodexConfig{Command: "codex", Timeout: 30 * time.Second},
+	backend, err := llm.NewBackend(llm.FactoryConfig{
+		Codex: llm.CodexConfig{Command: "codex", Timeout: 30 * time.Second},
 	})
 	if err != nil || backend == nil {
 		t.Fatalf("unexpected result err=%v backend=%v", err, backend)
@@ -79,7 +79,7 @@ func TestNewBackend_DefaultsToCodex(t *testing.T) {
 }
 
 func TestNewBackend_RejectsUnknownProvider(t *testing.T) {
-	_, err := agentbridge.NewBackend(agentbridge.FactoryConfig{Provider: "unknown"})
+	_, err := llm.NewBackend(llm.FactoryConfig{Provider: "unknown"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -88,34 +88,34 @@ func TestNewBackend_RejectsUnknownProvider(t *testing.T) {
 func TestNewInteractiveProviderSession_SteerModes(t *testing.T) {
 	tests := []struct {
 		name     string
-		cfg      agentbridge.FactoryConfig
-		wantMode agentbridge.SteerMode
+		cfg      llm.FactoryConfig
+		wantMode llm.SteerMode
 	}{
 		{
 			name:     "codex",
-			cfg:      agentbridge.FactoryConfig{Provider: agentbridge.ProviderCodex},
-			wantMode: agentbridge.SteerModeNative,
+			cfg:      llm.FactoryConfig{Provider: llm.ProviderCodex},
+			wantMode: llm.SteerModeNative,
 		},
 		{
 			name:     "kimi",
-			cfg:      agentbridge.FactoryConfig{Provider: agentbridge.ProviderKimi},
-			wantMode: agentbridge.SteerModeNative,
+			cfg:      llm.FactoryConfig{Provider: llm.ProviderKimi},
+			wantMode: llm.SteerModeNative,
 		},
 		{
 			name:     "opencode",
-			cfg:      agentbridge.FactoryConfig{Provider: agentbridge.ProviderOpenCode},
-			wantMode: agentbridge.SteerModeNativeEnqueue,
+			cfg:      llm.FactoryConfig{Provider: llm.ProviderOpenCode},
+			wantMode: llm.SteerModeNativeEnqueue,
 		},
 		{
 			name:     "claude",
-			cfg:      agentbridge.FactoryConfig{Provider: agentbridge.ProviderClaude},
-			wantMode: agentbridge.SteerModeNativeEnqueue,
+			cfg:      llm.FactoryConfig{Provider: llm.ProviderClaude},
+			wantMode: llm.SteerModeNativeEnqueue,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			session, err := agentbridge.NewInteractiveProviderSession(tt.cfg)
+			session, err := llm.NewInteractiveProviderSession(tt.cfg)
 			if err != nil {
 				t.Fatalf("NewInteractiveProviderSession failed: %v", err)
 			}
@@ -129,9 +129,9 @@ func TestNewInteractiveProviderSession_SteerModes(t *testing.T) {
 
 func TestNewProvider_CaseInsensitiveProvider(t *testing.T) {
 	for _, name := range []string{"Claude", "CLAUDE", "claude"} {
-		provider, err := agentbridge.NewProvider(agentbridge.FactoryConfig{
+		provider, err := llm.NewProvider(llm.FactoryConfig{
 			Provider: name,
-			Claude:   agentbridge.ClaudeConfig{Command: "claude"},
+			Claude:   llm.ClaudeConfig{Command: "claude"},
 		})
 		if err != nil {
 			t.Fatalf("provider=%q: unexpected error: %v", name, err)

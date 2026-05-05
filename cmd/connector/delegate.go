@@ -24,7 +24,7 @@ func newDelegateCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "delegate",
-		Short: "Run a one-shot LLM task via agentbridge",
+		Short: "Run a one-shot LLM task via configured CLI backend",
 		Long: `Execute a single prompt against a configured LLM provider CLI and print the reply.
 
 The prompt is taken from --prompt or stdin (stdin takes precedence when both are provided).
