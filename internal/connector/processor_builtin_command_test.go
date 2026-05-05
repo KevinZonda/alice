@@ -326,7 +326,7 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasks(t *testing.T) {
 	if _, err := automationStore.CreateTask(automation.Task{
 		ID:       "task_active",
 		Title:    "heartbeat",
-		Scope:    automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
+		Scope:    automation.Scope{Kind: automation.ScopeKindChat, ID: "chat_id:oc_chat|thread:omt_2"},
 		Route:    automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 		Creator:  automation.Actor{OpenID: "ou_actor"},
 		Schedule: automation.Schedule{EverySeconds: 600},
@@ -338,7 +338,7 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasks(t *testing.T) {
 	if _, err := automationStore.CreateTask(automation.Task{
 		ID:       "task_paused",
 		Title:    "daily report",
-		Scope:    automation.Scope{Kind: automation.ScopeKindChat, ID: "oc_chat"},
+		Scope:    automation.Scope{Kind: automation.ScopeKindChat, ID: "chat_id:oc_chat|thread:omt_2"},
 		Route:    automation.Route{ReceiveIDType: "chat_id", ReceiveID: "oc_chat"},
 		Creator:  automation.Actor{OpenID: "ou_actor"},
 		Schedule: automation.Schedule{EverySeconds: 3600},
@@ -418,6 +418,8 @@ func TestProcessor_StatusCommand_ListsActiveAutomationTasks(t *testing.T) {
 		"活跃自动化任务：`1`",
 		"`task_active`",
 		"`run_llm`",
+		"### 当前目标",
+		"未设置目标",
 	} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("expected status reply to contain %q, got %q", want, reply)
@@ -623,29 +625,6 @@ func TestIsSessionCommand(t *testing.T) {
 	}
 }
 
-func TestIsGoalCommand(t *testing.T) {
-	tests := []struct {
-		name     string
-		text     string
-		expected bool
-	}{
-		{name: "exact", text: "/goal", expected: true},
-		{name: "with spaces", text: "  /goal  ", expected: true},
-		{name: "case insensitive", text: "/GOAL", expected: true},
-		{name: "with trailing text", text: "/goal do something", expected: true},
-		{name: "not goal", text: "/help", expected: false},
-		{name: "empty", text: "", expected: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := isGoalCommand(tc.text)
-			if result != tc.expected {
-				t.Fatalf("isGoalCommand(%q) = %v, want %v", tc.text, result, tc.expected)
-			}
-		})
-	}
-}
-
 func TestBuildGoalScopeFromJob_UsesSessionKeyForIsolation(t *testing.T) {
 	job1 := Job{
 		ChatType:      "group",
@@ -673,29 +652,15 @@ func TestBuildGoalScopeFromJob_UsesSessionKeyForIsolation(t *testing.T) {
 	}
 }
 
-func TestProcessGoalCommand_RejectsNonWorkScene(t *testing.T) {
-	stub := &codexStub{resp: "ok"}
-	sender := &senderStub{}
-	processor := NewProcessor(stub, sender, "failed", "thinking")
-	processor.SetSceneIdentityHints(false, true)
-
+func TestBuildGoalScopeFromJob_StripsMessageSuffix(t *testing.T) {
 	job := Job{
-		Text:            "/goal",
-		Scene:           jobSceneChat,
-		ReceiveIDType:   "chat_id",
-		ReceiveID:       "oc_chat",
-		SourceMessageID: "om_test",
-		EventID:         "evt_goal_chat",
+		ChatType:      "group",
+		ReceiveID:     "oc_chat",
+		ReceiveIDType: "chat_id",
+		SessionKey:    "chat_id:oc_chat|work:om_seed|message:om_reply",
 	}
-	ctx := context.Background()
-	state := processor.ProcessJobState(ctx, job)
-	if state != JobProcessCompleted {
-		t.Fatalf("expected job to complete, got %s", state)
-	}
-	if len(sender.replyMarkdownTexts) != 1 {
-		t.Fatalf("expected 1 reply, got %d", len(sender.replyMarkdownTexts))
-	}
-	if !strings.Contains(sender.replyMarkdownTexts[0], "work") {
-		t.Fatalf("expected work-only rejection message, got %q", sender.replyMarkdownTexts[0])
+	scope := buildGoalScopeFromJob(job)
+	if scope.ID != "chat_id:oc_chat|work:om_seed" {
+		t.Fatalf("expected scope ID without message suffix, got %q", scope.ID)
 	}
 }

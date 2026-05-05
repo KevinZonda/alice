@@ -14,12 +14,13 @@ import (
 )
 
 const defaultGoalTimeout = 48 * time.Hour
+const maxConsecutiveFastRuns = 5
+const fastRunThreshold = 3 * time.Minute
 
 func (e *Engine) runGoals(ctx context.Context) {
 	if e.store == nil {
 		return
 	}
-	// List both active and waiting-for-session goals.
 	allGoals, err := e.store.ListGoals("")
 	if err != nil {
 		logging.Warnf("goal tick list failed: %v", err)
@@ -27,6 +28,9 @@ func (e *Engine) runGoals(ctx context.Context) {
 	}
 	for _, goal := range allGoals {
 		if goal.Running {
+			continue
+		}
+		if goal.Status.IsTerminal() {
 			continue
 		}
 		switch goal.Status {
@@ -140,6 +144,7 @@ func (e *Engine) ExecuteGoal(ctx context.Context, scope Scope) error {
 		}
 		prompt := e.buildGoalPrompt(goal)
 		logging.Infof("goal iteration start scope=%s:%s thread=%s", goal.Scope.Kind, goal.Scope.ID, threadID)
+		iterStart := e.nowTime()
 		result, err := runner.Run(runCtx, llm.RunRequest{
 			ThreadID:   threadID,
 			AgentName:  "goal",
@@ -173,7 +178,25 @@ func (e *Engine) ExecuteGoal(ctx context.Context, scope Scope) error {
 		logging.Infof("goal iteration done scope=%s:%s done=%v next_thread=%s", goal.Scope.Kind, goal.Scope.ID, result.GoalDone, strings.TrimSpace(result.NextThreadID))
 		if result.GoalDone {
 			e.markGoalComplete(goal)
+			e.resetFastRunCount(scope)
 			return nil
+		}
+		iterElapsed := e.nowTime().Sub(iterStart)
+		if err == nil && iterElapsed < fastRunThreshold {
+			if e.incrementFastRunCount(scope) >= maxConsecutiveFastRuns {
+				logging.Warnf("goal paused (fast loop detected) scope=%s:%s fast_runs=%d", goal.Scope.Kind, goal.Scope.ID, maxConsecutiveFastRuns)
+				if _, patchErr := e.store.PatchGoal(scope, func(g *GoalTask) error {
+					g.Status = GoalStatusPaused
+					return nil
+				}); patchErr != nil {
+					logging.Errorf("goal pause on fast loop failed scope=%s:%s err=%v", goal.Scope.Kind, goal.Scope.ID, patchErr)
+				}
+				e.resetFastRunCount(scope)
+				e.sendGoalNotification(goal, "⚠️ 目标已自动暂停\n检测到连续 5 次快速循环（每次 < 3 分钟），可能存在死循环。\n目标: "+goal.Objective)
+				return nil
+			}
+		} else {
+			e.resetFastRunCount(scope)
 		}
 	}
 }
@@ -202,6 +225,7 @@ func (e *Engine) markGoalComplete(goal GoalTask) {
 		logging.Errorf("goal mark complete failed scope=%s:%s err=%v", goal.Scope.Kind, goal.Scope.ID, err)
 		return
 	}
+	e.setGoalRunning(goal.Scope, false)
 	logging.Infof("goal completed scope=%s:%s", goal.Scope.Kind, goal.Scope.ID)
 	elapsed := e.nowTime().Sub(goal.CreatedAt)
 	msg := "✅ 目标已完成\n   耗时: " + formatDurationHMS(elapsed)
@@ -383,4 +407,19 @@ func richTextCardContent(markdown string) string {
 	}
 	raw, _ := json.Marshal(card)
 	return string(raw)
+}
+
+func (e *Engine) incrementFastRunCount(scope Scope) int {
+	e.fastRunMu.Lock()
+	defer e.fastRunMu.Unlock()
+	key := fmt.Sprintf("%s:%s", scope.Kind, scope.ID)
+	e.consecutiveFastRuns[key]++
+	return e.consecutiveFastRuns[key]
+}
+
+func (e *Engine) resetFastRunCount(scope Scope) {
+	e.fastRunMu.Lock()
+	defer e.fastRunMu.Unlock()
+	key := fmt.Sprintf("%s:%s", scope.Kind, scope.ID)
+	delete(e.consecutiveFastRuns, key)
 }
